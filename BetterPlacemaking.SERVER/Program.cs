@@ -1,3 +1,5 @@
+using BetterPlacemaking.Controllers;
+using BetterPlacemaking.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
@@ -21,29 +23,25 @@ var dbId = firebaseSection["Database"] ?? "(default)";
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<SampleService>();
+builder.Services.AddScoped<UserService>();
 
+// builder.Services.AddSingleton(provider =>
+// {
+//     // Uses GOOGLE_APPLICATION_CREDENTIALS or ambient credentials
+//     return FirebaseApp.Create(new AppOptions
+//     {
+//         Credential = GoogleCredential.GetApplicationDefault(),
+//         ProjectId = projectId
+//     });
+// });
 
-builder.Services.AddSingleton(provider =>
-{
-    return new FirestoreDbBuilder
+builder.Services.AddSingleton<FirestoreDb>(_ =>
+    new FirestoreDbBuilder
     {
         ProjectId = projectId,
         DatabaseId = dbId
-    }.Build();
-});
-
-builder.Services.AddSingleton(provider =>
-{
-    // Uses GOOGLE_APPLICATION_CREDENTIALS or ambient credentials
-    return FirebaseApp.Create(new AppOptions
-    {
-        Credential = GoogleCredential.GetApplicationDefault(),
-        ProjectId = projectId
-    });
-});
-
-
-// add db context
+    }.Build());
 
 builder.Services.AddSwaggerGen(options =>
 {
