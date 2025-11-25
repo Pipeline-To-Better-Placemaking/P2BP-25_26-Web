@@ -1,0 +1,14 @@
+/* Layout-specific overrides to complement Tailwind utility classes */
+
+:host {
+	display: block;
+}
+
+::ng-deep .p-button {
+	border-radius: 9999px;
+}
+
+::ng-deep .p-avatar {
+	background: radial-gradient(circle at 10% 20%, #8b5cf6 0%, #6366f1 40%, #22d3ee 100%);
+}
+
