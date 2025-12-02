@@ -25,6 +25,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<SampleService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<LoginService>();
 
 // builder.Services.AddSingleton(provider =>
 // {

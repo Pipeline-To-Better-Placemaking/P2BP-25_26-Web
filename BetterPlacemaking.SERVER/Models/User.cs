@@ -13,5 +13,14 @@ namespace BetterPlacemaking.Models
 
         [FirestoreProperty]
         public string? LastName { get; set; }
-    }
+
+        [FirestoreProperty]
+        public string? Email { get; set; }
+
+        [FirestoreProperty]
+        public string? Password { get; set; }
+
+        [FirestoreProperty]
+        public string? Role { get; set; }
+    }   
 }
