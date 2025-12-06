@@ -26,7 +26,6 @@ body {
 
 .content-background {
 	background-color: var(--content-background);
-	color: var(--content-foreground);
 }
 
 .surface-ground {
@@ -34,11 +33,11 @@ body {
 }
 
 .primary-color {
-	color: var(--primary-color);
+	color: var(--p-primary-color);
 }
 
 .accent-background {
-	background-color: var(--p-accent-background);
+	background-color: var(--p-accent-color);
 }
 
 .accent-color {

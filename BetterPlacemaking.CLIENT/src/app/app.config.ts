@@ -16,7 +16,7 @@ export const appConfig: ApplicationConfig = {
       theme: {
         preset: BetterPlacemakingPreset,
         options: {
-          darkModeSelector: '.my-app-dark'
+          darkModeSelector: '.app-dark-mode'
         }
       }
     }),

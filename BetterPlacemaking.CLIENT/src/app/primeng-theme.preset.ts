@@ -16,19 +16,26 @@ const BetterPlacemakingPreset = definePreset(Aura, {
       900: '{cyan.900}',
       950: '{cyan.950}'
     }
-
   },
-
-  components: {
-    button: {
-      colorScheme: {
-        dark: {
-          text: {
-            secondary: {
-              color: '{text.color}',
-            }
-          }
-        }
+  colorScheme: {
+    light: {
+      accent: {
+        color: '{cyan.500}',
+        background: '{cyan.100}',
+      },
+      tertiary: {
+        color: '{gray.700}',
+        background: '{gray.50}',
+      }
+    },
+    dark: {
+      accent: {
+        color: '{cyan.200}',
+        background: '{cyan.950}',
+      },
+      tertiary: {
+        color: '{gray.300}',
+        background: '{gray.700}',
       }
     }
   }

@@ -6,7 +6,6 @@ export const routes: Routes = [
         path: '',
         component: DefaultLayout,
         children: [
-            // Future routes will go here
         ]
     }
 ];
