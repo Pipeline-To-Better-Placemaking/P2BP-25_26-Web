@@ -4,7 +4,7 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { providePrimeNG } from 'primeng/config';
 
 import { routes } from './app.routes';
-import BetterPlacemakingPreset from './primeng-theme.preset';
+import BetterPlacemakingPreset from './themes/primeng-theme.preset';
 
 export const appConfig: ApplicationConfig = {
   providers: [

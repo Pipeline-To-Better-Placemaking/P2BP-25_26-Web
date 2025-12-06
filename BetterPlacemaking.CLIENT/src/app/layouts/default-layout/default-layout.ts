@@ -4,7 +4,7 @@ import { ButtonModule } from 'primeng/button';
 import { AvatarModule } from 'primeng/avatar';
 import { MenuModule } from 'primeng/menu';
 import { FontAwesomeModule, FaIconLibrary } from '@fortawesome/angular-fontawesome';
-import { faHome, faFolder, faChartLine, faCog, faSignOutAlt, faMoon } from '@fortawesome/free-solid-svg-icons';
+import { faHome, faFolder, faChartLine, faCog, faSignOutAlt, faMoon, faUser } from '@fortawesome/free-solid-svg-icons';
 import { MenuItem } from 'primeng/api';
 import { ThemeService } from '../../services/theme-service';
 
@@ -28,7 +28,7 @@ export class DefaultLayout {
 
   footerItems: MenuItem[] = [
     { label: 'Toggle dark mode', faIcon: faMoon, command: () => this.toggleDarkMode() },
-    { label: 'Log out', faIcon: faSignOutAlt }
+    { label: 'User', faIcon: faUser, routerLink: '/profile' },
   ];
 
   toggleDarkMode(): void {
