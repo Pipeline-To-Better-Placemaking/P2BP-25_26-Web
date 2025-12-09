@@ -1,12 +1,12 @@
 using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
+using BCrypt.Net;
 
 namespace BetterPlacemaking.Services
 {
     public class LoginService(FirestoreDb db)
     {
         private readonly FirestoreDb _db = db;
-        private const string collectionName = "users";
 
         public LoginResponse Login(string email, string password)
         {
@@ -24,8 +24,9 @@ namespace BetterPlacemaking.Services
             }
             
             var user = result.Documents[0].ConvertTo<User>();
+            bool correctPass = BCrypt.Net.BCrypt.Verify(password, user.Password);
 
-            if (user.Password != password)
+            if (!correctPass)
             {
                 return new LoginResponse
                 {
@@ -34,11 +35,19 @@ namespace BetterPlacemaking.Services
                 };
             }
 
+            var userInfo = new User
+            {
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email,
+                Role = user.Role
+            };
+
             return new LoginResponse
             {
                 Success = true,
                 Message = "Login successful",
-                User = user
+                User = userInfo
             };
     }
 

@@ -1,6 +1,7 @@
 using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
+using BCrypt.Net;
 
 namespace BetterPlacemaking.Services
 {
@@ -25,19 +26,36 @@ namespace BetterPlacemaking.Services
             return user;
         }
 
-        public User AddUser(User user)
+        public async Task<User?> AddUser(User user)
         {
             var collection = _db.Collection(collectionName);
+
+            var query = collection.WhereEqualTo("Email", user.Email);
+            var result = await query.GetSnapshotAsync();
+            if (result.Count > 0)
+            {
+                return null;
+            }
+
+            user.Password = BCrypt.Net.BCrypt.HashPassword(user.Password);
+
+            user.Role = "User";
 
             var docRef = string.IsNullOrWhiteSpace(user.Id)
                 ? collection.Document()
                 : collection.Document(user.Id);
 
-            docRef.SetAsync(user).Wait();
+            await docRef.SetAsync(user);
 
-            var created = docRef.GetSnapshotAsync().Result
-                .ConvertTo<User>();
-            return created;
+            var userInfo = new User
+            {
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email,
+                Role = user.Role
+            };
+            
+            return userInfo;
         }
 
         public User? UpdateUser(string id, User user)

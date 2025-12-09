@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Google.Cloud.Firestore;
 
 namespace BetterPlacemaking.Models
@@ -20,7 +21,7 @@ namespace BetterPlacemaking.Models
         [FirestoreProperty]
         public string? Password { get; set; }
 
-        [FirestoreProperty]
+        [JsonIgnore]
         public string? Role { get; set; }
     }   
 }
