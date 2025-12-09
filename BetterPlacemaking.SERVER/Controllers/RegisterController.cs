@@ -11,8 +11,16 @@ namespace BetterPlacemaking.Controllers
         private readonly UserService _userService = userService;
 
         [HttpPost]
-        public async Task<IActionResult> Register([FromBody] User user)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
+            var user = new User
+            {
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                Email = request.Email,
+                Password = request.Password
+            };
+
             var createdUser = await _userService.AddUser(user);
 
             if (createdUser == null)

@@ -19,8 +19,10 @@ namespace BetterPlacemaking.Models
         public string? Email { get; set; }
 
         [FirestoreProperty]
+        [JsonIgnore]
         public string? Password { get; set; }
 
+        [FirestoreProperty]
         [JsonIgnore]
         public string? Role { get; set; }
     }   
