@@ -20,6 +20,32 @@
         </ng-template>
       </p-menu>
     </nav>
+
+    <nav class="px-3 mt-7">
+      <p-menu [model]="navItemsIfSelected">
+        <ng-template #item let-item>
+          <a
+            [routerLink]="item.routerLink"
+            class="p-menu-item-link">
+            <fa-icon [icon]="item.faIcon"></fa-icon>
+            <span>{{ item.label }}</span>
+          </a>
+        </ng-template>
+      </p-menu>
+    </nav>
+
+    <nav class="px-3 mt-7">
+      <p-menu [model]="navItemsAdmin">
+        <ng-template #item let-item>
+          <a
+            [routerLink]="item.routerLink"
+            class="p-menu-item-link">
+            <fa-icon [icon]="item.faIcon"></fa-icon>
+            <span>{{ item.label }}</span>
+          </a>
+        </ng-template>
+      </p-menu>
+    </nav>
     
     <nav class="px-3 mt-auto mb-4">
       <p-menu [model]="footerItems">

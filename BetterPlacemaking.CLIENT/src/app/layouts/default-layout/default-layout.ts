@@ -20,10 +20,18 @@ export class DefaultLayout {
   constructor(public themeService: ThemeService) {}
 
   navItems: MenuItem[] = [
-    { label: 'Dashboard', faIcon: faHome, routerLink: '/dashboard' },
-    { label: 'Projects', faIcon: faFolder, routerLink: '/projects' },
-    { label: 'Insights', faIcon: faChartLine, routerLink: '/insights' },
-    { label: 'Settings', faIcon: faCog, routerLink: '/settings' }
+    { label: 'Select Project', faIcon: faHome, routerLink: '/selectProject' },
+  ];
+
+  navItemsIfSelected: MenuItem[] = [
+    { label: '3D Model', faIcon: faHome, routerLink: '/selectProject' },
+    { label: 'Vision', faIcon: faHome, routerLink: '/selectProject' },
+    { label: 'Edit Room', faIcon: faHome, routerLink: '/selectProject' },
+  ];
+
+  navItemsAdmin: MenuItem[] = [
+    { label: 'Permissions', faIcon: faChartLine, routerLink: '/admin/permissions' },
+    { label: 'Manage Projects', faIcon: faFolder, routerLink: '/admin/projects' },
   ];
 
   footerItems: MenuItem[] = [
