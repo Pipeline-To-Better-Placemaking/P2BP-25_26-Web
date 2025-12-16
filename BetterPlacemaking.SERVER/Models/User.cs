@@ -25,5 +25,13 @@ namespace BetterPlacemaking.Models
         [FirestoreProperty]
         [JsonIgnore]
         public string? Role { get; set; }
+
+        [FirestoreProperty]
+        [JsonIgnore]
+        public bool EmailVerified { get; set; } = false;
+
+        [FirestoreProperty]
+        [JsonIgnore]
+        public string? EmailVerificationToken { get; set; }
     }   
 }

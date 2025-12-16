@@ -5,9 +5,10 @@ using BCrypt.Net;
 
 namespace BetterPlacemaking.Services
 {
-    public class UserService(FirestoreDb db)
+    public class UserService(FirestoreDb db, EmailService emailService)
     {
         private readonly FirestoreDb _db = db;
+        private readonly EmailService _emailService = emailService;
         private const string collectionName = "users";
 
         public List<User> GetUsers()
@@ -26,38 +27,44 @@ namespace BetterPlacemaking.Services
             return user;
         }
 
-        public async Task<User?> AddUser(User user)
+        public User? AddUser(User user)
         {
             var collection = _db.Collection(collectionName);
 
             var query = collection.WhereEqualTo("Email", user.Email);
-            var result = await query.GetSnapshotAsync();
-            if (result.Count > 0)
+            var result = query.GetSnapshotAsync().Result;
+            if (result.Count > 0) 
             {
                 return null;
             }
-
+            
             user.Password = BCrypt.Net.BCrypt.HashPassword(user.Password);
 
+            user.EmailVerificationToken = Guid.NewGuid().ToString();
+            user.EmailVerified = false;
             user.Role = "User";
 
-            var docRef = string.IsNullOrWhiteSpace(user.Id)
-                ? collection.Document()
-                : collection.Document(user.Id);
+            var docRef = collection.Document();
+            docRef.SetAsync(user).Wait();
 
-            await docRef.SetAsync(user);
+            if (!string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(user.EmailVerificationToken))
+            {
+                _emailService.SendVerificationEmail(user.Email, user.EmailVerificationToken);
+            }
+            else
+            {
+                Console.WriteLine("Email or token is null, cannot send verification email.");
+            }
 
-            var userInfo = new User
+            return new User
             {
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 Email = user.Email,
                 Role = user.Role
             };
-            
-            return userInfo;
         }
-
+        
         public User? UpdateUser(string id, User user)
         {
             var docRef = _db.Collection(collectionName).Document(id);

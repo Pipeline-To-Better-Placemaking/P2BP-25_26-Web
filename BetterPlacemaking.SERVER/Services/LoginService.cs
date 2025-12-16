@@ -34,6 +34,15 @@ namespace BetterPlacemaking.Services
                     Message = "Wrong password"
                 };
             }
+            
+            if (!user.EmailVerified)
+            {
+                return new LoginResponse
+                {
+                    Success = false,
+                    Message = "Email not verified. Please check your email."
+                };
+            }
 
             var userInfo = new User
             {

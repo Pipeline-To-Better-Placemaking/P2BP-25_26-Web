@@ -6,13 +6,14 @@ namespace BetterPlacemaking.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class RegistrationController(UserService userService): ControllerBase
+    public class RegisterController(UserService userService) : ControllerBase
     {
         private readonly UserService _userService = userService;
 
         [HttpPost]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public IActionResult Register([FromBody] RegisterRequest request)
         {
+            // Map request to User model
             var user = new User
             {
                 FirstName = request.FirstName,
@@ -21,12 +22,24 @@ namespace BetterPlacemaking.Controllers
                 Password = request.Password
             };
 
-            var createdUser = await _userService.AddUser(user);
+            // Add user (synchronously)
+            var createdUser = _userService.AddUser(user);
 
             if (createdUser == null)
-                return BadRequest(new { Success = false, Message = "Email already exists" });
+            {
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = "Email already exists"
+                });
+            }
 
-            return Ok(new { Success = true, Message = "Registration successful", User = createdUser });
+            return Ok(new
+            {
+                Success = true,
+                Message = "Registration successful",
+                User = createdUser
+            });
         }
     }
 }
