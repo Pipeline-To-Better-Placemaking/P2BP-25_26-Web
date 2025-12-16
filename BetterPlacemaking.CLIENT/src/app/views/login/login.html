@@ -1,1 +1,77 @@
-<p>login works!</p>
+<div class="login-page">
+	<p-card class="login-card">
+		<div class="card-header">
+			<h2>{{ isSignup ? 'Create account' : 'Welcome back' }}</h2>
+			<p class="subtitle">{{ isSignup ? 'Sign up to join Better Placemaking' : 'Sign in to continue to Better Placemaking' }}</p>
+		</div>
+
+		<div class="toggle-row">
+			<button pButton type="button" class="toggle-btn" [ngClass]="{active: !isSignup}" (click)="isSignup=false" label="Sign in"></button>
+			<button pButton type="button" class="toggle-btn" [ngClass]="{active: isSignup}" (click)="isSignup=true" label="Sign up"></button>
+		</div>
+
+		<div class="panels">
+			<!-- Login panel -->
+			<div class="panel panel-login" [class.show]="!isSignup">
+				<form [formGroup]="form" (ngSubmit)="submit()" class="login-form">
+					<div class="field">
+						<label for="username" class="sr-only">Username</label>
+						<input id="username" pInputText type="text" formControlName="username" placeholder="Username" />
+						<div class="field-error" *ngIf="form.get('username')?.touched && form.get('username')?.invalid">
+							<small>Username is required</small>
+						</div>
+					</div>
+
+					<div class="field">
+						<label for="password" class="sr-only">Password</label>
+						<p-password id="password" formControlName="password" [toggleMask]="true" placeholder="Password"></p-password>
+						<div class="field-error" *ngIf="form.get('password')?.touched && form.get('password')?.invalid">
+							<small>Password is required</small>
+						</div>
+					</div>
+
+					<div class="actions">
+						<div class="remember">
+							<p-checkbox formControlName="remember" binary="true"></p-checkbox>
+							<label>Remember me</label>
+						</div>
+
+						<button pButton type="submit" label="Sign in" [disabled]="form.invalid || submitting"></button>
+					</div>
+
+					<div *ngIf="error" class="error">{{ error }}</div>
+				</form>
+			</div>
+
+			<!-- Signup panel -->
+			<div class="panel panel-signup" [class.show]="isSignup">
+				<form [formGroup]="signupForm" (ngSubmit)="submitSignup()" class="login-form">
+					<div class="field">
+						<label for="username-s" class="sr-only">Username</label>
+						<input id="username-s" pInputText type="text" formControlName="username" placeholder="Choose a username" />
+						<div class="field-error" *ngIf="signupForm.get('username')?.touched && signupForm.get('username')?.invalid">
+							<small>Username is required</small>
+						</div>
+					</div>
+
+					<div class="field">
+						<label for="password-s" class="sr-only">Password</label>
+						<p-password id="password-s" formControlName="password" [toggleMask]="true" placeholder="Password"></p-password>
+						<div class="field-error" *ngIf="signupForm.get('password')?.touched && signupForm.get('password')?.invalid">
+							<small>Password is required</small>
+						</div>
+					</div>
+
+					<div class="field agree">
+						<p-checkbox formControlName="agree" binary="true"></p-checkbox>
+						<label>I agree to the terms</label>
+					</div>
+
+					<div class="actions">
+						<button pButton type="submit" label="Create account" [disabled]="signupForm.invalid || submitting"></button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</p-card>
+</div>

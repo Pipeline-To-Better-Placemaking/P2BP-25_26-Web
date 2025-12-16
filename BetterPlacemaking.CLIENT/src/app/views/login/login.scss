@@ -1,0 +1,201 @@
+:root {
+	--login-bg-1: #f5f7fb;
+	--login-bg-2: #e9eef8;
+	--card-bg: #ffffff;
+}
+
+.login-page {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2rem;
+	background: linear-gradient(180deg, var(--login-bg-1), var(--login-bg-2));
+}
+
+.login-card {
+	width: 100%;
+	max-width: 420px;
+	padding: 1.6rem;
+	border-radius: 12px;
+	background: var(--card-bg);
+	box-shadow: 0 8px 30px rgba(25, 40, 60, 0.12);
+}
+
+.card-header {
+	text-align: center;
+	margin-bottom: 1rem;
+}
+
+.card-header h2 {
+	margin: 0 0 0.25rem 0;
+	font-size: 1.4rem;
+}
+
+.subtitle {
+	margin: 0;
+	color: rgba(0, 0, 0, 0.6);
+	font-size: 0.95rem;
+}
+
+.login-form {
+	display: flex;
+	flex-direction: column;
+	gap: 0.85rem;
+}
+
+.field input[pInputText],
+.field ::ng-deep .p-inputtext,
+.field ::ng-deep input[pInputText],
+.field ::ng-deep .p-password .p-password-input,
+.field ::ng-deep .p-password input {
+	width: 100% !important;
+	box-sizing: border-box;
+	padding: 0.75rem 0.9rem;
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Ensure the p-password wrapper presents a single visual box matching other inputs */
+.field ::ng-deep .p-password {
+	width: 100% !important;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.2rem 0.6rem; /* outer padding for consistent visual size */
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	background: transparent;
+}
+
+.field ::ng-deep .p-password .p-password-input {
+	flex: 1 1 auto;
+	width: auto !important;
+	border: none !important; /* remove inner border so wrapper provides it */
+	padding: 0.6rem 0 !important; /* align vertical padding with text inputs */
+	background: transparent !important;
+	box-shadow: none !important;
+}
+
+.field ::ng-deep .p-password .p-password-reveal {
+	flex: 0 0 auto;
+	margin-left: 0.25rem;
+}
+
+.field-error small {
+	color: #c63737;
+	display: block;
+	margin-top: 0.35rem;
+}
+
+.actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-top: 0.25rem;
+}
+
+.remember {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.error {
+	margin-top: 0.6rem;
+	color: #b00020;
+	text-align: center;
+}
+
+@media (max-width: 520px) {
+	.login-card {
+		padding: 1.1rem;
+		border-radius: 10px;
+	}
+}
+
+.sr-only {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0,0,0,0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Toggle UI */
+.toggle-row {
+	display: flex;
+	gap: 0.5rem;
+	justify-content: center;
+	margin-bottom: 0.9rem;
+}
+
+.toggle-btn {
+	flex: 1 1 auto;
+	border-radius: 999px;
+	background: transparent;
+	color: rgba(0,0,0,0.6);
+	border: 1px solid transparent;
+}
+
+.toggle-btn.active {
+	background: linear-gradient(90deg, #6b8cff, #5ec6ff);
+	color: white !important;
+	box-shadow: 0 6px 18px rgba(76,118,255,0.18);
+}
+
+/* Panels container that holds both panels and animates them */
+.panels {
+	position: relative;
+	height: 360px; /* fixed height to allow smooth transitions */
+	overflow: hidden;
+}
+
+.panel {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	padding: 0.5rem 0 0 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	opacity: 0;
+	transform: translateX(20%);
+	transition: transform 360ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease;
+	pointer-events: none;
+}
+
+.panel.show {
+	opacity: 1;
+	transform: translateX(0);
+	pointer-events: auto;
+}
+
+.panel-signup {
+	transform: translateX(30%);
+}
+
+.panel-login {
+	transform: translateX(-10%);
+}
+
+/* Make inner form scroll if content overflows (mobile) */
+.panel .login-form {
+	width: 100%;
+	padding: 0 1rem;
+	max-width: 360px;
+	overflow: auto;
+}
+
+@media (max-width: 520px) {
+	.panels { height: auto; }
+	.panel { position: relative; transform: none; opacity: 1; pointer-events: auto; transition: none; }
+}
