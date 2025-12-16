@@ -2,50 +2,57 @@
 
   <div class="w-72 min-h-screen content-background flex flex-col">
 
-    <div class="flex items-center ms-2">
-      <a [routerLink]="['/']" class="flex items-center gap-3 p-3 no-underline">
-        <span class="text-lg font-semibold tracking-tight text-on-surface-900">Better Placemaking</span>
+    <div class="flex items-center justify-center w-full">
+      <a [routerLink]="['/']" class="flex items-center gap-3 p-3 no-underline w-full justify-center">
+        <span class="text-3xl font-semibold tracking-tight text-on-surface-900">Better Placemaking</span>
       </a>
     </div>
 
-    <nav class="px-3 mt-7">
-      <p-menu [model]="navItems">
-        <ng-template #item let-item>
-          <a
-            [routerLink]="item.routerLink"
-            class="p-menu-item-link">
-            <fa-icon [icon]="item.faIcon"></fa-icon>
-            <span>{{ item.label }}</span>
-          </a>
-        </ng-template>
-      </p-menu>
-    </nav>
+    <div *ngIf="navItems?.length">
+      <nav class="px-3 mt-7" >
+        <p-menu [model]="navItems">
+          <ng-template #item let-item>
+            <a
+              [routerLink]="item.routerLink"
+              class="p-menu-item-link">
+              <fa-icon [icon]="item.faIcon"></fa-icon>
+              <span>{{ item.label }}</span>
+            </a>
+          </ng-template>
+        </p-menu>
+      </nav>
+    </div>
 
-    <nav class="px-3 mt-7">
-      <p-menu [model]="navItemsIfSelected">
-        <ng-template #item let-item>
-          <a
-            [routerLink]="item.routerLink"
-            class="p-menu-item-link">
-            <fa-icon [icon]="item.faIcon"></fa-icon>
-            <span>{{ item.label }}</span>
-          </a>
-        </ng-template>
-      </p-menu>
-    </nav>
+    <div *ngIf="navItemsIfSelected?.length">
+      <nav class="px-3 mt-7" >
+        <p-menu [model]="navItemsIfSelected">
+          <ng-template #item let-item>
+            <a
+              [routerLink]="item.routerLink"
+              class="p-menu-item-link">
+              <fa-icon [icon]="item.faIcon"></fa-icon>
+              <span>{{ item.label }}</span>
+            </a>
+          </ng-template>
+        </p-menu>
+      </nav>
+    </div>
 
-    <nav class="px-3 mt-7">
-      <p-menu [model]="navItemsAdmin">
-        <ng-template #item let-item>
-          <a
-            [routerLink]="item.routerLink"
-            class="p-menu-item-link">
-            <fa-icon [icon]="item.faIcon"></fa-icon>
-            <span>{{ item.label }}</span>
-          </a>
-        </ng-template>
-      </p-menu>
-    </nav>
+    <div *ngIf="navItemsAdmin?.length">
+      <nav class="px-3 mt-7" >
+        <p-menu [model]="navItemsAdmin">
+          <ng-template #item let-item>
+            <a
+              [routerLink]="item.routerLink"
+              class="p-menu-item-link">
+              <fa-icon [icon]="item.faIcon"></fa-icon>
+              <span>{{ item.label }}</span>
+            </a>
+          </ng-template>
+        </p-menu>
+      </nav>
+    </div>
+
     
     <nav class="px-3 mt-auto mb-4">
       <p-menu [model]="footerItems">
@@ -60,7 +67,7 @@
 
   </div>
 
-  <div class="grow overflow-y-auto inset-shadow-sm  surface-ground p-8">
+  <div class="grow overflow-y-auto inset-shadow-sm surface-ground p-8">
     <router-outlet></router-outlet>
   </div>
   

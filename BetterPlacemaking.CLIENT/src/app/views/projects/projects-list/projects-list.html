@@ -1,1 +1,35 @@
-<p>projects-list works!</p>
+<div class="w-full flex flex-col content-background p-4 rounded-lg">
+  <p-table [value]="projects" class="rounded-lg overflow-hidden">
+
+    <ng-template #caption>
+      <div class="p-d-flex p-ai-center p-jc-between">
+        <div class="gap-3">
+          <span class="font-semibold text-xl">Projects</span>
+          <p class="text-muted-color">This table uses PrimeNG caption, header and body templates.</p>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #header>
+      <tr>
+        <th>Title</th>
+        <th>Description</th>
+        <th>Size</th>
+        <th>Action</th>
+      </tr>
+    </ng-template>
+
+    <ng-template #body let-project>
+      <tr>
+        <td>{{ project.title }}</td>
+        <td>{{ project.description }}</td>
+        <td>{{ project.size }}</td>
+        <td>
+          <a pButton type="button" class="p-button-sm p-button-outlined" routerLink="/20">Open</a>
+        </td>
+      </tr>
+    </ng-template>
+
+  </p-table>
+
+</div>
