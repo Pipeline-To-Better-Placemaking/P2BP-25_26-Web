@@ -13,9 +13,13 @@ public class EmailService
         _apiSecret = Environment.GetEnvironmentVariable("SECRET_KEY")!;
     }
 
-    public void SendVerificationEmail(string toEmail, string token)
+    public void SendEmail(string toEmail, string token, string subject = "Verify your email")
     {
         var client = new MailjetClient(_apiKey, _apiSecret);
+
+        string link = subject == "Password Reset"
+            ? $"http://localhost:5123/api/password/reset-password?token={token}"
+            : $"http://localhost:5123/api/email/verify-email?token={token}";
 
         var request = new MailjetRequest
         {
@@ -23,12 +27,10 @@ public class EmailService
         }
         .Property(Send.FromEmail, "lanzzhen@gmail.com")
         .Property(Send.FromName, "BetterPlacemaking")
-        .Property(Send.Subject, "Verify your email")
-        .Property(Send.HtmlPart, $"<p>Click to verify your email:</p><a href='http://localhost:5123/api/email/verify-email?token={token}'>Verify Email</a>")
-        .Property(Send.Recipients, new JArray {
-            new JObject { { "Email", toEmail } }
-        });
+        .Property(Send.Subject, subject)
+        .Property(Send.HtmlPart, $"<p>Click to proceed:</p><a href='{link}'>{subject}</a>")
+        .Property(Send.Recipients, new JArray { new JObject { { "Email", toEmail } } });
 
         var response = client.PostAsync(request).Result;
-    }
+}
 }

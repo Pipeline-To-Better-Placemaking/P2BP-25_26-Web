@@ -27,6 +27,7 @@ builder.Services.AddScoped<SampleService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddSingleton<EmailService>();
+builder.Services.AddScoped<PasswordService>();
 
 // builder.Services.AddSingleton(provider =>
 // {

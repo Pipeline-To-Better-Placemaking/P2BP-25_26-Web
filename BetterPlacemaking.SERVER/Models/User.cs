@@ -33,5 +33,14 @@ namespace BetterPlacemaking.Models
         [FirestoreProperty]
         [JsonIgnore]
         public string? EmailVerificationToken { get; set; }
+
+        [FirestoreProperty]
+        [JsonIgnore]
+        public string? PasswordResetToken { get; set; }
+
+        [FirestoreProperty]
+        [JsonIgnore]
+        public DateTime? PasswordResetTokenExpiry { get; set; }
+
     }   
 }

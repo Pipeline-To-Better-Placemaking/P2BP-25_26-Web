@@ -1,7 +1,5 @@
 using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
-using Microsoft.AspNetCore.Mvc;
-using BCrypt.Net;
 
 namespace BetterPlacemaking.Services
 {
@@ -49,7 +47,7 @@ namespace BetterPlacemaking.Services
 
             if (!string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(user.EmailVerificationToken))
             {
-                _emailService.SendVerificationEmail(user.Email, user.EmailVerificationToken);
+                _emailService.SendEmail(user.Email, user.EmailVerificationToken);
             }
             else
             {
@@ -64,7 +62,7 @@ namespace BetterPlacemaking.Services
                 Role = user.Role
             };
         }
-        
+
         public User? UpdateUser(string id, User user)
         {
             var docRef = _db.Collection(collectionName).Document(id);
