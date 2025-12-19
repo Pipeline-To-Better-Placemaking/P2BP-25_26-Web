@@ -15,3 +15,5 @@ node_modules/
 .angular
 .firebase/
 /BetterPlacemaking.CLIENT/.firebase
+
+*.cache

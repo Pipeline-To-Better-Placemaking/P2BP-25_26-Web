@@ -2,10 +2,13 @@
   <p-table [value]="projects" class="rounded-lg overflow-hidden">
 
     <ng-template #caption>
-      <div class="p-d-flex p-ai-center p-jc-between">
+      <div class="w-full flex justify-between items-center">
         <div class="gap-3">
           <span class="font-semibold text-xl">Projects</span>
-          <p class="text-muted-color">This table uses PrimeNG caption, header and body templates.</p>
+          <p class="text-muted-color">List of projects.</p>
+        </div>
+        <div>
+          <p-button label="TEST BUTTON" (onClick)="testPing()"/>
         </div>
       </div>
     </ng-template>

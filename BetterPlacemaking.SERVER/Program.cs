@@ -89,9 +89,9 @@ if (app.Environment.IsDevelopment())
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Better Placemaking API V1");
         options.RoutePrefix = "swagger";
     });
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("_myAllowSpecificOrigins");
