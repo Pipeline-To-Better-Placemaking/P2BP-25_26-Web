@@ -13,3 +13,5 @@
 [Dd]ist/
 node_modules/
 .angular
+.firebase/
+/BetterPlacemaking.CLIENT/.firebase
