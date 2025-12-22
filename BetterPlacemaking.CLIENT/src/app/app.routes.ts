@@ -3,11 +3,10 @@ import { DefaultLayout } from './layouts/default-layout/default-layout';
 import { Login } from './views/login/login';
 import { ProjectsList } from './views/projects/projects-list/projects-list';
 import { Dashboard } from './views/projects/selected/dashboard/dashboard';
+import { DevicesList } from './views/admin/devices/devices-list/devices-list';
 
 const admin: Routes = [
-  // { path: '', data: { subtree: 'admin-root' }, children: [] },
-  // { path: 'users', data: { subtree: 'admin-users' }, children: [] },
-  // { path: 'settings', data: { subtree: 'admin-settings' }, children: [] },
+  { path: 'devices', component: DevicesList}
 ];
 
 export const routes: Routes = [
@@ -19,20 +18,14 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'projects', pathMatch: 'full' },
       { path: 'projects', component: ProjectsList },
-      { path: ':projectId', children: [{ path: '', component: Dashboard }] },
-      // { path: 'admin', children: admin },
-
-      // {
-      //   path: 'project/:projectId',
-      //   children: [
-      //     { path: '', },
-      //     { path: 'overview', },
-      //     { path: 'tasks', },
-      //     { path: 'settings', },
-
-      //     { path: 'admin', children: admin },
-      //   ],
-      // },
+      { path: 'admin', children: admin },
+      {
+        path: ':projectId',
+        children: [
+          { path: '', component: Dashboard },
+          { path: 'admin', children: admin },
+        ],
+      },
     ],
   },
 ];

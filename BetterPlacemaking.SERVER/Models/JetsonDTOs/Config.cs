@@ -5,9 +5,6 @@ namespace BetterPlacemaking.Models.JetsonDTOs
     [FirestoreData]
     public class Config
     {
-        [FirestoreDocumentId]
-        public string? DeviceId { get; set; }
-
         [FirestoreProperty]
         public TrackingConfig? Tracking { get; set; }
 

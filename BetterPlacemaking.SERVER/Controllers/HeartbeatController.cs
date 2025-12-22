@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BetterPlacemaking.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/[controller]")]
     public class HeartbeatController(FirestoreDb firestoreDb) : ControllerBase
     {
         private readonly FirestoreDb _firestoreDb = firestoreDb;

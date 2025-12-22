@@ -1,0 +1,42 @@
+<div class="w-full flex flex-col content-background p-4 rounded-lg">
+  <p-table [value]="devices" class="rounded-lg overflow-hidden">
+    <ng-template #caption>
+      <div class="w-full flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <span class="font-semibold text-xl">Devices</span>
+          <span class="text-muted-color text-xl">{{ devices?.length || 0 }}</span>
+        </div>
+        <p-button label="Add" icon="pi pi-plus" (onClick)="addDevice()"> </p-button>
+      </div>
+    </ng-template>
+
+    <ng-template #header>
+      <tr>
+        <th style="width: 3rem"></th>
+        <th>Id</th>
+        <th>Device</th>
+        <th>Project</th>
+        <th>Size</th>
+      </tr>
+    </ng-template>
+
+    <ng-template #body let-device>
+      <tr>
+        <td>
+          <p-button
+            icon="pi pi-ellipsis-v"
+            styleClass="p-button-text p-button-rounded p-button-plain"
+            (onClick)="onRowMenuClick($event, device, rowMenu)"
+          >
+          </p-button>
+        </td>
+        <td>{{ device.Id }}</td>
+        <td>{{ device.Name }}</td>
+        <td>{{ device.ProjectId }}</td>
+        <td>1</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-menu #rowMenu [model]="rowMenuItems" [popup]="true" ></p-menu>

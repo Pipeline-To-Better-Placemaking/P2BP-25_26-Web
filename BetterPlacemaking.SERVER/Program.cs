@@ -28,6 +28,7 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<PasswordService>();
+builder.Services.AddScoped<DeviceService>();
 
 // builder.Services.AddSingleton(provider =>
 // {
@@ -38,6 +39,11 @@ builder.Services.AddScoped<PasswordService>();
 //         ProjectId = projectId
 //     });
 // });
+
+builder.Services.AddControllers().AddJsonOptions(opts =>
+{
+  opts.JsonSerializerOptions.PropertyNamingPolicy = null;
+});
 
 builder.Services.AddSingleton<FirestoreDb>(_ =>
     new FirestoreDbBuilder

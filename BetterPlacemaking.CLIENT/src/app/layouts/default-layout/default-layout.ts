@@ -48,15 +48,6 @@ export class DefaultLayout implements OnDestroy {
     ];
 
     this.navItems = [{ label: 'Select Project', faIcon: faHome, routerLink: '/projects' }];
-    this.navItemsAdmin = [
-      {
-        label: 'Admin',
-        items: [
-          { label: 'Permissions', faIcon: faChartLine, routerLink: '/admin/permissions' },
-          { label: 'Manage Projects', faIcon: faFolder, routerLink: '/admin/projects' },
-        ],
-      },
-    ];
 
     // Listen for navigation end events and rebuild menus when project id changes
     this.routerSub = this.router.events
@@ -87,7 +78,7 @@ export class DefaultLayout implements OnDestroy {
   private buildNavMenus(projectId?: number): void {
     
     if (projectId != null) {
-      const base = `/projects/${projectId}`;
+      const base = `${projectId}`;
       this.navItemsIfSelected = [
         {
           label: 'Project',
@@ -99,9 +90,28 @@ export class DefaultLayout implements OnDestroy {
           ],
         },
       ];
+      this.navItemsAdmin = [
+        {
+          label: 'Admin',
+          items: [
+            { label: 'Permissions', faIcon: faChartLine, routerLink: `${base}/admin/permissions` },
+            { label: 'Manage Projects', faIcon: faFolder, routerLink: `${base}/admin/projects` },
+            { label: 'Devices', faIcon: faFolder, routerLink: `${base}/admin/devices` },
+          ],
+        },
+      ];
     } else {
-      // No project selected - show fallback links or clear the section
       this.navItemsIfSelected = [
+      ];
+      this.navItemsAdmin = [
+        {
+          label: 'Admin',
+          items: [
+            { label: 'Permissions', faIcon: faChartLine, routerLink: '/admin/permissions' },
+            { label: 'Manage Projects', faIcon: faFolder, routerLink: '/admin/projects' },
+            { label: 'Devices', faIcon: faFolder, routerLink: '/admin/devices' },
+          ],
+        },
       ];
     }
   }

@@ -1,0 +1,77 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col gap-6 p-4">
+	<section class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-4 space-y-4">
+		<h3 class="text-lg font-semibold">Device Details</h3>
+		<div class="grid gap-4 md:grid-cols-2">
+			<div class="flex flex-col gap-1">
+				<label class="font-semibold">Project Id</label>
+				<input pInputText formControlName="ProjectId" />
+			</div>
+			<div class="flex flex-col gap-1">
+				<label class="font-semibold">Name</label>
+				<input pInputText formControlName="Name" />
+			</div>
+		</div>
+	</section>
+
+	<section formGroupName="Config" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-4 space-y-6">
+		<div class="space-y-2">
+			<h3 class="text-lg font-semibold">Jetson Configuration</h3>
+			<p class="text-sm text-muted-color">Tune heartbeat, tracking, and camera settings for this device.</p>
+		</div>
+
+		<div class="grid gap-4 md:grid-cols-2">
+			<div class="flex flex-col gap-1">
+				<label class="font-semibold">Heartbeat Interval (sec)</label>
+				<p-inputNumber formControlName="HeartbeatInterval" [min]="1" showButtons suffix=" s"></p-inputNumber>
+			</div>
+			<div class="flex flex-col gap-1">
+				<label class="font-semibold">Config Version</label>
+				<input pInputText formControlName="Version" />
+			</div>
+		</div>
+
+		<div formGroupName="Tracking" class="rounded-lg border border-surface-200 dark:border-surface-700 p-4 space-y-4">
+			<div class="flex items-center gap-2">
+				<p-checkbox inputId="tracking-enabled" formControlName="Enabled" binary></p-checkbox>
+				<label for="tracking-enabled" class="font-semibold">Enable Tracking</label>
+			</div>
+			<div class="grid gap-4 md:grid-cols-3">
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Model</label>
+					<input pInputText formControlName="Model" />
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Confidence Threshold (0-1)</label>
+					<p-inputNumber formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Max FPS</label>
+					<p-inputNumber formControlName="MaxFps" [min]="0" [max]="120" showButtons></p-inputNumber>
+				</div>
+			</div>
+		</div>
+
+		<div formGroupName="Camera" class="rounded-lg border border-surface-200 dark:border-surface-700 p-4 space-y-4">
+			<h4 class="text-base font-semibold">Camera</h4>
+			<div class="grid gap-4 md:grid-cols-3">
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Resolution</label>
+					<input pInputText formControlName="Resolution" />
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Framerate</label>
+					<p-inputNumber formControlName="Framerate" [min]="0" [max]="240" showButtons suffix=" fps"></p-inputNumber>
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="font-semibold">Codec</label>
+					<input pInputText formControlName="Codec" />
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<div class="flex justify-end gap-2">
+		<p-button type="button" label="Cancel" styleClass="p-button-text" (onClick)="onCancel()"></p-button>
+		<p-button type="submit" label="Save" [disabled]="form.invalid"></p-button>
+	</div>
+</form>

@@ -50,7 +50,7 @@ namespace BetterPlacemaking.Controllers
 			try
 			{
 				var created = _userService.AddUser(user);
-				return CreatedAtAction(nameof(GetUser), new { id = created.Id }, created);
+				return CreatedAtAction(nameof(GetUser), new { id = created?.Id }, created);
 			}
 			catch (Exception)
 			{
