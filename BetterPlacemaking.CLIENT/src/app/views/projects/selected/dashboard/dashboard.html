@@ -1,1 +1,40 @@
-<p>dashboard works!</p>
+<div class="w-full flex flex-col content-background p-4 rounded-lg">
+  <p-splitter
+    [style]="{ height: '300px' }"
+    [panelSizes]="[20, 80]"
+    [minSizes]="[10, 0]"
+    class="mb-8"
+  >
+    <ng-template pTemplate="panel">
+      <div class="col flex w-full items-center justify-center">
+        Panel 1
+      </div>
+    </ng-template>
+
+    <ng-template pTemplate="panel">
+      <p-splitter layout="vertical" [panelSizes]="[50, 50]">
+        <ng-template pTemplate="panel">
+          <div class="flex items-center justify-center h-full">
+            Panel 2
+          </div>
+        </ng-template>
+
+        <ng-template pTemplate="panel">
+          <p-splitter [panelSizes]="[20, 80]">
+            <ng-template pTemplate="panel">
+              <div class="h-full flex items-center justify-center">
+                Panel 3
+              </div>
+            </ng-template>
+
+            <ng-template pTemplate="panel">
+              <div class="h-full flex items-center justify-center">
+                Panel 4
+              </div>
+            </ng-template>
+          </p-splitter>
+        </ng-template>
+      </p-splitter>
+    </ng-template>
+  </p-splitter>
+</div>
