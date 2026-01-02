@@ -1,0 +1,62 @@
+<div class="w-full flex flex-col gap-4 p-3">
+	<ng-container *ngIf="!apiKey; else apiKeyView">
+		<p class="text-sm text-color-secondary">
+			You can only view a device API key once. Clicking
+			<span class="font-semibold">"Generate"</span> will create a new key for this device and
+			immediately invalidate any previous key.
+		</p>
+
+		<p *ngIf="error" class="text-sm text-red-500">{{ error }}</p>
+
+		<div class="flex justify-end gap-2 mt-4">
+			<p-button
+				label="Cancel"
+				severity="secondary"
+				(onClick)="close()"
+			></p-button>
+
+			<p-button
+				label="Generate"
+				icon="pi pi-key"
+                variant="outlined"
+                severity="danger"
+				(onClick)="generateApiKey()"
+				[loading]="isLoading"
+				[disabled]="isLoading || !deviceId"
+			></p-button>
+		</div>
+	</ng-container>
+
+	<ng-template #apiKeyView>
+		<p class="text-sm text-color-secondary">
+			This is the new API key for this device. Copy it and store it in a safe place now. You won't be able to
+			view it again.
+		</p>
+
+		<div class="flex items-center gap-2 mt-2">
+			<input
+				pInputText
+				class="w-full font-mono"
+				[value]="apiKey || ''"
+				readonly
+			/>
+			<p-button
+				icon="pi pi-copy"
+				(onClick)="copyApiKey()"
+				[disabled]="!apiKey"
+				severity="secondary"
+			></p-button>
+		</div>
+
+		<small *ngIf="copied" class="text-xs text-green-500 mt-1">Copied to clipboard</small>
+
+		<p *ngIf="error" class="text-sm text-red-500 mt-2">{{ error }}</p>
+
+		<div class="flex justify-end mt-4">
+			<p-button
+				label="Close"
+				(onClick)="close()"
+			></p-button>
+		</div>
+	</ng-template>
+</div>

@@ -5,7 +5,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { Device } from '../../../../models/Device';
+import { DeviceDto } from '../../../../models/DeviceDto';
 import { Config } from '../../../../models/jetson-dtos/Config';
 
 @Component({
@@ -16,18 +16,18 @@ import { Config } from '../../../../models/jetson-dtos/Config';
 })
 export class DeviceForm implements OnInit {
   form!: FormGroup;
-  @Input() device: Device | null = null;
-  @Output() deviceChange = new EventEmitter<Device>();
-  private originalDevice: Device | null = null;
+  @Input() device: DeviceDto | null = null;
+  @Output() deviceChange = new EventEmitter<DeviceDto>();
+  private originalDevice: DeviceDto | null = null;
 
   constructor(
-    private fb: FormBuilder,
-    private ref: DynamicDialogRef,
-    private config: DynamicDialogConfig,
+    private readonly fb: FormBuilder,
+    private readonly ref: DynamicDialogRef,
+    private readonly config: DynamicDialogConfig,
   ) {}
 
   ngOnInit(): void {
-    const existing = this.device ?? (this.config.data as Device | undefined);
+    const existing = this.device ?? (this.config.data as DeviceDto | undefined);
     this.originalDevice = existing ?? null;
 
     this.form = this.fb.group({
@@ -45,8 +45,8 @@ export class DeviceForm implements OnInit {
     }
 
     const value = this.form.value;
-    const device: Device = {
-      ...(this.originalDevice ?? {}),
+    const device: DeviceDto = {
+      ...this.originalDevice,
       Id: value.Id,
       Name: value.Name,
       ProjectId: value.ProjectId || undefined,

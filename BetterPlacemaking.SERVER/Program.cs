@@ -1,8 +1,12 @@
 using BetterPlacemaking.Controllers;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Authorization;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +33,22 @@ builder.Services.AddScoped<LoginService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<DeviceService>();
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddAuthentication("DeviceApiKey")
+    .AddScheme<AuthenticationSchemeOptions, DeviceApiKeyAuthenticationHandler>(
+        "DeviceApiKey",
+        options => { });
+
+builder.Services.AddScoped<IAuthorizationHandler, DeviceApiKeyHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("DeviceApiKey", policy =>
+    {
+        policy.Requirements.Add(new DeviceApiKeyRequirement());
+        policy.AddAuthenticationSchemes("DeviceApiKey");
+    });
+});
 
 // builder.Services.AddSingleton(provider =>
 // {
@@ -54,10 +74,33 @@ builder.Services.AddSingleton<FirestoreDb>(_ =>
 
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Better Placemaking API",
         Version = "v1"
+    });
+
+    options.AddSecurityDefinition("DeviceApiKey", new OpenApiSecurityScheme
+    {
+        Description = "Device API key in the form: Bearer {api_key}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "DeviceApiKey"
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 
@@ -85,7 +128,7 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapControllers().AllowAnonymous();
+    app.MapControllers();
     app.UseSwagger(options =>
     {
         options.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0;
@@ -101,6 +144,8 @@ if (app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("_myAllowSpecificOrigins");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}"

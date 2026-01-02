@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
@@ -49,10 +51,49 @@ namespace BetterPlacemaking.Services
         {
             var docRef = _db.Collection(collectionName).Document(id);
 
+            var snap = docRef.GetSnapshotAsync().Result;
+            if (!snap.Exists)
+                return null;
+
+            var existing = snap.ConvertTo<Device>();
+			device.ApiKeyHash = existing.ApiKeyHash;
             docRef.SetAsync(device).Wait();
             var updated = docRef.GetSnapshotAsync().Result
                 .ConvertTo<Device>();
             return updated;
+        }
+
+        public Device? GetDeviceByApiKey(string apiKey)
+        {
+            var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(apiKey));
+            var hash = Convert.ToBase64String(hashBytes);
+
+            var query = _db.Collection(collectionName)
+                .WhereEqualTo(nameof(Device.ApiKeyHash), hash)
+                .Limit(1);
+
+            var snapshot = query.GetSnapshotAsync().Result;
+            var doc = snapshot.Documents.FirstOrDefault();
+            return doc?.ConvertTo<Device>();
+        }
+
+        public string? GenerateAndUpdateApiKey(string id)
+        {
+            var docRef = _db.Collection(collectionName).Document(id);
+            var snap = docRef.GetSnapshotAsync().Result;
+            if (!snap.Exists)
+                return null;
+
+            var device = snap.ConvertTo<Device>();
+            if (device == null)
+                return null;
+
+            var newKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(newKey));
+            var hash = Convert.ToBase64String(hashBytes);
+            device.ApiKeyHash = hash;
+            docRef.SetAsync(device).Wait();
+            return newKey;
         }
 
         public bool DeleteDevice(string id)

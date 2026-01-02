@@ -1,32 +1,43 @@
 import { Injectable } from '@angular/core';
-import { Device } from '../models/Device';
+import { DeviceDto } from '../models/DeviceDto';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
 })
 export class DeviceService {
-  constructor(private http: HttpClient) {}
+  constructor(private readonly http: HttpClient) {}
 
-  public getDevices(): Observable<Device[]> {
-    return this.http.get<Device[]>(`${environment.apiBaseUrl}/api/device`);
+  public getDevices(): Observable<DeviceDto[]> {
+	return this.http.get<DeviceDto[]>(`${environment.apiBaseUrl}/api/device`);
   }
 
-  public getDevice(id: string): Observable<Device> {
-    return this.http.get<Device>(`${environment.apiBaseUrl}/api/device/${id}`);
+  public getDevice(id: string): Observable<DeviceDto> {
+	return this.http.get<DeviceDto>(`${environment.apiBaseUrl}/api/device/${id}`);
   }
 
-  public addDevice(device: Device): Observable<Device> {
-    return this.http.post<Device>(`${environment.apiBaseUrl}/api/device`, device);
+  public addDevice(device: DeviceDto): Observable<DeviceDto> {
+	return this.http.post<DeviceDto>(`${environment.apiBaseUrl}/api/device`, device);
   }
 
-  public updateDevice(id: string, device: Device): Observable<Device> {
-    return this.http.put<Device>(`${environment.apiBaseUrl}/api/device/${id}`, device);
+  public updateDevice(id: string, device: DeviceDto): Observable<DeviceDto> {
+	return this.http.put<DeviceDto>(`${environment.apiBaseUrl}/api/device/${id}`, device);
   }
 
   public deleteDevice(id: string): Observable<void> {
     return this.http.delete<void>(`${environment.apiBaseUrl}/api/device/${id}`);
+  }
+
+  public getApiKey(id: string): Observable<string> {
+    return this.http
+      .post<{ apiKey?: string; ApiKey?: string }>(
+        `${environment.apiBaseUrl}/api/device/${id}/apikey`,
+        null,
+      )
+      .pipe(
+        map((response) => response.apiKey ?? response.ApiKey ?? ''),
+      );
   }
 }

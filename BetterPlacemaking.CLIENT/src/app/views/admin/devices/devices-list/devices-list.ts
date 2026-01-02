@@ -1,13 +1,13 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
-import { MenuModule } from 'primeng/menu';
-import { Device } from '../../../../models/Device';
+import { MenuModule, Menu } from 'primeng/menu';
+import { DeviceDto } from '../../../../models/DeviceDto';
 import { DeviceService } from '../../../../services/device-service';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { DeviceForm } from '../device-form/device-form';
 import { MenuItem } from 'primeng/api';
-import { Menu } from 'primeng/menu';
+import { DeviceApiInfo } from '../device-api-info/device-api-info';
 
 @Component({
   selector: 'app-devices-list',
@@ -16,15 +16,19 @@ import { Menu } from 'primeng/menu';
   templateUrl: './devices-list.html',
   styleUrl: './devices-list.scss',
 })
-export class DevicesList {
-  public devices: Device[] = [];
+export class DevicesList implements OnInit {
+  public devices: DeviceDto[] = [];
 
   public rowMenuItems: MenuItem[] = [];
-  private selectedDevice: Device | null = null;
+  private selectedDevice: DeviceDto | null = null;
 
-  ref: DynamicDialogRef<DeviceForm> | null = null;
+  formRef: DynamicDialogRef<DeviceForm> | null = null;
+  apiInfoRef: DynamicDialogRef<DeviceApiInfo> | null = null;
 
-  public constructor(private deviceService: DeviceService, private dialogService: DialogService) {}
+  public constructor(
+    private readonly deviceService: DeviceService,
+    private readonly dialogService: DialogService
+  ) {}
 
   ngOnInit(): void {
     this.loadDevices();
@@ -43,7 +47,7 @@ export class DevicesList {
       },
     });
   }
-  
+
   public buildDrowndownMenu(): void {
     this.rowMenuItems = [
       {
@@ -64,11 +68,31 @@ export class DevicesList {
           }
         },
       },
+      {
+        label: 'Get API Key',
+        icon: 'pi pi-key',
+        command: () => {
+          if (this.selectedDevice) {
+            this.getAndDisplayApiKey(this.selectedDevice.Id);
+          }
+        },
+      },
     ];
   }
-  
+
+  public getAndDisplayApiKey(id: string): void {
+    this.apiInfoRef = this.dialogService.open(DeviceApiInfo, {
+      header: 'Device API Key',
+      width: '450px',
+      modal: true,
+      data: { deviceId: id },
+      dismissableMask: true,
+      closable: true,
+    });
+  }
+
   public addDevice(): void {
-    this.ref = this.dialogService.open(DeviceForm, {
+    this.formRef = this.dialogService.open(DeviceForm, {
       header: 'Select a Device',
       width: '50vw',
       modal: true,
@@ -79,7 +103,7 @@ export class DevicesList {
       closable: true,
     });
 
-    this.ref?.onClose.subscribe((device: Device | undefined) => {
+    this.formRef?.onClose.subscribe((device: DeviceDto | undefined) => {
       if (!device) {
         return;
       }
@@ -91,14 +115,13 @@ export class DevicesList {
     });
   }
 
-
-  public onRowMenuClick(event: MouseEvent, device: Device, menu: Menu): void {
+  public onRowMenuClick(event: MouseEvent, device: DeviceDto, menu: Menu): void {
     this.selectedDevice = device;
     menu.toggle(event);
   }
 
-  private editDevice(device: Device): void {
-    this.ref = this.dialogService.open(DeviceForm, {
+  private editDevice(device: DeviceDto): void {
+    this.formRef = this.dialogService.open(DeviceForm, {
       header: 'Edit Device',
       width: '50vw',
       modal: true,
@@ -112,7 +135,7 @@ export class DevicesList {
     });
   }
 
-  private deleteDevice(device: Device): void {
+  private deleteDevice(device: DeviceDto): void {
     if (!confirm('Are you sure you want to delete this device?')) {
       return;
     }

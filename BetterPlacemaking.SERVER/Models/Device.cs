@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Google.Cloud.Firestore;
+using BetterPlacemaking.Models.JetsonDTOs;
 
 namespace BetterPlacemaking.Models
 {
@@ -16,6 +17,10 @@ namespace BetterPlacemaking.Models
         public string? Name { get; set; }
 
         [FirestoreProperty]
-        public JetsonDTOs.Config? Config { get; set; }
+        public Config? Config { get; set; }
+
+        [FirestoreProperty]
+        [JsonIgnore]
+        public string? ApiKeyHash { get; set; }
     }
 }

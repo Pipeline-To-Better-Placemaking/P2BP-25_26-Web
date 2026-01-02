@@ -1,7 +1,10 @@
 using BetterPlacemaking.Models;
+using BetterPlacemaking.Models.Dtos;
+using BetterPlacemaking.Models.JetsonDTOs;
 using BetterPlacemaking.Services;
 using Google.Cloud.Firestore;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
@@ -17,8 +20,9 @@ namespace BetterPlacemaking.Controllers
         {
             try
             {
-                List<Device> response = _deviceService.GetDevices();
-                return Ok(response);
+				List<Device> devices = _deviceService.GetDevices();
+				var dtos = devices.Select(ToDto).ToList();
+				return Ok(dtos);
             }
             catch (Exception)
             {
@@ -31,10 +35,10 @@ namespace BetterPlacemaking.Controllers
         {
             try
             {
-                Device? response = _deviceService.GetDevice(id);
-                if (response == null)
+				Device? device = _deviceService.GetDevice(id);
+				if (device == null)
                     return NotFound();
-                return Ok(response);
+				return Ok(ToDto(device));
             }
             catch (Exception)
             {
@@ -42,16 +46,16 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
-        [HttpPost]
-		public IActionResult AddDevice([FromBody] Device device)
+		[HttpPost]
+		public IActionResult AddDevice([FromBody] DeviceDto deviceDto)
 		{
-			if (device == null)
+			if (deviceDto == null)
 				return BadRequest();
 
 			try
 			{
-				var created = _deviceService.AddDevice(device);
-				return CreatedAtAction(nameof(GetDevice), new { id = created?.Id }, created);
+				var created = _deviceService.AddDevice(FromDto(deviceDto));
+				return CreatedAtAction(nameof(GetDevice), new { id = created?.Id }, ToDto(created!));
 			}
 			catch (Exception)
 			{
@@ -59,18 +63,18 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-        [HttpPut("{id}")]
-		public IActionResult UpdateDevice(string id, [FromBody] Device device)
+		[HttpPut("{id}")]
+		public IActionResult UpdateDevice(string id, [FromBody] DeviceDto deviceDto)
 		{
-			if (device == null || id != device.Id)
+			if (deviceDto == null || id != deviceDto.Id)
 				return BadRequest();
 
 			try
 			{
-				var updated = _deviceService.UpdateDevice(id, device);
+				var updated = _deviceService.UpdateDevice(id, FromDto(deviceDto));
 				if (updated == null)
 					return NotFound();
-				return Ok(updated);
+				return Ok(ToDto(updated));
 			}
 			catch (Exception)
 			{
@@ -93,5 +97,58 @@ namespace BetterPlacemaking.Controllers
 				return Problem("An unexpected error occurred while deleting the user.");
 			}
 		}
-    }
+
+		[HttpPost("heartbeat")]
+		[Authorize(Policy = "DeviceApiKey")]
+		public IActionResult PostHeartbeat([FromBody] HealthCheck heartbeat)
+		{
+			if (heartbeat == null)
+				return BadRequest("Invalid heartbeat data");
+
+			try
+			{
+                if (HttpContext.Items["Device"] is not Device device)
+                    return Unauthorized("Invalid API key");
+
+                return Ok(device.Config);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while processing the heartbeat.");
+			}
+		}
+
+		[HttpPost("{id}/apikey")]
+		public IActionResult GenerateApiKey(string id)
+		{
+			try
+			{
+				var apiKey = _deviceService.GenerateAndUpdateApiKey(id);
+				if (apiKey == null)
+					return NotFound();
+
+				return Ok(new { ApiKey = apiKey });
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while generating the API key.");
+			}
+		}
+
+		private static DeviceDto ToDto(Device device) => new()
+		{
+			Id = device.Id,
+			ProjectId = device.ProjectId,
+			Name = device.Name,
+			Config = device.Config,
+		};
+
+		private static Device FromDto(DeviceDto dto) => new()
+		{
+			Id = dto.Id,
+			ProjectId = dto.ProjectId,
+			Name = dto.Name,
+			Config = dto.Config,
+		};
+	}
 }

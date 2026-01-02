@@ -3,12 +3,12 @@
 		<h3 class="text-lg font-semibold">Device Details</h3>
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class="flex flex-col gap-1">
-				<label class="font-semibold">Project Id</label>
-				<input pInputText formControlName="ProjectId" />
+				<label for="project-id" class="font-semibold">Project Id</label>
+				<input id="project-id" pInputText formControlName="ProjectId" />
 			</div>
 			<div class="flex flex-col gap-1">
-				<label class="font-semibold">Name</label>
-				<input pInputText formControlName="Name" />
+				<label for="device-name" class="font-semibold">Name</label>
+				<input id="device-name" pInputText formControlName="Name" />
 			</div>
 		</div>
 	</section>
@@ -21,12 +21,12 @@
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class="flex flex-col gap-1">
-				<label class="font-semibold">Heartbeat Interval (sec)</label>
-				<p-inputNumber formControlName="HeartbeatInterval" [min]="1" showButtons suffix=" s"></p-inputNumber>
+				<label for="heartbeat-interval" class="font-semibold">Heartbeat Interval (sec)</label>
+				<p-inputNumber inputId="heartbeat-interval" formControlName="HeartbeatInterval" [min]="1" showButtons suffix=" s"></p-inputNumber>
 			</div>
 			<div class="flex flex-col gap-1">
-				<label class="font-semibold">Config Version</label>
-				<input pInputText formControlName="Version" />
+				<label for="config-version" class="font-semibold">Config Version</label>
+				<input id="config-version" pInputText formControlName="Version" />
 			</div>
 		</div>
 
@@ -37,16 +37,16 @@
 			</div>
 			<div class="grid gap-4 md:grid-cols-3">
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Model</label>
-					<input pInputText formControlName="Model" />
+					<label for="tracking-model" class="font-semibold">Model</label>
+					<input id="tracking-model" pInputText formControlName="Model" />
 				</div>
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Confidence Threshold (0-1)</label>
-					<p-inputNumber formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
+					<label for="confidence-threshold" class="font-semibold">Confidence Threshold (0-1)</label>
+					<p-inputNumber inputId="confidence-threshold" formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
 				</div>
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Max FPS</label>
-					<p-inputNumber formControlName="MaxFps" [min]="0" [max]="120" showButtons></p-inputNumber>
+					<label for="max-fps" class="font-semibold">Max FPS</label>
+					<p-inputNumber inputId="max-fps" formControlName="MaxFps" [min]="0" [max]="120" showButtons></p-inputNumber>
 				</div>
 			</div>
 		</div>
@@ -55,16 +55,16 @@
 			<h4 class="text-base font-semibold">Camera</h4>
 			<div class="grid gap-4 md:grid-cols-3">
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Resolution</label>
-					<input pInputText formControlName="Resolution" />
+					<label for="camera-resolution" class="font-semibold">Resolution</label>
+					<input id="camera-resolution" pInputText formControlName="Resolution" />
 				</div>
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Framerate</label>
-					<p-inputNumber formControlName="Framerate" [min]="0" [max]="240" showButtons suffix=" fps"></p-inputNumber>
+					<label for="camera-framerate" class="font-semibold">Framerate</label>
+					<p-inputNumber inputId="camera-framerate" formControlName="Framerate" [min]="0" [max]="240" showButtons suffix=" fps"></p-inputNumber>
 				</div>
 				<div class="flex flex-col gap-1">
-					<label class="font-semibold">Codec</label>
-					<input pInputText formControlName="Codec" />
+					<label for="camera-codec" class="font-semibold">Codec</label>
+					<input id="camera-codec" pInputText formControlName="Codec" />
 				</div>
 			</div>
 		</div>

@@ -1,6 +1,6 @@
 import { Config } from "./jetson-dtos/Config";
 
-export interface Device {
+export interface DeviceDto {
     Id: string;
     ProjectId?: string;
     Name: string;
