@@ -1,11 +1,13 @@
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [AllowAnonymous]
     public class PasswordController(PasswordService passwordService) : ControllerBase
     {
         private readonly PasswordService _passwordService = passwordService;

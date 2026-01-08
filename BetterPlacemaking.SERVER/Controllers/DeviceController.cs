@@ -16,6 +16,7 @@ namespace BetterPlacemaking.Controllers
         private readonly DeviceService _deviceService = deviceService;
 
         [HttpGet]
+		[Authorize(Policy = "UserJwt")]
         public IActionResult GetDevices()
         {
             try
@@ -31,6 +32,7 @@ namespace BetterPlacemaking.Controllers
         }
 
         [HttpGet("{id}")]
+		[Authorize(Policy = "UserJwt")]
         public IActionResult GetDevice(string id)
         {
             try
@@ -47,6 +49,7 @@ namespace BetterPlacemaking.Controllers
         }
 
 		[HttpPost]
+		[Authorize(Policy = "UserJwt")]
 		public IActionResult AddDevice([FromBody] DeviceDto deviceDto)
 		{
 			if (deviceDto == null)
@@ -64,6 +67,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpPut("{id}")]
+		[Authorize(Policy = "UserJwt")]
 		public IActionResult UpdateDevice(string id, [FromBody] DeviceDto deviceDto)
 		{
 			if (deviceDto == null || id != deviceDto.Id)
@@ -83,6 +87,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpDelete("{id}")]
+		[Authorize(Policy = "UserJwt")]
 		public IActionResult DeleteDevice(string id)
 		{
 			try
@@ -119,6 +124,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpPost("{id}/apikey")]
+		[Authorize(Policy = "UserJwt")]
 		public IActionResult GenerateApiKey(string id)
 		{
 			try

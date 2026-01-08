@@ -2,6 +2,7 @@ using BetterPlacemaking.Models;
 using BetterPlacemaking.Services;
 using Google.Cloud.Firestore;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
@@ -13,6 +14,7 @@ namespace BetterPlacemaking.Controllers
 		private readonly FirestoreDb _db = db;
 
 		[HttpGet("verify-email")]
+        [AllowAnonymous]
         public IActionResult VerifyEmail(string token)
         {
             var query = _db.Collection("users")

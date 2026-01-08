@@ -1,12 +1,14 @@
 using BetterPlacemaking.Services;
 using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
 {
 	[ApiController]
 	[Route("api/[controller]")]
+	[Authorize(Policy = "UserJwt")]
 	public class UserController(UserService userService) : ControllerBase
 	{
 		private readonly UserService _userService = userService;

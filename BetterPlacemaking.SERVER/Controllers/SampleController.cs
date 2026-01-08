@@ -1,5 +1,6 @@
 using BetterPlacemaking.Services;
 using Google.Cloud.Firestore;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
@@ -9,10 +10,11 @@ namespace BetterPlacemaking.Controllers
 	public class SampleController(FirestoreDb db, SampleService sampleService) : ControllerBase
 	{
 		private readonly SampleService _sampleService = sampleService;
-		private readonly FirestoreDb _db = db;
+		private readonly FirestoreDb _ = db;
 
 		[HttpGet("ping")]
 		[ProducesResponseType(typeof(string), 200)]
+		[Authorize(Policy = "UserJwt")]
 		public IActionResult PingPong()
 		{
 			string response = _sampleService.SampleServiceMethod();

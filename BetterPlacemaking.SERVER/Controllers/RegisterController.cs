@@ -1,11 +1,13 @@
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [AllowAnonymous]
     public class RegisterController(UserService userService) : ControllerBase
     {
         private readonly UserService _userService = userService;

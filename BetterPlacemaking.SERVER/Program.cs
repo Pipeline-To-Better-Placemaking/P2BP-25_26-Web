@@ -4,14 +4,16 @@ using BetterPlacemaking.Authorization;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
-
 // CONFIG
-var env = builder.Environment;
 var config = builder.Configuration;
 
 var credsPath = config["Google:CredentialsFile"];
@@ -29,24 +31,72 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<SampleService>();
 builder.Services.AddScoped<UserService>();
-builder.Services.AddScoped<LoginService>();
+builder.Services.AddScoped<AuthSessionService>();
+builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<TokenService>();
 
-builder.Services.AddAuthentication("DeviceApiKey")
+const string UserJwtScheme = "UserJwt";
+const string DeviceApiKeyScheme = "DeviceApiKey";
+
+const string UserJwtPolicy = "UserJwt";
+const string DeviceApiKeyPolicy = "DeviceApiKey";
+
+var jwtKey = config["Jwt:Key"];
+var jwtIssuer = config["Jwt:Issuer"];
+var jwtAudience = config["Jwt:Audience"];
+
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException(
+        "Jwt:Key is missing. This must be provided as a secret (e.g., environment variable Jwt__Key in Cloud Run / Secret Manager)."
+    );
+
+if (string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
+    throw new InvalidOperationException(
+        "Jwt:Issuer and/or Jwt:Audience is missing. Configure them in appsettings.json/appsettings.Production.json or via environment variables (Jwt__Issuer, Jwt__Audience)."
+    );
+
+var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = UserJwtScheme;
+        options.DefaultChallengeScheme = UserJwtScheme;
+    })
+    .AddJwtBearer(UserJwtScheme, options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = signingKey,
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(2)
+        };
+    })
     .AddScheme<AuthenticationSchemeOptions, DeviceApiKeyAuthenticationHandler>(
-        "DeviceApiKey",
+        DeviceApiKeyScheme,
         options => { });
 
 builder.Services.AddScoped<IAuthorizationHandler, DeviceApiKeyHandler>();
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("DeviceApiKey", policy =>
+    options.AddPolicy(UserJwtPolicy, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.AddAuthenticationSchemes(UserJwtScheme);
+    });
+
+    options.AddPolicy(DeviceApiKeyPolicy, policy =>
     {
         policy.Requirements.Add(new DeviceApiKeyRequirement());
-        policy.AddAuthenticationSchemes("DeviceApiKey");
+        policy.AddAuthenticationSchemes(DeviceApiKeyScheme);
     });
 });
 
@@ -80,7 +130,17 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1"
     });
 
-    options.AddSecurityDefinition("DeviceApiKey", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+
+    options.AddSecurityDefinition(DeviceApiKeyScheme, new OpenApiSecurityScheme
     {
         Description = "Device API key in the form: Bearer {api_key}",
         Name = "Authorization",
@@ -96,7 +156,18 @@ builder.Services.AddSwaggerGen(options =>
                 Reference = new OpenApiReference
                 {
                     Type = ReferenceType.SecurityScheme,
-                    Id = "DeviceApiKey"
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = DeviceApiKeyScheme
                 }
             },
             Array.Empty<string>()
@@ -113,9 +184,10 @@ if (!string.IsNullOrEmpty(allowedOrigins))
     {
         options.AddPolicy("_myAllowSpecificOrigins", policy =>
         {
-            policy.WithOrigins(allowedOrigins.Split(','))
+            policy.WithOrigins(allowedOrigins.Split(',').Select(o => o.Trim()).Where(o => !string.IsNullOrEmpty(o)).ToArray())
                   .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .AllowAnyMethod()
+                  .AllowCredentials();
         });
     });
 }
@@ -126,9 +198,14 @@ var app = builder.Build();
 
 // Middleware
 
+// Needed for Cloud Run / reverse proxies so scheme/remote IP are correct.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapControllers();
     app.UseSwagger(options =>
     {
         options.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0;
@@ -138,17 +215,19 @@ if (app.Environment.IsDevelopment())
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Better Placemaking API V1");
         options.RoutePrefix = "swagger";
     });
-    app.UseHttpsRedirection();
 }
+
+app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseRouting();
-app.UseCors("_myAllowSpecificOrigins");
+
+if (!string.IsNullOrEmpty(allowedOrigins))
+    app.UseCors("_myAllowSpecificOrigins");
+
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}"
-);
 
-app.Run();
+app.MapControllers();
+
+await app.RunAsync();

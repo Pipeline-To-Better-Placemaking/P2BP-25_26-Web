@@ -1,77 +1,109 @@
-<div class="login-page">
-	<p-card class="login-card">
-		<div class="card-header">
-			<h2>{{ isSignup ? 'Create account' : 'Welcome back' }}</h2>
-			<p class="subtitle">{{ isSignup ? 'Sign up to join Better Placemaking' : 'Sign in to continue to Better Placemaking' }}</p>
-		</div>
-
-		<div class="toggle-row">
-			<button pButton type="button" class="toggle-btn" [ngClass]="{active: !isSignup}" (click)="isSignup=false" label="Sign in"></button>
-			<button pButton type="button" class="toggle-btn" [ngClass]="{active: isSignup}" (click)="isSignup=true" label="Sign up"></button>
-		</div>
-
-		<div class="panels">
-			<!-- Login panel -->
-			<div class="panel panel-login" [class.show]="!isSignup">
-				<form [formGroup]="form" (ngSubmit)="submit()" class="login-form">
-					<div class="field">
-						<label for="username" class="sr-only">Username</label>
-						<input id="username" pInputText type="text" formControlName="username" placeholder="Username" />
-						<div class="field-error" *ngIf="form.get('username')?.touched && form.get('username')?.invalid">
-							<small>Username is required</small>
-						</div>
-					</div>
-
-					<div class="field">
-						<label for="password" class="sr-only">Password</label>
-						<p-password id="password" formControlName="password" [toggleMask]="true" placeholder="Password"></p-password>
-						<div class="field-error" *ngIf="form.get('password')?.touched && form.get('password')?.invalid">
-							<small>Password is required</small>
-						</div>
-					</div>
-
-					<div class="actions">
-						<div class="remember">
-							<p-checkbox formControlName="remember" binary="true"></p-checkbox>
-							<label>Remember me</label>
-						</div>
-
-						<button pButton type="submit" label="Sign in" [disabled]="form.invalid || submitting"></button>
-					</div>
-
-					<div *ngIf="error" class="error">{{ error }}</div>
-				</form>
+<div class="min-h-screen w-full flex items-center justify-center surface-ground p-4">
+	<p-card class="w-full max-w-md content-background">
+		<ng-template pTemplate="title">
+			<div class="text-center">
+				<div class="text-xl font-semibold">Better Placemaking</div>
+				<div class="text-sm text-surface-500">{{ isSignup ? 'Create an account' : 'Sign in' }}</div>
 			</div>
+		</ng-template>
 
-			<!-- Signup panel -->
-			<div class="panel panel-signup" [class.show]="isSignup">
-				<form [formGroup]="signupForm" (ngSubmit)="submitSignup()" class="login-form">
-					<div class="field">
-						<label for="username-s" class="sr-only">Username</label>
-						<input id="username-s" pInputText type="text" formControlName="username" placeholder="Choose a username" />
-						<div class="field-error" *ngIf="signupForm.get('username')?.touched && signupForm.get('username')?.invalid">
-							<small>Username is required</small>
-						</div>
+		<ng-template pTemplate="content">
+			<form *ngIf="!isSignup" [formGroup]="loginForm" (ngSubmit)="submitLogin()" class="flex flex-col gap-4">
+				<div class="flex flex-col gap-2">
+					<label class="text-sm font-medium" for="login-email">Email</label>
+					<input
+						id="login-email"
+						pInputText
+						type="email"
+						formControlName="email"
+						autocomplete="email"
+						class="w-full"
+					/>
+					<div *ngIf="loginForm.controls.email.touched && loginForm.controls.email.invalid" class="text-xs text-red-600">
+						Enter a valid email.
+					</div>
+				</div>
+
+				<div class="flex flex-col gap-2">
+					<label class="text-sm font-medium" for="login-password">Password</label>
+					<p-password
+						inputId="login-password"
+						formControlName="password"
+						[feedback]="false"
+						[toggleMask]="true"
+						styleClass="w-full"
+						inputStyleClass="w-full"
+					/>
+					<div *ngIf="loginForm.controls.password.touched && loginForm.controls.password.invalid" class="text-xs text-red-600">
+						Password is required.
+					</div>
+				</div>
+
+				<p-button
+					type="submit"
+					label="Sign in"
+					[loading]="submitting"
+					[disabled]="submitting"
+					styleClass="w-full"
+				/>
+
+				<div class="text-center text-sm">
+					<p-button type="button" severity="secondary" variant="text" label="Create an account" [link]="true" styleClass="p-0" (onClick)="toggleMode()" />
+				</div>
+			</form>
+
+			<form *ngIf="isSignup" [formGroup]="signupForm" (ngSubmit)="submitSignup()" class="flex flex-col gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div class="flex flex-col gap-2">
+						<label class="text-sm font-medium" for="signup-first">First name</label>
+						<input id="signup-first" pInputText type="text" formControlName="firstName" class="w-full" />
 					</div>
 
-					<div class="field">
-						<label for="password-s" class="sr-only">Password</label>
-						<p-password id="password-s" formControlName="password" [toggleMask]="true" placeholder="Password"></p-password>
-						<div class="field-error" *ngIf="signupForm.get('password')?.touched && signupForm.get('password')?.invalid">
-							<small>Password is required</small>
-						</div>
+					<div class="flex flex-col gap-2">
+						<label class="text-sm font-medium" for="signup-last">Last name</label>
+						<input id="signup-last" pInputText type="text" formControlName="lastName" class="w-full" />
 					</div>
+				</div>
 
-					<div class="field agree">
-						<p-checkbox formControlName="agree" binary="true"></p-checkbox>
-						<label>I agree to the terms</label>
+				<div class="flex flex-col gap-2">
+					<label class="text-sm font-medium" for="signup-email">Email</label>
+					<input
+						id="signup-email"
+						pInputText
+						type="email"
+						formControlName="email"
+						autocomplete="email"
+						class="w-full"
+					/>
+					<div *ngIf="signupForm.controls.email.touched && signupForm.controls.email.invalid" class="text-xs text-red-600">
+						Enter a valid email.
 					</div>
+				</div>
 
-					<div class="actions">
-						<button pButton type="submit" label="Create account" [disabled]="signupForm.invalid || submitting"></button>
-					</div>
-				</form>
-			</div>
-		</div>
+				<div class="flex flex-col gap-2">
+					<label class="text-sm font-medium" for="signup-password">Password</label>
+					<p-password
+						inputId="signup-password"
+						formControlName="password"
+						[feedback]="false"
+						[toggleMask]="true"
+						styleClass="w-full"
+						inputStyleClass="w-full"
+					/>
+				</div>
+
+				<p-button
+					type="submit"
+					label="Create account"
+					[loading]="submitting"
+					[disabled]="submitting"
+					styleClass="w-full"
+				/>
+
+				<div class="text-center text-sm">
+					<p-button type="button" severity="secondary" variant="text" label="Back to sign in" [link]="false" styleClass="p-0" (onClick)="toggleMode()" />
+				</div>
+			</form>
+		</ng-template>
 	</p-card>
 </div>
