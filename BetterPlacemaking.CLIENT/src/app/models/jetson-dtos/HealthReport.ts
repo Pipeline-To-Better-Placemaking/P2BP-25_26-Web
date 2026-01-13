@@ -1,4 +1,4 @@
-export interface HealthCheck {
+export interface HealthReport {
     Timestamp: number;
     Services?: Record<string, ServiceStatus> | null;
 	Cameras?: Record<string, CameraInfo> | null;

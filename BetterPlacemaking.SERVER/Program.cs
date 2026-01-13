@@ -84,7 +84,6 @@ builder.Services.AddAuthentication(options =>
         DeviceApiKeyScheme,
         options => { });
 
-builder.Services.AddScoped<IAuthorizationHandler, DeviceApiKeyHandler>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(UserJwtPolicy, policy =>
@@ -95,7 +94,7 @@ builder.Services.AddAuthorization(options =>
 
     options.AddPolicy(DeviceApiKeyPolicy, policy =>
     {
-        policy.Requirements.Add(new DeviceApiKeyRequirement());
+        policy.RequireAuthenticatedUser();
         policy.AddAuthenticationSchemes(DeviceApiKeyScheme);
     });
 });

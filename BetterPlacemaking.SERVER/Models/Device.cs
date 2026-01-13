@@ -18,6 +18,9 @@ namespace BetterPlacemaking.Models
 
         [FirestoreProperty]
         public Config? Config { get; set; }
+        
+        [FirestoreProperty]
+        public HealthReport? HealthReport { get; set; }
 
         [FirestoreProperty]
         [JsonIgnore]

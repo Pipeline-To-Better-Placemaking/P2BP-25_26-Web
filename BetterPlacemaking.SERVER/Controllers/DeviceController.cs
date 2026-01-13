@@ -105,7 +105,7 @@ namespace BetterPlacemaking.Controllers
 
 		[HttpPost("heartbeat")]
 		[Authorize(Policy = "DeviceApiKey")]
-		public IActionResult PostHeartbeat([FromBody] HealthCheck heartbeat)
+		public IActionResult PostHeartbeat([FromBody] HealthReport heartbeat)
 		{
 			if (heartbeat == null)
 				return BadRequest("Invalid heartbeat data");
@@ -114,6 +114,13 @@ namespace BetterPlacemaking.Controllers
 			{
                 if (HttpContext.Items["Device"] is not Device device)
                     return Unauthorized("Invalid API key");
+
+				if (string.IsNullOrWhiteSpace(device.Id))
+					return Unauthorized("Invalid device");
+
+				var updated = _deviceService.UpdateDeviceHealthReport(device.Id, heartbeat);
+				if (!updated)
+					return NotFound("Device not found");
 
                 return Ok(device.Config);
 			}

@@ -21,19 +21,19 @@ export interface CameraConfig {
 }
 
 export interface CharucoBoardConfig {
-	ReferencePoints: CharucoReferencePoints;
-	Board: CharucoBoardDetails;
+	ReferencePoints?: CharucoReferencePoints | null;
+	Board?: CharucoBoardDetails | null;
 	BeginScanning: boolean;
 }
 
 export interface CharucoReferencePoints {
-	P1: CharucoPoint;
-	P2: CharucoPoint;
+	P1?: CharucoPoint | null;
+	P2?: CharucoPoint | null;
 }
 
 export interface CharucoPoint {
-	x: number;
-	y: number;
+	X: number;
+	Y: number;
 }
 
 export interface CharucoBoardDetails {
@@ -41,6 +41,7 @@ export interface CharucoBoardDetails {
 	SquaresY: number;
 	SquareSize: number;
 	ArucoSize: number;
+	Dictionary?: string | null;
 }
 
 export interface TrackingCamerasConfig {

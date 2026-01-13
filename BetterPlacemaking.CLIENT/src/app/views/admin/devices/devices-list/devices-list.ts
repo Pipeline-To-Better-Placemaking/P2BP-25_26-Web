@@ -104,9 +104,7 @@ export class DevicesList implements OnInit {
     });
 
     this.formRef?.onClose.subscribe((device: DeviceDto | undefined) => {
-      if (!device) {
-        return;
-      }
+      if (!device) return;
 
       this.deviceService.addDevice(device).subscribe({
         next: () => this.loadDevices(),
@@ -132,6 +130,15 @@ export class DevicesList implements OnInit {
         '960px': '75vw',
         '640px': '90vw',
       },
+    });
+
+    this.formRef?.onClose.subscribe((device: DeviceDto | undefined) => {
+      if (!device) return;
+
+      this.deviceService.updateDevice(device.Id, device).subscribe({
+        next: () => this.loadDevices(),
+        error: (err) => console.error('Error adding device:', err),
+      });
     });
   }
 

@@ -1,6 +1,5 @@
-<form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col gap-6 p-4">
-	<section class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-4 space-y-4">
-		<h3 class="text-lg font-semibold">Device Details</h3>
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="p-fluid flex flex-col gap-4 p-4">
+	<p-panel header="Device Details">
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class="flex flex-col gap-1">
 				<label for="project-id" class="font-semibold">Project Id</label>
@@ -11,49 +10,48 @@
 				<input id="device-name" pInputText formControlName="Name" />
 			</div>
 		</div>
-	</section>
+	</p-panel>
 
-	<section formGroupName="Config" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-4 space-y-6">
-		<div class="space-y-2">
-			<h3 class="text-lg font-semibold">Jetson Configuration</h3>
-			<p class="text-sm text-muted-color">Tune heartbeat, tracking, and camera settings for this device.</p>
-		</div>
-
-		<div class="grid gap-4 md:grid-cols-2">
-			<div class="flex flex-col gap-1">
-				<label for="heartbeat-interval" class="font-semibold">Heartbeat Interval (sec)</label>
-				<p-inputNumber inputId="heartbeat-interval" formControlName="HeartbeatInterval" [min]="1" showButtons suffix=" s"></p-inputNumber>
-			</div>
-			<div class="flex flex-col gap-1">
-				<label for="config-version" class="font-semibold">Config Version</label>
-				<input id="config-version" pInputText formControlName="Version" />
-			</div>
-		</div>
-
-		<div formGroupName="Tracking" class="rounded-lg border border-surface-200 dark:border-surface-700 p-4 space-y-4">
-			<div class="flex items-center gap-2">
-				<p-checkbox inputId="tracking-enabled" formControlName="Enabled" binary></p-checkbox>
-				<label for="tracking-enabled" class="font-semibold">Enable Tracking</label>
-			</div>
-			<div class="grid gap-4 md:grid-cols-3">
+	<div formGroupName="Config" class="flex flex-col gap-4">
+		<p-panel header="Jetson Configuration">
+			<p class="text-sm text-muted-color mb-4">Tune heartbeat, tracking, and camera settings for this device.</p>
+			<div class="grid gap-4 md:grid-cols-2">
 				<div class="flex flex-col gap-1">
-					<label for="tracking-model" class="font-semibold">Model</label>
-					<input id="tracking-model" pInputText formControlName="Model" />
+					<label for="heartbeat-interval" class="font-semibold">Heartbeat Interval (sec)</label>
+					<p-inputNumber inputId="heartbeat-interval" formControlName="HeartbeatInterval" [min]="1" showButtons suffix=" s"></p-inputNumber>
 				</div>
 				<div class="flex flex-col gap-1">
-					<label for="confidence-threshold" class="font-semibold">Confidence Threshold (0-1)</label>
-					<p-inputNumber inputId="confidence-threshold" formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
-				</div>
-				<div class="flex flex-col gap-1">
-					<label for="max-fps" class="font-semibold">Max FPS</label>
-					<p-inputNumber inputId="max-fps" formControlName="MaxFps" [min]="0" [max]="120" showButtons></p-inputNumber>
+					<label for="config-version" class="font-semibold">Config Version</label>
+					<input id="config-version" pInputText formControlName="Version" />
 				</div>
 			</div>
-		</div>
+		</p-panel>
 
-		<div formGroupName="Camera" class="rounded-lg border border-surface-200 dark:border-surface-700 p-4 space-y-4">
-			<h4 class="text-base font-semibold">Camera</h4>
-			<div class="grid gap-4 md:grid-cols-3">
+		<p-panel header="Tracking">
+			<div formGroupName="Tracking" class="space-y-4">
+				<div class="flex items-center gap-2">
+					<p-checkbox inputId="tracking-enabled" formControlName="Enabled" binary></p-checkbox>
+					<label for="tracking-enabled" class="font-semibold">Enabled</label>
+				</div>
+				<div class="grid gap-4 md:grid-cols-3">
+					<div class="flex flex-col gap-1">
+						<label for="tracking-model" class="font-semibold">Model</label>
+						<input id="tracking-model" pInputText formControlName="Model" />
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="confidence-threshold" class="font-semibold">Confidence Threshold (0-1)</label>
+						<p-inputNumber inputId="confidence-threshold" formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="max-fps" class="font-semibold">Max FPS</label>
+						<p-inputNumber inputId="max-fps" formControlName="MaxFps" [min]="0" [max]="120" showButtons></p-inputNumber>
+					</div>
+				</div>
+			</div>
+		</p-panel>
+
+		<p-panel header="Camera">
+			<div formGroupName="Camera" class="grid gap-4 md:grid-cols-3">
 				<div class="flex flex-col gap-1">
 					<label for="camera-resolution" class="font-semibold">Resolution</label>
 					<input id="camera-resolution" pInputText formControlName="Resolution" />
@@ -67,8 +65,134 @@
 					<input id="camera-codec" pInputText formControlName="Codec" />
 				</div>
 			</div>
-		</div>
-	</section>
+		</p-panel>
+
+		<p-panel header="Tracking Cameras">
+			<div class="flex items-center justify-between gap-4 mb-3">
+				<p class="text-sm text-muted-color">MAC address → enabled mapping.</p>
+				<p-button type="button" label="Add" styleClass="p-button-text" (onClick)="addTrackingCameraRow()"></p-button>
+			</div>
+			<div formArrayName="TrackingCameras" class="space-y-3">
+				<div
+					*ngFor="let row of trackingCameras.controls; let i = index"
+					[formGroupName]="i"
+					class="flex flex-col gap-2"
+				>
+					<label
+						[for]="'tracking-camera-key-' + i"
+						class="font-semibold"
+					>
+						Camera Key
+					</label>
+					<div class="grid grid-cols-12 gap-3 items-center">
+						<div class="col-span-7">
+							<input
+								[id]="'tracking-camera-key-' + i"
+								pInputText
+								formControlName="Key"
+								placeholder="d0:3b:f4:02:44:84"
+								class="w-full"
+							/>
+						</div>
+						<div class="col-span-3 flex items-center gap-2">
+							<p-checkbox
+								[inputId]="'tracking-camera-enabled-' + i"
+								formControlName="Enabled"
+								binary
+							></p-checkbox>
+							<label
+								[for]="'tracking-camera-enabled-' + i"
+								class="font-semibold"
+							>
+								Enabled
+							</label>
+						</div>
+						<div class="col-span-2 flex justify-end">
+							<p-button
+								type="button"
+								label="Remove"
+								styleClass="p-button-text"
+								(onClick)="removeTrackingCameraRow(i)"
+							></p-button>
+						</div>
+					</div>
+				</div>
+				<p class="text-sm text-muted-color" *ngIf="trackingCameras.length === 0">No tracking cameras configured.</p>
+			</div>
+		</p-panel>
+
+		<p-panel header="Charuco Board">
+			<div formGroupName="CharucoBoard" class="space-y-4">
+				<div class="flex items-center justify-between gap-4">
+					<p class="text-sm text-muted-color">Calibration board scanning settings.</p>
+					<div class="flex items-center gap-2">
+						<p-checkbox inputId="charuco-begin-scanning" formControlName="BeginScanning" binary></p-checkbox>
+						<label for="charuco-begin-scanning" class="font-semibold">Begin Scanning</label>
+					</div>
+				</div>
+
+				<div formGroupName="ReferencePoints" class="space-y-3">
+					<div class="text-sm font-semibold">Reference Points</div>
+					<div class="grid gap-4 md:grid-cols-2">
+						<div formGroupName="P1" class="space-y-2">
+							<div class="text-sm font-semibold">P1</div>
+							<div class="grid gap-3 md:grid-cols-2">
+								<div class="flex flex-col gap-1">
+									<label for="charuco-p1-x" class="font-semibold">X</label>
+									<p-inputNumber inputId="charuco-p1-x" formControlName="X" mode="decimal"></p-inputNumber>
+								</div>
+								<div class="flex flex-col gap-1">
+									<label for="charuco-p1-y" class="font-semibold">Y</label>
+									<p-inputNumber inputId="charuco-p1-y" formControlName="Y" mode="decimal"></p-inputNumber>
+								</div>
+							</div>
+						</div>
+						<div formGroupName="P2" class="space-y-2">
+							<div class="text-sm font-semibold">P2</div>
+							<div class="grid gap-3 md:grid-cols-2">
+								<div class="flex flex-col gap-1">
+									<label for="charuco-p2-x" class="font-semibold">X</label>
+									<p-inputNumber inputId="charuco-p2-x" formControlName="X" mode="decimal"></p-inputNumber>
+								</div>
+								<div class="flex flex-col gap-1">
+									<label for="charuco-p2-y" class="font-semibold">Y</label>
+									<p-inputNumber inputId="charuco-p2-y" formControlName="Y" mode="decimal"></p-inputNumber>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div formGroupName="Board" class="space-y-3">
+					<div class="text-sm font-semibold">Board</div>
+					<div class="grid gap-4 md:grid-cols-3">
+						<div class="flex flex-col gap-1">
+							<label for="charuco-squares-x" class="font-semibold">Squares X</label>
+							<p-inputNumber inputId="charuco-squares-x" formControlName="SquaresX" [min]="0" showButtons></p-inputNumber>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="charuco-squares-y" class="font-semibold">Squares Y</label>
+							<p-inputNumber inputId="charuco-squares-y" formControlName="SquaresY" [min]="0" showButtons></p-inputNumber>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="charuco-dictionary" class="font-semibold">Dictionary</label>
+							<input id="charuco-dictionary" pInputText formControlName="Dictionary" placeholder="DICT_4X4_50" />
+						</div>
+					</div>
+					<div class="grid gap-4 md:grid-cols-2">
+						<div class="flex flex-col gap-1">
+							<label for="charuco-square-size" class="font-semibold">Square Size</label>
+							<p-inputNumber inputId="charuco-square-size" formControlName="SquareSize" mode="decimal" [min]="0"></p-inputNumber>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="charuco-aruco-size" class="font-semibold">Aruco Size</label>
+							<p-inputNumber inputId="charuco-aruco-size" formControlName="ArucoSize" mode="decimal" [min]="0"></p-inputNumber>
+						</div>
+					</div>
+				</div>
+			</div>
+		</p-panel>
+	</div>
 
 	<div class="flex justify-end gap-2">
 		<p-button type="button" label="Cancel" styleClass="p-button-text" (onClick)="onCancel()"></p-button>

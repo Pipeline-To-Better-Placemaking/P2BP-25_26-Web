@@ -3,6 +3,7 @@ using System.Text;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
+using BetterPlacemaking.Models.JetsonDTOs;
 
 namespace BetterPlacemaking.Services
 {
@@ -104,6 +105,21 @@ namespace BetterPlacemaking.Services
                 return false;
 
             docRef.DeleteAsync().Wait();
+            return true;
+        }
+
+        public bool UpdateDeviceHealthReport(string deviceId, HealthReport healthReport)
+        {
+            var docRef = _db.Collection(collectionName).Document(deviceId);
+            var snap = docRef.GetSnapshotAsync().Result;
+            if (!snap.Exists)
+                return false;
+
+            docRef.UpdateAsync(new Dictionary<string, object>
+            {
+                { nameof(Device.HealthReport), healthReport }
+            }).Wait();
+
             return true;
         }
     }

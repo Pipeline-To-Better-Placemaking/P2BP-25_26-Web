@@ -97,9 +97,12 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         public int SquaresY { get; set; }
 
         [FirestoreProperty]
-        public int SquareSize { get; set; }
+        public double SquareSize { get; set; }
 
         [FirestoreProperty]
-        public int ArucoSize { get; set; }
+        public double ArucoSize { get; set; }
+
+        [FirestoreProperty]
+        public string? Dictionary { get; set; }
     }
 }
