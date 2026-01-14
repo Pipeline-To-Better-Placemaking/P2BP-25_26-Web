@@ -40,7 +40,7 @@
 					</div>
 					<div class="flex flex-col gap-1">
 						<label for="confidence-threshold" class="font-semibold">Confidence Threshold (0-1)</label>
-						<p-inputNumber inputId="confidence-threshold" formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal"></p-inputNumber>
+						<p-inputNumber inputId="confidence-threshold" formControlName="ConfidenceThreshold" [min]="0" [max]="1" [step]="0.05" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4"></p-inputNumber>
 					</div>
 					<div class="flex flex-col gap-1">
 						<label for="max-fps" class="font-semibold">Max FPS</label>
@@ -130,11 +130,11 @@
 							<div class="grid gap-3 md:grid-cols-2">
 								<div class="flex flex-col gap-1">
 									<label for="charuco-p1-x" class="font-semibold">X</label>
-									<p-inputNumber inputId="charuco-p1-x" formControlName="X" mode="decimal"></p-inputNumber>
+									<p-inputNumber inputId="charuco-p1-x" formControlName="X" mode="decimal" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 								</div>
 								<div class="flex flex-col gap-1">
 									<label for="charuco-p1-y" class="font-semibold">Y</label>
-									<p-inputNumber inputId="charuco-p1-y" formControlName="Y" mode="decimal"></p-inputNumber>
+									<p-inputNumber inputId="charuco-p1-y" formControlName="Y" mode="decimal" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 								</div>
 							</div>
 						</div>
@@ -143,11 +143,11 @@
 							<div class="grid gap-3 md:grid-cols-2">
 								<div class="flex flex-col gap-1">
 									<label for="charuco-p2-x" class="font-semibold">X</label>
-									<p-inputNumber inputId="charuco-p2-x" formControlName="X" mode="decimal"></p-inputNumber>
+									<p-inputNumber inputId="charuco-p2-x" formControlName="X" mode="decimal" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 								</div>
 								<div class="flex flex-col gap-1">
 									<label for="charuco-p2-y" class="font-semibold">Y</label>
-									<p-inputNumber inputId="charuco-p2-y" formControlName="Y" mode="decimal"></p-inputNumber>
+									<p-inputNumber inputId="charuco-p2-y" formControlName="Y" mode="decimal" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 								</div>
 							</div>
 						</div>
@@ -173,11 +173,11 @@
 					<div class="grid gap-4 md:grid-cols-2">
 						<div class="flex flex-col gap-1">
 							<label for="charuco-square-size" class="font-semibold">Square Size</label>
-							<p-inputNumber inputId="charuco-square-size" formControlName="SquareSize" mode="decimal" [min]="0"></p-inputNumber>
+							<p-inputNumber inputId="charuco-square-size" formControlName="SquareSize" mode="decimal" [min]="0" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 						</div>
 						<div class="flex flex-col gap-1">
 							<label for="charuco-aruco-size" class="font-semibold">Aruco Size</label>
-							<p-inputNumber inputId="charuco-aruco-size" formControlName="ArucoSize" mode="decimal" [min]="0"></p-inputNumber>
+							<p-inputNumber inputId="charuco-aruco-size" formControlName="ArucoSize" mode="decimal" [min]="0" [step]="0.01" [minFractionDigits]="0" [maxFractionDigits]="6"></p-inputNumber>
 						</div>
 					</div>
 				</div>
