@@ -154,6 +154,7 @@ namespace BetterPlacemaking.Controllers
 			ProjectId = device.ProjectId,
 			Name = device.Name,
 			Config = device.Config,
+			HealthReport = device.HealthReport,
 		};
 
 		private static Device FromDto(DeviceDto dto) => new()

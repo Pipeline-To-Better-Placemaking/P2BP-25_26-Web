@@ -1,0 +1,91 @@
+<div class="flex flex-col gap-4 p-3">
+  <p-panel header="Device">
+    <div class="grid gap-2 md:grid-cols-2">
+      <div>
+        <div class="text-sm text-muted-color">Name</div>
+        <div class="font-semibold">{{ device?.Name || '—' }}</div>
+      </div>
+      <div>
+        <div class="text-sm text-muted-color">Id</div>
+        <div class="font-semibold">{{ device?.Id || '—' }}</div>
+      </div>
+    </div>
+    <div class="mt-3" *ngIf="healthReport">
+      <div class="text-sm text-muted-color">Timestamp</div>
+      <div class="font-semibold">{{ timestampText || '—' }}</div>
+    </div>
+  </p-panel>
+
+  <p-panel header="Health Report" *ngIf="!healthReport">
+    <p class="text-sm text-muted-color">No health report is available for this device.</p>
+  </p-panel>
+
+  <p-panel header="System" *ngIf="healthReport?.System as sys">
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <div class="text-sm text-muted-color">GPU Utilization</div>
+        <div class="font-semibold">{{ sys.Gpu?.UtilizationPct ?? '—' }}</div>
+      </div>
+      <div>
+        <div class="text-sm text-muted-color">GPU Frequency (MHz)</div>
+        <div class="font-semibold">{{ sys.Gpu?.FrequencyMhz ?? '—' }}</div>
+      </div>
+      <div>
+        <div class="text-sm text-muted-color">Memory Used (MB)</div>
+        <div class="font-semibold">{{ sys.Memory?.UsedMb ?? '—' }}</div>
+      </div>
+      <div>
+        <div class="text-sm text-muted-color">Memory Total (MB)</div>
+        <div class="font-semibold">{{ sys.Memory?.TotalMb ?? '—' }}</div>
+      </div>
+    </div>
+  </p-panel>
+
+  <p-panel header="Services" *ngIf="healthReport">
+    <p class="text-sm text-muted-color" *ngIf="serviceRows.length === 0">No services reported.</p>
+    <p-table
+      *ngIf="serviceRows.length > 0"
+      [value]="serviceRows"
+      class="rounded-lg overflow-hidden"
+    >
+      <ng-template #header>
+        <tr>
+          <th>Service</th>
+          <th>Active</th>
+          <th>Sub</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-row>
+        <tr>
+          <td>{{ row.Name }}</td>
+          <td>{{ row.Active || '—' }}</td>
+          <td>{{ row.Sub || '—' }}</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-panel>
+
+  <p-panel header="Cameras" *ngIf="healthReport">
+    <p class="text-sm text-muted-color" *ngIf="cameraRows.length === 0">No cameras reported.</p>
+    <p-table *ngIf="cameraRows.length > 0" [value]="cameraRows" class="rounded-lg overflow-hidden">
+      <ng-template #header>
+        <tr>
+          <th>Key</th>
+          <th>MAC</th>
+          <th>IP</th>
+          <th>Resolution</th>
+          <th>Enabled</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-row>
+        <tr>
+          <td>{{ row.Key }}</td>
+          <td>{{ row.Mac || '—' }}</td>
+          <td>{{ row.Ip || '—' }}</td>
+          <td>{{ row.Resolution || '—' }}</td>
+          <td>{{ row.Enabled ? 'Yes' : 'No' }}</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-panel>
+</div>

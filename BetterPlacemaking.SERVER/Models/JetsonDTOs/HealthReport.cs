@@ -32,7 +32,7 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         public List<int>? Resolution { get; set; }
 
         [FirestoreProperty]
-        public bool Online { get; set; }
+        public bool Enabled { get; set; }
     }
 
     [FirestoreData]

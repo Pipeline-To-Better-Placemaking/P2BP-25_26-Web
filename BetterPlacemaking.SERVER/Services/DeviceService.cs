@@ -58,6 +58,7 @@ namespace BetterPlacemaking.Services
 
             var existing = snap.ConvertTo<Device>();
 			device.ApiKeyHash = existing.ApiKeyHash;
+			device.HealthReport = existing.HealthReport;
             docRef.SetAsync(device).Wait();
             var updated = docRef.GetSnapshotAsync().Result
                 .ConvertTo<Device>();
@@ -115,12 +116,62 @@ namespace BetterPlacemaking.Services
             if (!snap.Exists)
                 return false;
 
+            var device = snap.ConvertTo<Device>();
+            if (device == null)
+                return false;
+
+            device.Config ??= new Config();
+
+            var existingTracking = device.Config.TrackingCameras ?? [];
+            var existingByNorm = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in existingTracking)
+            {
+                var norm = NormalizeMac(kvp.Key);
+                if (string.IsNullOrWhiteSpace(norm))
+                    continue;
+
+                if (!existingByNorm.ContainsKey(norm))
+                    existingByNorm[norm] = kvp.Value;
+            }
+
+            var reportMacs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (healthReport?.Cameras != null)
+            {
+                foreach (var kvp in healthReport.Cameras)
+                {
+                    var mac = NormalizeMac(kvp.Value?.Mac);
+                    if (string.IsNullOrWhiteSpace(mac))
+                        mac = NormalizeMac(kvp.Key);
+
+                    if (!string.IsNullOrWhiteSpace(mac))
+                        reportMacs.Add(mac);
+                }
+            }
+
+            var mergedTracking = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mac in reportMacs)
+            {
+                if (existingByNorm.TryGetValue(mac, out var existingValue))
+                    mergedTracking[mac] = existingValue;
+                else
+                    mergedTracking[mac] = false;
+            }
+
+            device.Config.TrackingCameras = mergedTracking;
+            device.HealthReport = healthReport;
+
             docRef.UpdateAsync(new Dictionary<string, object>
             {
-                { nameof(Device.HealthReport), healthReport }
+                { nameof(Device.HealthReport), device.HealthReport! },
+                { nameof(Device.Config), device.Config! }
             }).Wait();
 
             return true;
+        }
+
+        private static string NormalizeMac(string? mac)
+        {
+            return (mac ?? string.Empty).Trim().ToLowerInvariant();
         }
     }
 }

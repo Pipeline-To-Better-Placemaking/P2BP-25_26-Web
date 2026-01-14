@@ -11,5 +11,7 @@ namespace BetterPlacemaking.Models.Dtos
         public string? Name { get; set; }
 
         public Config? Config { get; set; }
+
+		public HealthReport? HealthReport { get; set; }
     }
 }

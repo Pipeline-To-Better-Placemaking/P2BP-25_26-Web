@@ -120,19 +120,6 @@ export class DeviceForm implements OnInit {
     return this.form.get(['Config', 'TrackingCameras']) as FormArray;
   }
 
-  addTrackingCameraRow(): void {
-    this.trackingCameras.push(
-      this.fb.group({
-        Key: [''],
-        Enabled: [true],
-      }),
-    );
-  }
-
-  removeTrackingCameraRow(index: number): void {
-    this.trackingCameras.removeAt(index);
-  }
-
   private createConfigGroup(config?: Config): FormGroup {
     return this.fb.group({
       HeartbeatInterval: [config?.HeartbeatInterval ?? 60, [Validators.required, Validators.min(1)]],
@@ -158,7 +145,7 @@ export class DeviceForm implements OnInit {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, enabled]) =>
         this.fb.group({
-          Key: [key],
+          Key: [{ value: key, disabled: true }],
           Enabled: [enabled],
         }),
       );

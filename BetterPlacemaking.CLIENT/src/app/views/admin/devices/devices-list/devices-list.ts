@@ -8,6 +8,7 @@ import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { DeviceForm } from '../device-form/device-form';
 import { MenuItem } from 'primeng/api';
 import { DeviceApiInfo } from '../device-api-info/device-api-info';
+import { DeviceHealthReport } from '../device-health-report/device-health-report';
 
 @Component({
   selector: 'app-devices-list',
@@ -24,6 +25,7 @@ export class DevicesList implements OnInit {
 
   formRef: DynamicDialogRef<DeviceForm> | null = null;
   apiInfoRef: DynamicDialogRef<DeviceApiInfo> | null = null;
+  healthReportRef: DynamicDialogRef<DeviceHealthReport> | null = null;
 
   public constructor(
     private readonly deviceService: DeviceService,
@@ -60,6 +62,15 @@ export class DevicesList implements OnInit {
         },
       },
       {
+        label: 'Health Report',
+        icon: 'pi pi-heart',
+        command: () => {
+          if (this.selectedDevice) {
+            this.openHealthReport(this.selectedDevice);
+          }
+        },
+      },
+      {
         label: 'Delete',
         icon: 'pi pi-trash',
         command: () => {
@@ -78,6 +89,21 @@ export class DevicesList implements OnInit {
         },
       },
     ];
+  }
+
+  private openHealthReport(device: DeviceDto): void {
+    this.healthReportRef = this.dialogService.open(DeviceHealthReport, {
+      header: `Health Report${device?.Name ? ` - ${device.Name}` : ''}`,
+      width: '70vw',
+      modal: true,
+      data: { device },
+      dismissableMask: true,
+      closable: true,
+      breakpoints: {
+        '960px': '90vw',
+        '640px': '95vw',
+      },
+    });
   }
 
   public getAndDisplayApiKey(id: string): void {

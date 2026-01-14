@@ -14,7 +14,7 @@ export interface CameraInfo {
 	Mac?: string | null;
 	Ip?: string | null;
 	Resolution?: number[] | null;
-	Online: boolean;
+	Enabled: boolean;
 }
 
 export interface GpuInfo {
