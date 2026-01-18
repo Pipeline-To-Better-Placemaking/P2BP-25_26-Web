@@ -17,3 +17,7 @@ node_modules/
 /BetterPlacemaking.CLIENT/.firebase
 
 *.cache
+
+.env
+.env.*
+!.env.example
