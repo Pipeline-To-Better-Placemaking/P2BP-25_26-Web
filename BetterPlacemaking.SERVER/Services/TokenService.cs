@@ -33,13 +33,15 @@ namespace BetterPlacemaking.Services
 
             var userId = user.Id ?? string.Empty;
             var email = user.Email ?? string.Empty;
+            var role = user.Role ?? string.Empty;
 
             var claims = new List<Claim>
             {
                 new(JwtRegisteredClaimNames.Sub, userId),
                 new(JwtRegisteredClaimNames.Email, email),
                 new(ClaimTypes.NameIdentifier, userId),
-                new(ClaimTypes.Email, email)
+                new(ClaimTypes.Email, email),
+                new(ClaimTypes.Role, role)
             };
 
             var displayName = $"{user.FirstName} {user.LastName}".Trim();

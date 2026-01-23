@@ -46,6 +46,7 @@ builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<AdminService>();
 
 const string UserJwtScheme = "UserJwt";
 const string DeviceApiKeyScheme = "DeviceApiKey";
