@@ -24,15 +24,4 @@ export class ProjectsList {
     // Example usage of ProjectService
     this.projectService.DoStuff();
   }
-
-  public testPing(): void {
-    // this.sampleService.samplePing().subscribe({
-    //   next: (res) => console.log('samplePing response:', res),
-    //   error: (err) => console.error('Error during samplePing:', err),
-    // });
-    this.authService.logout().subscribe({
-      next: () => console.log('Logged out successfully'),
-      error: (err) => console.error('Error during logout:', err),
-    });
-  }
 }

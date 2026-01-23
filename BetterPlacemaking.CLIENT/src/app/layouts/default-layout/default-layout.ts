@@ -1,8 +1,8 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, ViewChild } from '@angular/core';
 import { NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { AvatarModule } from 'primeng/avatar';
-import { MenuModule } from 'primeng/menu';
+import { Menu, MenuModule } from 'primeng/menu';
 import { FontAwesomeModule, FaIconLibrary } from '@fortawesome/angular-fontawesome';
 import {
   faHome,
@@ -17,6 +17,7 @@ import { MenuItem } from 'primeng/api';
 import { ThemeService } from '../../services/theme-service';
 import { filter, startWith, Subscription } from 'rxjs';
 import { NgIf } from '@angular/common';
+import { AuthService } from '../../services/auth-service';
 
 @Component({
   selector: 'app-default-layout',
@@ -30,7 +31,14 @@ export class DefaultLayout implements OnDestroy {
   private projectId?: number;
   private routerSub?: Subscription;
 
-  constructor(public themeService: ThemeService, private router: Router) {}
+  public readonly faMoon = faMoon;
+  public readonly faUser = faUser;
+
+  constructor(
+    public themeService: ThemeService,
+    private router: Router,
+    private authService: AuthService
+  ) {}
 
   navItems: MenuItem[] = [];
 
@@ -39,12 +47,19 @@ export class DefaultLayout implements OnDestroy {
   navItemsAdmin: MenuItem[] = [];
 
   footerItems: MenuItem[] = [];
+  userMenuItems: MenuItem[] = [];
+
+  @ViewChild('userMenu') private userMenu?: Menu;
 
   ngOnInit(): void {
-    // initialize footer which is static
     this.footerItems = [
       { label: 'Toggle dark mode', faIcon: faMoon, command: () => this.toggleDarkMode() },
-      { label: 'User', faIcon: faUser, routerLink: '/profile' },
+      { label: 'User', faIcon: faUser, command: (event) => this.openUserMenu(event) },
+    ];
+
+    this.userMenuItems = [
+      { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings() },
+      { label: 'Logout', icon: 'pi pi-sign-out', command: () => this.logout() },
     ];
 
     this.navItems = [{ label: 'Select Project', faIcon: faHome, routerLink: '/projects' }];
@@ -118,5 +133,22 @@ export class DefaultLayout implements OnDestroy {
 
   toggleDarkMode(): void {
     this.themeService.toggleDarkMode();
+  }
+
+  private openSettings(): void {
+    // Placeholder: settings route not wired yet
+  }
+
+  private openUserMenu(event: { originalEvent?: Event }): void {
+    if (event?.originalEvent) {
+      this.userMenu?.toggle(event.originalEvent);
+    }
+  }
+
+  private logout(): void {
+    this.authService.logout().subscribe({
+      next: () => void this.router.navigate(['/login']),
+      error: () => void this.router.navigate(['/login']),
+    });
   }
 }
