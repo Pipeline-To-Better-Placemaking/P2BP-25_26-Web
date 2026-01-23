@@ -12,6 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 if (builder.Environment.IsDevelopment())
@@ -45,6 +46,8 @@ builder.Services.AddScoped<DeviceService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration.GetSection("Gcs"));
+builder.Services.AddSingleton<CloudStorageService>();
 
 const string UserJwtScheme = "UserJwt";
 const string DeviceApiKeyScheme = "DeviceApiKey";
