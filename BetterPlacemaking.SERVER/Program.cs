@@ -14,8 +14,6 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Local development convenience: load BetterPlacemaking.SERVER/.env (if present)
-// and then re-add environment variables so IConfiguration can see them.
 if (builder.Environment.IsDevelopment())
 {
     DotEnv.LoadIfPresent(builder.Environment.ContentRootPath);

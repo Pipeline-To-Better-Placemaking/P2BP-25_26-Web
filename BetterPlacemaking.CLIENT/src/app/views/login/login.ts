@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
@@ -27,6 +27,7 @@ export class Login {
   public constructor(
     private readonly authService: AuthService,
     private readonly router: Router,
+    private readonly route: ActivatedRoute,
     private readonly fb: FormBuilder
   ) {
     this.loginForm = this.fb.group({
@@ -40,10 +41,17 @@ export class Login {
       email: ['', [Validators.required, Validators.email]],
       password: ['', [Validators.required]],
     });
+
+    this.returnUrl = this.sanitizeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
+
+    if (this.authService.isAuthenticatedSync()) {
+      this.router.navigateByUrl(this.returnUrl ?? '/projects');
+    }
   }
 
   public isSignup = false;
   public submitting = false;
+  private readonly returnUrl: string | null;
 
   public readonly loginForm;
   public readonly signupForm;
@@ -71,13 +79,20 @@ export class Login {
           return;
         }
 
-        this.router.navigateByUrl('/projects');
+        this.router.navigateByUrl(this.returnUrl ?? '/projects');
         this.submitting = false;
       },
       error: () => {
         this.submitting = false;
       },
     });
+  }
+
+  private sanitizeReturnUrl(raw: string | null): string | null {
+    if (!raw) return null;
+
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+    return raw;
   }
 
   public submitSignup(): void {

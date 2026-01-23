@@ -1,8 +1,8 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateChildFn, CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth-service';
 
-export const authGuard: CanActivateFn = () => {
+const checkAuthAndRedirect = (url: string) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
@@ -10,5 +10,11 @@ export const authGuard: CanActivateFn = () => {
     return true;
   }
 
-  return router.parseUrl('/login');
+  return router.createUrlTree(['/login'], {
+    queryParams: url && url !== '/' ? { returnUrl: url } : undefined,
+  });
 };
+
+export const authGuard: CanActivateFn = (_route, state) => checkAuthAndRedirect(state.url);
+
+export const authChildGuard: CanActivateChildFn = (_route, state) => checkAuthAndRedirect(state.url);
