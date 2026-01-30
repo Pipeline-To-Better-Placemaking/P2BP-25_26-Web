@@ -48,6 +48,7 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration.GetSection("Gcs"));
 builder.Services.AddSingleton<CloudStorageService>();
+builder.Services.AddScoped<ProjectService>();
 
 const string UserJwtScheme = "UserJwt";
 const string DeviceApiKeyScheme = "DeviceApiKey";

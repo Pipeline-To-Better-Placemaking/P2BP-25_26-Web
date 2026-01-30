@@ -15,7 +15,6 @@ namespace BetterPlacemaking.Controllers
         [HttpPost]
         public IActionResult Register([FromBody] RegisterRequest request)
         {
-            // Map request to User model
             var user = new User
             {
                 FirstName = request.FirstName,
@@ -24,7 +23,6 @@ namespace BetterPlacemaking.Controllers
                 Password = request.Password
             };
 
-            // Add user (synchronously)
             var createdUser = _userService.AddUser(user);
 
             if (createdUser == null)
