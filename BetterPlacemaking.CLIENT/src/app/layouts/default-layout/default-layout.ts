@@ -91,7 +91,7 @@ export class DefaultLayout implements OnDestroy {
   }
 
   private buildNavMenus(projectId?: number): void {
-    
+
     if (projectId != null) {
       const base = `${projectId}`;
       this.navItemsIfSelected = [
@@ -99,7 +99,7 @@ export class DefaultLayout implements OnDestroy {
           label: 'Project',
           items: [
             { label: 'Dashboard', faIcon: faHome, routerLink: `${base}/dashboard` },
-            { label: '3D Model', faIcon: faHome, routerLink: `${base}/3d` },
+            { label: '3D Model', faIcon: faHome, routerLink: `${base}/model` },
             { label: 'Vision', faIcon: faHome, routerLink: `${base}/vision` },
             { label: 'Edit Room', faIcon: faHome, routerLink: `${base}/edit` },
           ],
