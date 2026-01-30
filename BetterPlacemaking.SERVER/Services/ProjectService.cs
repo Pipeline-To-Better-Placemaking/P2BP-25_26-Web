@@ -8,6 +8,28 @@ namespace BetterPlacemaking.Services
         private readonly FirestoreDb _db = db;
         private const string collectionName = "projects";
 
+        public List<Project> GetAll()
+        {
+            var projects = _db.Collection(collectionName).GetSnapshotAsync().Result.Documents
+                .Select(doc => doc.ConvertTo<Project>())
+                .ToList();
+            
+            return projects;
+        }
+        
+        public Project? GetById(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return null;
+            }
+            
+            var project = _db.Collection(collectionName).Document(id).GetSnapshotAsync().Result
+                .ConvertTo<Project>();
+
+            return project;
+        }
+
         public Project Create(Project project)
         {
             var docRef = _db.Collection(collectionName).Document();

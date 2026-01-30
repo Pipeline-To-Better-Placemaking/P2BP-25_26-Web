@@ -11,6 +11,28 @@ namespace BetterPlacemaking.Controllers
     {
         private readonly ProjectService _projectService = projectService;
 
+        [HttpGet("projects")]
+        [AllowAnonymous]
+        public IActionResult GetProjects()
+        {
+            var projects = _projectService.GetAll();
+            return Ok(new { Success = true, Projects = projects });
+        }
+
+
+        [HttpGet("id")]
+        [AllowAnonymous]
+        public IActionResult GetProject(string id)
+        {
+            var project = _projectService.GetById(id);
+            if (project == null)
+            {
+                return NotFound(new { Success = false, Message = "Project not found" });
+            }
+
+            return Ok(new { Success = true, Project = project });
+        }
+
         [HttpPost("create")]
         [Authorize(Roles = "Admin")]
         public IActionResult CreateProject([FromBody] ProjectRequest request)
