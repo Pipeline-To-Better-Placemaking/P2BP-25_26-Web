@@ -23,6 +23,7 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public string? Version { get; set; }
+        public string? UploadLink {get; set; }
     }
 
     [FirestoreData]

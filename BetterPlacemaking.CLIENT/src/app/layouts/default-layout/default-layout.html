@@ -1,76 +1,74 @@
-<div class="main-wrapper flex min-h-screen">
-
-  <div class="w-72 min-h-screen content-background flex flex-col">
-
-    <div class="flex items-center justify-center w-full">
-      <a [routerLink]="['/']" class="flex items-center gap-3 p-3 no-underline w-full justify-center">
-        <span class="text-3xl font-semibold tracking-tight text-on-surface-900">Better Placemaking</span>
+<div class="main-wrapper flex flex-col h-screen overflow-hidden">
+  <div class="content-background h-16">
+    <div class="flex items-center justify-start w-full">
+      <a
+        [routerLink]="['/']"
+        class="flex items-center gap-3 p-3 no-underline justify-start"
+      >
+        <span class="text-3xl font-semibold tracking-tight text-on-surface-900"
+          >Better Placemaking Tracking & Modeling</span
+        >
       </a>
     </div>
-
-    <div *ngIf="navItems?.length">
-      <nav class="px-3 mt-7" >
-        <p-menu [model]="navItems">
-          <ng-template #item let-item>
-            <a
-              [routerLink]="item.routerLink"
-              class="p-menu-item-link">
-              <fa-icon [icon]="item.faIcon"></fa-icon>
-              <span>{{ item.label }}</span>
-            </a>
-          </ng-template>
-        </p-menu>
-      </nav>
-    </div>
-
-    <div *ngIf="navItemsIfSelected?.length">
-      <nav class="px-3 mt-7" >
-        <p-menu [model]="navItemsIfSelected">
-          <ng-template #item let-item>
-            <a
-              [routerLink]="item.routerLink"
-              class="p-menu-item-link">
-              <fa-icon [icon]="item.faIcon"></fa-icon>
-              <span>{{ item.label }}</span>
-            </a>
-          </ng-template>
-        </p-menu>
-      </nav>
-    </div>
-
-    <div *ngIf="navItemsAdmin?.length">
-      <nav class="px-3 mt-7" >
-        <p-menu [model]="navItemsAdmin">
-          <ng-template #item let-item>
-            <a
-              [routerLink]="item.routerLink"
-              class="p-menu-item-link">
-              <fa-icon [icon]="item.faIcon"></fa-icon>
-              <span>{{ item.label }}</span>
-            </a>
-          </ng-template>
-        </p-menu>
-      </nav>
-    </div>
-
-    
-    <nav class="px-3 mt-auto mb-4">
-      <p-menu [model]="footerItems">
-        <ng-template #item let-item>
-          <button type="button" class="p-menu-item-link">
-            <fa-icon [icon]="item.faIcon"></fa-icon>
-            <span>{{ item.label }}</span>
-          </button>
-        </ng-template>
-      </p-menu>
-
-      <p-menu #userMenu [popup]="true" [model]="userMenuItems" styleClass="w-48"></p-menu>
-    </nav>
-
   </div>
 
-  <div class="grow overflow-y-auto inset-shadow-sm surface-ground p-8">
-    <router-outlet></router-outlet>
+  <div class="flex grow min-h-0 overflow-hidden">
+    <div class="w-60 min-h-0 content-background flex flex-col">
+      <div *ngIf="navItems?.length">
+        <nav class="px-3 mb-7 mt-3">
+          <p-menu [model]="navItems">
+            <ng-template #item let-item>
+              <a [routerLink]="item.routerLink" class="p-menu-item-link">
+                <fa-icon [icon]="item.faIcon"></fa-icon>
+                <span>{{ item.label }}</span>
+              </a>
+            </ng-template>
+          </p-menu>
+        </nav>
+      </div>
+
+      <div *ngIf="navItemsIfSelected?.length">
+        <nav class="px-3 mb-7">
+          <p-menu [model]="navItemsIfSelected">
+            <ng-template #item let-item>
+              <a [routerLink]="item.routerLink" class="p-menu-item-link">
+                <fa-icon [icon]="item.faIcon"></fa-icon>
+                <span>{{ item.label }}</span>
+              </a>
+            </ng-template>
+          </p-menu>
+        </nav>
+      </div>
+
+      <div *ngIf="navItemsAdmin?.length">
+        <nav class="px-3 mb-7">
+          <p-menu [model]="navItemsAdmin">
+            <ng-template #item let-item>
+              <a [routerLink]="item.routerLink" class="p-menu-item-link">
+                <fa-icon [icon]="item.faIcon"></fa-icon>
+                <span>{{ item.label }}</span>
+              </a>
+            </ng-template>
+          </p-menu>
+        </nav>
+      </div>
+
+      <nav class="px-3 mt-auto mb-4">
+        <p-menu [model]="footerItems">
+          <ng-template #item let-item>
+            <button type="button" class="p-menu-item-link">
+              <fa-icon [icon]="item.faIcon"></fa-icon>
+              <span>{{ item.label }}</span>
+            </button>
+          </ng-template>
+        </p-menu>
+
+        <p-menu #userMenu [popup]="true" [model]="userMenuItems" styleClass="w-48"></p-menu>
+      </nav>
+    </div>
+
+    <div class="grow min-h-0 overflow-y-auto inset-shadow-sm surface-ground p-8 rounded-lg">
+      <router-outlet></router-outlet>
+    </div>
   </div>
-  
 </div>

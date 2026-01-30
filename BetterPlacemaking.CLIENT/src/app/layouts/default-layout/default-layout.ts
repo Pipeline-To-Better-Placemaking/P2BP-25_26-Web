@@ -12,6 +12,12 @@ import {
   faSignOutAlt,
   faMoon,
   faUser,
+  faCube,
+  faEye,
+  faPenToSquare,
+  faUserShield,
+  faFolderOpen,
+  faMicrochip,
 } from '@fortawesome/free-solid-svg-icons';
 import { MenuItem } from 'primeng/api';
 import { ThemeService } from '../../services/theme-service';
@@ -62,7 +68,7 @@ export class DefaultLayout implements OnDestroy {
       { label: 'Logout', icon: 'pi pi-sign-out', command: () => this.logout() },
     ];
 
-    this.navItems = [{ label: 'Select Project', faIcon: faHome, routerLink: '/projects' }];
+    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: '/projects' }];
 
     // Listen for navigation end events and rebuild menus when project id changes
     this.routerSub = this.router.events
@@ -91,17 +97,17 @@ export class DefaultLayout implements OnDestroy {
   }
 
   private buildNavMenus(projectId?: number): void {
-    
+
     if (projectId != null) {
       const base = `${projectId}`;
       this.navItemsIfSelected = [
         {
           label: 'Project',
           items: [
-            { label: 'Dashboard', faIcon: faHome, routerLink: `${base}/dashboard` },
-            { label: '3D Model', faIcon: faHome, routerLink: `${base}/3d` },
-            { label: 'Vision', faIcon: faHome, routerLink: `${base}/vision` },
-            { label: 'Edit Room', faIcon: faHome, routerLink: `${base}/edit` },
+            { label: 'Dashboard', faIcon: faChartLine, routerLink: `${base}/dashboard` },
+            { label: '3D Model', faIcon: faCube, routerLink: `${base}/model` },
+            { label: 'Vision', faIcon: faEye, routerLink: `${base}/vision` },
+            { label: 'Edit Room', faIcon: faPenToSquare, routerLink: `${base}/edit` },
           ],
         },
       ];
@@ -109,9 +115,9 @@ export class DefaultLayout implements OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Permissions', faIcon: faChartLine, routerLink: `${base}/admin/permissions` },
-            { label: 'Manage Projects', faIcon: faFolder, routerLink: `${base}/admin/projects` },
-            { label: 'Devices', faIcon: faFolder, routerLink: `${base}/admin/devices` },
+            { label: 'Permissions', faIcon: faUserShield, routerLink: `${base}/admin/permissions` },
+            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `${base}/admin/projects` },
+            { label: 'Devices', faIcon: faMicrochip, routerLink: `${base}/admin/devices` },
           ],
         },
       ];
@@ -122,9 +128,9 @@ export class DefaultLayout implements OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Permissions', faIcon: faChartLine, routerLink: '/admin/permissions' },
-            { label: 'Manage Projects', faIcon: faFolder, routerLink: '/admin/projects' },
-            { label: 'Devices', faIcon: faFolder, routerLink: '/admin/devices' },
+            { label: 'Permissions', faIcon: faUserShield, routerLink: '/admin/permissions' },
+            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: '/admin/projects' },
+            { label: 'Devices', faIcon: faMicrochip, routerLink: '/admin/devices' },
           ],
         },
       ];
