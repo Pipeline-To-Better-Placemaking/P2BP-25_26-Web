@@ -9,6 +9,7 @@ import { Permissions } from './views/admin/permissions/permissions';
 import { Projects } from './views/admin/projects/projects';
 import { DevicesList } from './views/admin/devices/devices-list/devices-list';
 import { authGuard } from './guards/auth-guard';
+import { UserSettings } from './views/user-settings/user-settings';
 
 const admin: Routes = [
   { path: 'permissions', component: Permissions },
@@ -38,4 +39,9 @@ export const routes: Routes = [
       },
     ],
   },
+
+  {
+    path: 'settings',
+    component: UserSettings
+  }
 ];

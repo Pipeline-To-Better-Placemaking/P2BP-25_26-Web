@@ -1,1 +1,156 @@
-<p>user-settings works!</p>
+<p-card header="User Settings">
+  <div class="settings-grid">
+
+    <!-- Profile + Notifications -->
+    <div class="col">
+      <p-card header="Profile" class="subcard">
+        <div class="settings-form">
+
+          <div class="field">
+            <label for="name">Display name</label>
+            <input pInputText id="name" [(ngModel)]="model.displayName" />
+          </div>
+
+          <div class="field">
+            <label for="email">Email</label>
+            <input pInputText id="email" [(ngModel)]="model.email" />
+          </div>
+
+          <div class="field">
+            <label for="theme">Theme</label>
+            <p-dropdown
+              [options]="themes"
+              optionLabel="label"
+              optionValue="value"
+              [(ngModel)]="model.theme">
+            </p-dropdown>
+          </div>
+
+          <p-button
+            label="Save"
+            icon="pi pi-save"
+            [loading]="saving"
+            (onClick)="save()">
+          </p-button>
+
+        </div>
+      </p-card>
+
+      <p-card header="Notifications" class="subcard">
+        <div class="settings-form">
+          <p-checkbox
+            inputId="emailAlerts"
+            [binary]="true"
+            [(ngModel)]="notifications.emailAlerts">
+          </p-checkbox>
+          <label for="emailAlerts">Email alerts</label>
+
+          <p-checkbox
+            inputId="scanCompletion"
+            [binary]="true"
+            [(ngModel)]="notifications.scanCompletionAlerts">
+          </p-checkbox>
+          <label for="scanCompletion">Scan completion alerts</label>
+
+          <p-checkbox
+            inputId="changeDetection"
+            [binary]="true"
+            [(ngModel)]="notifications.changeDetectionAlerts">
+          </p-checkbox>
+          <label for="changeDetection">Change detection alerts</label>
+
+          <p-message
+            severity="info"
+            text="These notification settings are UI-only for now and will be wired later.">
+          </p-message>
+        </div>
+      </p-card>
+    </div>
+
+    <!-- Change Password + Projects -->
+    <div class="col">
+      <p-card header="Change Password" class="subcard">
+        <div class="settings-form">
+
+          <div class="field">
+            <label for="currentPassword">Current password</label>
+            <p-password
+              inputId="currentPassword"
+              [feedback]="false"
+              [toggleMask]="true"
+              [(ngModel)]="password.current">
+            </p-password>
+          </div>
+
+          <div class="field">
+            <label for="newPassword">New password</label>
+            <p-password
+              inputId="newPassword"
+              [feedback]="true"
+              [toggleMask]="true"
+              [(ngModel)]="password.new">
+            </p-password>
+          </div>
+
+          <div class="field">
+            <label for="confirmPassword">Confirm new password</label>
+            <p-password
+              inputId="confirmPassword"
+              [feedback]="false"
+              [toggleMask]="true"
+              [(ngModel)]="password.confirm">
+            </p-password>
+          </div>
+
+          <div class="row">
+            <p-button
+              label="Update Password"
+              icon="pi pi-key"
+              [disabled]="!canSubmitPassword()"
+              (onClick)="updatePassword()">
+            </p-button>
+
+            <p-button
+              label="Clear"
+              icon="pi pi-times"
+              severity="secondary"
+              (onClick)="clearPassword()">
+            </p-button>
+          </div>
+
+          <p-message
+            *ngIf="passwordError"
+            severity="error"
+            [text]="passwordError">
+          </p-message>
+
+          <p-message
+            *ngIf="passwordSuccess"
+            severity="success"
+            text="Password updated (placeholder).">
+          </p-message>
+
+          <p-message
+            severity="warn"
+            text="Password update is not wired to the API yet.">
+          </p-message>
+
+        </div>
+      </p-card>
+
+      <p-card header="Assigned Projects" class="subcard">
+        <p-listbox
+          [options]="assignedProjects"
+          optionLabel="name"
+          [listStyle]="{ 'max-height': '260px' }">
+        </p-listbox>
+
+        <p-message
+          severity="info"
+          text="This list is static for now and will be wired later.">
+        </p-message>
+      </p-card>
+    </div>
+
+  </div>
+</p-card>
