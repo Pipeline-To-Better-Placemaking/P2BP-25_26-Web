@@ -64,7 +64,7 @@ export class DefaultLayout implements OnDestroy {
     ];
 
     this.userMenuItems = [
-      { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings() },
+      { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings(), routerLink: '/settings' },
       { label: 'Logout', icon: 'pi pi-sign-out', command: () => this.logout() },
     ];
 
