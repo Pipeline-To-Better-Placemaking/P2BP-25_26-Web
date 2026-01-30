@@ -1,13 +1,18 @@
-<div class="card p-4 content-background rounded-lg">
-  <h2 class="text-xl font-bold mb-4">User Permissions</h2>
-
+<div class="w-full flex flex-col content-background rounded-lg">
   <p-table
     [value]="users"
-    class="rounded-lg overflow-visible"
-    scrollable
-    scrollHeight="400px"
-    styleClass="shadow-lg"
+    class="rounded-lg overflow-hidden"
+    [paginator]="true"
+    [rows]="5"
   >
+    <ng-template #caption>
+      <div class="w-full flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <span class="font-semibold text-xl">Users</span>
+          <span class="text-muted-color text-xl">{{ users.length || 0 }}</span>
+        </div>
+      </div>
+    </ng-template>
     <ng-template pTemplate="header">
       <tr>
         <th>User</th>
