@@ -11,12 +11,12 @@ namespace BetterPlacemaking.Controllers
     {
         private readonly ProjectService _projectService = projectService;
 
-        [HttpGet("projects")]
+        [HttpGet]
         [AllowAnonymous]
         public IActionResult GetProjects()
         {
             var projects = _projectService.GetAll();
-            return Ok(new { Success = true, Projects = projects });
+            return Ok(new { Projects = projects });
         }
 
 
@@ -30,7 +30,7 @@ namespace BetterPlacemaking.Controllers
                 return NotFound(new { Success = false, Message = "Project not found" });
             }
 
-            return Ok(new { Success = true, Project = project });
+            return Ok(new { Project = project });
         }
 
         [HttpPost("create")]
@@ -49,7 +49,6 @@ namespace BetterPlacemaking.Controllers
 
             return Ok(new
             {
-                Success = true,
                 Message = "Project created successfully",
                 Project = project
             });
