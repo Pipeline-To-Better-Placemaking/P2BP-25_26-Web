@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -49,6 +50,23 @@ builder.Services.AddScoped<AdminService>();
 builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration.GetSection("Gcs"));
 builder.Services.AddSingleton<CloudStorageService>();
 builder.Services.AddScoped<ProjectService>();
+
+// Caching
+// Cloud Run can scale to multiple instances, so use Redis when configured.
+// Falls back to in-memory IDistributedCache for local dev when Redis isn't set.
+var redisConfiguration = config.GetConnectionString("Redis") ?? config["Redis:Configuration"];
+if (!string.IsNullOrWhiteSpace(redisConfiguration))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConfiguration;
+        options.InstanceName = config["Redis:InstanceName"] ?? "BetterPlacemaking:";
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
 
 const string UserJwtScheme = "UserJwt";
 const string DeviceApiKeyScheme = "DeviceApiKey";

@@ -118,11 +118,11 @@ namespace BetterPlacemaking.Controllers
 				if (string.IsNullOrWhiteSpace(device.Id))
 					return Unauthorized("Invalid device");
 
-				var updated = _deviceService.UpdateDeviceHealthReport(device.Id, heartbeat);
-				if (!updated)
+				var config = _deviceService.UpdateDeviceHealthReport(device.Id, heartbeat);
+				if (config == null)
 					return NotFound("Device not found");
 
-                return Ok(device.Config);
+				return Ok(config);
 			}
 			catch (Exception)
 			{
