@@ -4,6 +4,7 @@ import { Login } from './views/login/login';
 import { ProjectsList } from './views/projects/projects-list/projects-list';
 import { Dashboard } from './views/projects/selected/dashboard/dashboard';
 import { Model } from './views/projects/selected/model/model';
+import { Scanner } from './views/admin/devices/scanner/scanner';
 import { Permissions } from './views/admin/permissions/permissions';
 import { Projects } from './views/admin/projects/projects';
 import { DevicesList } from './views/admin/devices/devices-list/devices-list';
@@ -31,7 +32,7 @@ export const routes: Routes = [
         children: [
           { path: '', component: Dashboard },
           { path: 'admin', children: admin },
-          { path: 'model', component: Model },
+          { path: 'model', component: Scanner },
           { path: 'dashboard', component: Dashboard },
         ],
       },
