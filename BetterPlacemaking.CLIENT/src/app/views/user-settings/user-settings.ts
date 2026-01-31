@@ -10,7 +10,6 @@ import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
 import { ListboxModule } from 'primeng/listbox';
 
-
 @Component({
   selector: 'app-user-settings',
   standalone: true,
@@ -25,11 +24,11 @@ import { ListboxModule } from 'primeng/listbox';
     CheckboxModule,
     PasswordModule,
     MessageModule,
-    ListboxModule
+    ListboxModule,
   ],
 })
 export class UserSettings {
-
+dotnet run --launch-profile "https"
   saving = false;
 
   notifications = {
