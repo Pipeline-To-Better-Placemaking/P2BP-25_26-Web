@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgIf } from '@angular/common';
-
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
@@ -21,6 +21,7 @@ import { ListboxModule } from 'primeng/listbox';
     CardModule,
     InputTextModule,
     ButtonModule,
+    SelectButtonModule,
     CheckboxModule,
     PasswordModule,
     MessageModule,
@@ -28,83 +29,81 @@ import { ListboxModule } from 'primeng/listbox';
   ],
 })
 export class UserSettings {
-dotnet run --launch-profile "https"
   saving = false;
 
-  notifications = {
-    emailAlerts: true,
-    scanCompletionAlerts: false,
-    changeDetectionAlerts: true,
-};
-
-password = {
-  current: '',
-  new: '',
-  confirm: '',
-};
-
-passwordError = '';
-passwordSuccess = false;
-
-assignedProjects = [
-  { name: 'UCF Art Gallery' },
-  { name: 'Classroom' },
-  { name: 'Lake Eola' },
-];
-
-model = {
+  model = {
     displayName: '',
     email: '',
-    theme: ''
+    theme: 'system',
   };
 
   themes = [
     { label: 'Light', value: 'light' },
     { label: 'Dark', value: 'dark' },
-    { label: 'System', value: 'system' }
+    { label: 'System', value: 'system' },
   ];
 
-canSubmitPassword(): boolean {
-  this.passwordError = '';
-  this.passwordSuccess = false;
+  notifications = {
+    emailAlerts: true,
+    scanCompletionAlerts: false,
+    changeDetectionAlerts: true,
+  };
 
-  const c = this.password.current.trim();
-  const n = this.password.new.trim();
-  const cf = this.password.confirm.trim();
+  password = {
+    current: '',
+    new: '',
+    confirm: '',
+  };
 
-  if (!c || !n || !cf) return false;
-  if (n.length < 8) return false;
-  if (n !== cf) return false;
+  passwordError = '';
+  passwordSuccess = false;
 
-  return true;
-}
+  assignedProjects = [
+    { name: 'UCF Art Gallery' },
+    { name: 'Classroom' },
+    { name: 'Lake Eola' },
+  ];
 
-updatePassword(): void {
-  this.passwordError = '';
-  this.passwordSuccess = false;
-
-  const n = this.password.new.trim();
-  const cf = this.password.confirm.trim();
-
-  if (n.length < 8) {
-    this.passwordError = 'New password must be at least 8 characters.';
-    return;
-  }
-  if (n !== cf) {
-    this.passwordError = 'New password and confirmation do not match.';
-    return;
+  save(): void {
+    // placeholder: wire to API later
+    console.log('Saving settings:', this.model, this.notifications);
   }
 
-  // placeholder: wire to API later
-  this.passwordSuccess = true;
-  this.clearPassword();
-}
+  canSubmitPassword(): boolean {
+    // NOTE: don't mutate error state here; just validate
+    const c = this.password.current.trim();
+    const n = this.password.new.trim();
+    const cf = this.password.confirm.trim();
 
-clearPassword(): void {
-  this.password = { current: '', new: '', confirm: '' };
-}
+    if (!c || !n || !cf) return false;
+    if (n.length < 8) return false;
+    if (n !== cf) return false;
 
-  save() {
-    console.log(this.model);
+    return true;
+  }
+
+  updatePassword(): void {
+    this.passwordError = '';
+    this.passwordSuccess = false;
+
+    const n = this.password.new.trim();
+    const cf = this.password.confirm.trim();
+
+    if (n.length < 8) {
+      this.passwordError = 'New password must be at least 8 characters.';
+      return;
+    }
+    if (n !== cf) {
+      this.passwordError = 'New password and confirmation do not match.';
+      return;
+    }
+
+    // placeholder: wire to API later
+    this.passwordSuccess = true;
+    this.clearPassword();
+  }
+
+  clearPassword(): void {
+    this.password = { current: '', new: '', confirm: '' };
   }
 }
