@@ -27,6 +27,7 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'projects', pathMatch: 'full' },
       { path: 'projects', component: ProjectsList },
+      { path: 'user-settings', component: UserSettings },
       { path: 'admin', children: admin },
       {
         path: ':projectId',
@@ -39,9 +40,4 @@ export const routes: Routes = [
       },
     ],
   },
-
-  {
-    path: 'settings',
-    component: UserSettings
-  }
 ];
