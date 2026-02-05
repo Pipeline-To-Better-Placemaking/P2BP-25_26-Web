@@ -1,0 +1,55 @@
+/* 2-column layout (stacks on small screens) */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 980px) {
+  .settings-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Allow children to shrink properly (prevents overflow in CSS grid) */
+.col {
+  min-width: 0;
+}
+
+.subcard {
+  margin-bottom: 1rem;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+/* Make all inputs/selectors fill available width instead of oversizing */
+:host ::ng-deep input[pInputText],
+:host ::ng-deep .p-inputtext,
+:host ::ng-deep .p-password,
+:host ::ng-deep .p-password input,
+:host ::ng-deep .p-dropdown,
+:host ::ng-deep .p-listbox,
+:host ::ng-deep .p-selectbutton {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Buttons row */
+.row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
