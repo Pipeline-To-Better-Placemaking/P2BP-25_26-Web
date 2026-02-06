@@ -1,5 +1,6 @@
 using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
+using BetterPlacemaking.Models.Dtos;
 
 namespace BetterPlacemaking.Services
 {
@@ -84,5 +85,28 @@ namespace BetterPlacemaking.Services
             docRef.DeleteAsync().Wait();
             return true;
         }
+
+        public void UserSettings(string userId, UserSettingsDto dto)
+        {
+            var docRef = _db.Collection(collectionName).Document(userId);
+            var updates = new Dictionary<string, object>();
+            
+            if (dto.DisplayName != null)
+            {
+                var dn = dto.DisplayName.Trim();
+                if (dn.Length == 0) throw new ArgumentException("DisplayName cannot be empty.");
+                if (dn.Length > 50) throw new ArgumentException("DisplayName must be <= 50 characters.");
+                updates["DisplayName"] = dn;
+            }
+
+            if (dto.EmailAlerts.HasValue) updates["EmailAlerts"] = dto.EmailAlerts.Value;
+            if (dto.ScanCompletionAlerts.HasValue) updates["ScanCompletionAlerts"] = dto.ScanCompletionAlerts.Value;
+            if (dto.ChangeDetectionAlerts.HasValue) updates["ChangeDetectionAlerts"] = dto.ChangeDetectionAlerts.Value;
+
+            if (updates.Count == 0) return;
+
+            docRef.UpdateAsync(updates).Wait();
+        }
+
     }
 }

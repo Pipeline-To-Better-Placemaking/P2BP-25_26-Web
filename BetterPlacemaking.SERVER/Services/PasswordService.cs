@@ -62,5 +62,31 @@ namespace BetterPlacemaking.Services
             doc.Reference.UpdateAsync(updates).Wait();
             return true;
         }
+
+        public bool ChangePassword(string userId, string currentPassword, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(currentPassword) || string.IsNullOrWhiteSpace(newPassword))
+                throw new ArgumentException("Passwords are required.");
+
+            if (newPassword.Trim().Length < 8)
+                throw new ArgumentException("New password must be at least 8 characters.");
+
+            var docRef = _db.Collection(collectionName).Document(userId);
+            var snap = docRef.GetSnapshotAsync().Result;
+
+            if (!snap.Exists) throw new ArgumentException("User not found.");
+
+            var user = snap.ConvertTo<User>();
+            if (user == null || string.IsNullOrEmpty(user.Password))
+                throw new ArgumentException("User password is not set.");
+
+            var matches = BCrypt.Net.BCrypt.Verify(currentPassword, user.Password);
+            if (!matches) return false;
+
+            var newHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            docRef.UpdateAsync(new Dictionary<string, object> { ["Password"] = newHash }).Wait();
+
+            return true;
+        }
     }
 }

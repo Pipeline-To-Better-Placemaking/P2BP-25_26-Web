@@ -3,6 +3,8 @@ using BetterPlacemaking.Models;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using BetterPlacemaking.Models.Dtos;
 
 namespace BetterPlacemaking.Controllers
 {
@@ -94,5 +96,28 @@ namespace BetterPlacemaking.Controllers
 				return Problem("An unexpected error occurred while deleting the user.");
 			}
 		}
+
+		[HttpPatch("me/settings")]
+		public IActionResult UpdateMySettings([FromBody] UserSettingsDto dto)
+		{
+			try
+			{
+				var userId =
+					User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+					User.FindFirstValue("userId") ??
+					User.FindFirstValue("uid") ??
+					User.FindFirstValue("id");
+				
+				if (string.IsNullOrWhiteSpace(userId))
+					return Unauthorized("Missing user id claim.");
+					
+				_userService.UserSettings(userId, dto);
+        		return NoContent();
+}
+    	catch (Exception)
+    	{
+        	return Problem("An unexpected error occurred while updating user settings.");
+    	}
+	}
 	}
 }
