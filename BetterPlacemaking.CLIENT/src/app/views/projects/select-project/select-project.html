@@ -22,12 +22,12 @@
 
     <ng-template #body let-project>
       <tr>
-        <td>{{ project.title }}</td>
-        <td>{{ project.description }}</td>
-        <td>{{ project.location }}</td>
-        <td>{{ project.size }}</td>
+        <td>{{ project.Title }}</td>
+        <td>{{ project.Description }}</td>
+        <td>{{ project.Location }}</td>
+        <td>{{ project.Size }}</td>
         <td>
-          <a pButton type="button" class="p-button-sm p-button-outlined" routerLink="/20">Open</a>
+          <a pButton type="button" class="p-button-sm p-button-outlined" [routerLink]="['/', project.Id]">Open</a>
         </td>
       </tr>
     </ng-template>

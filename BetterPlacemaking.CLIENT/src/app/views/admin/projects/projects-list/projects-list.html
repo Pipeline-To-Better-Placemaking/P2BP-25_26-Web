@@ -1,0 +1,31 @@
+<div class="w-full flex flex-col content-background rounded-lg">
+	<p-table [value]="projects" class="rounded-lg overflow-hidden">
+		<ng-template #caption>
+			<div class="w-full flex justify-between items-center">
+				<div class="flex items-center gap-3">
+					<span class="font-semibold text-xl">Projects</span>
+					<span class="text-muted-color text-xl">{{ projects.length || 0 }}</span>
+				</div>
+				<p-button label="Add" icon="pi pi-plus" (onClick)="addProject()"> </p-button>
+			</div>
+		</ng-template>
+
+		<ng-template #header>
+			<tr>
+				<th>Title</th>
+				<th>Description</th>
+				<th>Location</th>
+				<th>Size</th>
+			</tr>
+		</ng-template>
+
+		<ng-template #body let-project>
+			<tr>
+				<td>{{ project.Title }}</td>
+				<td>{{ project.Description }}</td>
+				<td>{{ project.Location }}</td>
+				<td>{{ project.Size }}</td>
+			</tr>
+		</ng-template>
+	</p-table>
+</div>

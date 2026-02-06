@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 
 import { ProjectForm } from './project-form';
 
@@ -8,7 +9,11 @@ describe('ProjectForm', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ProjectForm]
+      imports: [ProjectForm],
+      providers: [
+        { provide: DynamicDialogRef, useValue: { close: () => void 0 } },
+        { provide: DynamicDialogConfig, useValue: { data: null } },
+      ],
     })
     .compileComponents();
 
