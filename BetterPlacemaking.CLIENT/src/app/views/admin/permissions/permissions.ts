@@ -6,16 +6,18 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 
+import { UsersService, ApiUser } from '../../../services/users-service';
+
 interface Project {
   id: number;
   name: string;
 }
 
-interface User {
-  id: number;
+interface UserRow {
+  id: string; // Firestore doc id is a string
   name: string;
   assignedProjects: number[];
-  savedMessage?: string; // <-- temporary message per user
+  savedMessage?: string;
 }
 
 @Component({
@@ -26,13 +28,12 @@ interface User {
   styleUrls: ['./permissions.scss'],
 })
 export class Permissions implements OnInit {
-  users: User[] = [];
+  users: UserRow[] = [];
   projects: Project[] = [];
 
-  constructor() {}
+  constructor(private usersService: UsersService) {}
 
   ngOnInit(): void {
-    // Dummy projects
     this.projects = [
       { id: 1, name: 'Project Alpha' },
       { id: 2, name: 'Project Beta' },
@@ -40,27 +41,36 @@ export class Permissions implements OnInit {
       { id: 4, name: 'Project Delta' },
     ];
 
-    // Dummy users
-    this.users = [
-      { id: 1, name: 'Alice', assignedProjects: [1, 3] },
-      { id: 2, name: 'Bob', assignedProjects: [2] },
-      { id: 3, name: 'Charlie', assignedProjects: [] },
-      { id: 4, name: 'Diana', assignedProjects: [1, 2, 3] },
-      { id: 5, name: 'Eve', assignedProjects: [] },
-      { id: 6, name: 'Frank', assignedProjects: [4] },
-      { id: 7, name: 'Grace', assignedProjects: [] },
-    ];
+    this.usersService.getUsers().subscribe({
+      next: (apiUsers: ApiUser[]) => {
+        this.users = apiUsers.map((u: ApiUser) => ({
+          id: u.id,
+          name: this.pickDisplayName(u),
+          assignedProjects: [],
+        }));
+      },
+      error: (err: any) => {
+        console.error('Failed to load users', err);
+      },
+    });
   }
 
-  saveUserPermissions(user: User) {
+  private pickDisplayName(u: ApiUser): string {
+    const dn = (u.displayName ?? '').trim();
+    if (dn) return dn;
+
+    const full = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
+    if (full) return full;
+
+    return u.email ?? '(unknown user)';
+  }
+
+  saveUserPermissions(user: UserRow): void {
     console.log(`Saved permissions for ${user.name}:`, user.assignedProjects);
     user.savedMessage = 'Saved changes!';
 
-    // Hide the message after 3 seconds
     setTimeout(() => {
       user.savedMessage = undefined;
     }, 3000);
-
-    // Here, you would also call your backend service to persist permissions
   }
 }
