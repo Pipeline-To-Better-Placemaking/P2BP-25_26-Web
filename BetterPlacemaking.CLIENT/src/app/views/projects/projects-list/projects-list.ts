@@ -14,14 +14,14 @@ import { AuthService } from '../../../services/auth-service';
 })
 export class ProjectsList {
   public projects = [
-    { title: 'SVAD Art Gallery', description: 'Art gallery at UCF', size: '3' },
-    { title: 'Orlando Downtown Plaza', description: 'Public plaza with lighting and seating', size: '6' },
-    { title: 'TEST ITEM', description: 'TEST', size: '4' }
+    { title: 'SVAD Art Gallery', description: 'Art gallery at UCF', location: 'Orlando, FL', size: '3' },
+    { title: 'Orlando Downtown Plaza', description: 'Public plaza with lighting and seating', location: 'Orlando, FL', size: '6' },
+    { title: 'TEST ITEM', description: 'TEST', location: 'TEST', size: '4' },
   ];
   public constructor(private projectService: ProjectService, private sampleService: SampleService, private authService: AuthService) {}
 
   ngOnInit(): void {
     // Example usage of ProjectService
-    this.projectService.DoStuff();
+    //this.projectService.DoStuff();
   }
 }
