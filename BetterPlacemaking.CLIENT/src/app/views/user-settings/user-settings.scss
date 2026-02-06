@@ -53,3 +53,31 @@
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* Ensure nothing blocks clicks in this view */
+:host {
+  display: block;
+  position: relative;
+  z-index: 0;
+}
+
+.settings-grid,
+.col,
+.subcard,
+.settings-form {
+  position: relative;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+/* Bring interactive controls above any accidental overlay */
+:host ::ng-deep button,
+:host ::ng-deep .p-button,
+:host ::ng-deep .p-inputtext,
+:host ::ng-deep .p-selectbutton,
+:host ::ng-deep .p-checkbox,
+:host ::ng-deep .p-password {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+}

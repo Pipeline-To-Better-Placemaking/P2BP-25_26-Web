@@ -74,6 +74,7 @@ export class UserSettings {
   ];
 
   save(): void {
+
     this.saving = true;
 
     this.userSettingsService
