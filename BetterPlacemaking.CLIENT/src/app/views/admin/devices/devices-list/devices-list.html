@@ -16,7 +16,10 @@
         <th>Id</th>
         <th>Device</th>
         <th>Project</th>
-        <th>Size</th>
+        <th>Last Heartbeat</th>
+        <th>Cameras Enabled</th>
+        <th>Tracking</th>
+        <th>Heartbeat Interval</th>
       </tr>
     </ng-template>
 
@@ -33,7 +36,10 @@
         <td>{{ device.Id }}</td>
         <td>{{ device.Name }}</td>
         <td>{{ device.ProjectId }}</td>
-        <td>1</td>
+        <td>{{ formatLastHeartbeat(device) }}</td>
+        <td>{{ countCamerasEnabled(device) }}</td>
+        <td>{{ device?.Config?.Tracking?.Enabled ? 'Yes' : 'No' }}</td>
+        <td>{{ device?.Config?.HeartbeatInterval ? device.Config.HeartbeatInterval : '—' }}</td>
       </tr>
     </ng-template>
   </p-table>

@@ -37,6 +37,20 @@ export class DevicesList implements OnInit {
     this.buildDrowndownMenu();
   }
 
+  public formatLastHeartbeat(device: DeviceDto): string {
+    const ts = device?.HealthReport?.Timestamp;
+    if (!ts) return '—';
+    const asMs = ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : ts;
+    const d = new Date(asMs);
+    return d.toLocaleString();
+  }
+
+  public countCamerasEnabled(device: DeviceDto): number {
+    const cams = device?.HealthReport?.Cameras;
+    if (!cams) return 0;
+    return Object.values(cams).filter((c) => c?.Enabled).length;
+  }
+
   private loadDevices(): void {
     this.deviceService.getDevices().subscribe({
       next: (devices) => {
