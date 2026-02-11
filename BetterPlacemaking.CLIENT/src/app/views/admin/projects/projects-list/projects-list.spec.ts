@@ -3,7 +3,6 @@ import { of } from 'rxjs';
 
 import { ProjectsList } from './projects-list';
 import { ProjectService } from '../../../../services/project-service';
-import { DialogService } from 'primeng/dynamicdialog';
 
 describe('ProjectsList', () => {
   let component: ProjectsList;
@@ -17,13 +16,6 @@ describe('ProjectsList', () => {
           provide: ProjectService,
           useValue: {
             getProjects: () => of([]),
-            addProject: () => of(null),
-          },
-        },
-        {
-          provide: DialogService,
-          useValue: {
-            open: () => ({ onClose: of(undefined) }),
           },
         },
       ],

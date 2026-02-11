@@ -1,15 +1,12 @@
-import { Component, OnDestroy, ViewChild } from '@angular/core';
-import { NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/router';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ActivatedRoute, NavigationEnd, Router, RouterModule, RouterOutlet } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { AvatarModule } from 'primeng/avatar';
 import { Menu, MenuModule } from 'primeng/menu';
 import { FontAwesomeModule, FaIconLibrary } from '@fortawesome/angular-fontawesome';
 import {
-  faHome,
   faFolder,
   faChartLine,
-  faCog,
-  faSignOutAlt,
   faMoon,
   faUser,
   faCube,
@@ -33,8 +30,8 @@ import { AuthService } from '../../services/auth-service';
   styleUrl: './default-layout.scss',
 })
 
-export class DefaultLayout implements OnDestroy {
-  private projectId?: number;
+export class DefaultLayout implements OnInit, OnDestroy {
+  private projectId?: string;
   private routerSub?: Subscription;
 
   public readonly faMoon = faMoon;
@@ -43,6 +40,7 @@ export class DefaultLayout implements OnDestroy {
   constructor(
     public themeService: ThemeService,
     private router: Router,
+    private route: ActivatedRoute,
     private authService: AuthService
   ) {}
 
@@ -74,7 +72,7 @@ export class DefaultLayout implements OnDestroy {
     this.routerSub = this.router.events
       .pipe(filter((event) => event instanceof NavigationEnd), startWith(null))
       .subscribe(() => {
-        const newId = this.parseProjectIdFromUrl(this.router.url || '');
+        const newId = this.getProjectIdFromRoute(this.route);
         this.projectId = newId;
         this.buildNavMenus(this.projectId);
       });
@@ -84,22 +82,27 @@ export class DefaultLayout implements OnDestroy {
     this.routerSub?.unsubscribe();
   }
 
-  private parseProjectIdFromUrl(url: string): number | undefined {
-    const raw = url.split('?')[0];
-    const segments = raw.split('/').filter(Boolean);
-    for (let i = segments.length - 1; i >= 0; i--) {
-      const val = Number(segments[i]);
-      if (!Number.isNaN(val) && Number.isFinite(val) && Number.isInteger(val)) {
-        return val;
+  private getProjectIdFromRoute(root: ActivatedRoute): string | undefined {
+    let cursor: ActivatedRoute | null = root;
+    while (cursor?.firstChild)
+      cursor = cursor.firstChild;
+
+    while (cursor) {
+      const raw = cursor.snapshot.paramMap.get('projectId');
+      if (raw != null) {
+        const trimmed = raw.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
       }
+      cursor = cursor.parent;
     }
+
     return undefined;
   }
 
-  private buildNavMenus(projectId?: number): void {
+  private buildNavMenus(projectId?: string): void {
 
-    if (projectId != null) {
-      const base = `${projectId}`;
+    if (projectId != null && projectId !== '') {
+      const base = projectId;
       this.navItemsIfSelected = [
         {
           label: 'Project',
