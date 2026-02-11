@@ -149,9 +149,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
   }
 
   private openUserMenu(event: { originalEvent?: Event }): void {
-    if (event?.originalEvent) {
+    if (event?.originalEvent)
       this.userMenu?.toggle(event.originalEvent);
-    }
   }
 
   private logout(): void {
