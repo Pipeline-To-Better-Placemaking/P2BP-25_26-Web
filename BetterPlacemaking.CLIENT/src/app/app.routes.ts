@@ -3,7 +3,6 @@ import { DefaultLayout } from './layouts/default-layout/default-layout';
 import { Login } from './views/login/login';
 import { SelectProject } from './views/projects/select-project/select-project';
 import { Dashboard } from './views/projects/selected/dashboard/dashboard';
-import { Scanner } from './views/admin/devices/scanner/scanner';
 import { Permissions } from './views/admin/permissions/permissions';
 import { ProjectsList } from './views/admin/projects/projects-list/projects-list';
 import { DevicesList } from './views/admin/devices/devices-list/devices-list';
@@ -33,7 +32,7 @@ export const routes: Routes = [
         children: [
           { path: '', component: Dashboard },
           { path: 'admin', children: admin },
-          { path: 'model', component: Scanner },
+          { path: 'model', loadComponent: () => import('./views/admin/devices/scanner/scanner').then(m => m.Scanner) },
           { path: 'dashboard', component: Dashboard },
         ],
       },

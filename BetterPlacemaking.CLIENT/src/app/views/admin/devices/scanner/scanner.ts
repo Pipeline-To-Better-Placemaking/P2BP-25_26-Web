@@ -8,6 +8,7 @@ import { SelectModule } from 'primeng/select';
 import { FormsModule } from '@angular/forms';
 import { MenuModule } from 'primeng/menu';
 import { MenuItem } from 'primeng/api';
+import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 
 interface Schedule {
   date: string;
@@ -33,7 +34,8 @@ interface FrequencyOption {
     MessageModule,
     SelectModule,
     FormsModule,
-    MenuModule
+    MenuModule,
+    PointCloudViewerComponent
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
