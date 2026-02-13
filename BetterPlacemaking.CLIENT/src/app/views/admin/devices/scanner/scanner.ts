@@ -1,20 +1,18 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
-import { SelectModule } from 'primeng/select';
-import { FormsModule } from '@angular/forms';
-import { MenuModule } from 'primeng/menu';
-import { MenuItem } from 'primeng/api';
-import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 
 interface Schedule {
   date: string;
   time: string;
   frequency: string;
   endDate?: string;
+  endTime?: string;
   id: number;
 }
 
@@ -28,24 +26,24 @@ interface FrequencyOption {
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     CardModule,
     ButtonModule,
     InputTextModule,
-    MessageModule,
-    SelectModule,
-    FormsModule,
-    MenuModule,
-    PointCloudViewerComponent
+    MessageModule
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
 })
 export class Scanner implements OnInit {
+
   public scanMessage: string | null = null;
   public scheduleMessage: string | null = null;
+
   public scheduledDate: string = '';
   public scheduledTime: string = '';
   public endDate: string = '';
+  public endTime: string = '';
 
   public frequencyOptions: FrequencyOption[] = [
     { name: 'Never', code: 'Never' },
@@ -53,52 +51,26 @@ export class Scanner implements OnInit {
     { name: 'Monthly', code: 'Monthly' },
     { name: 'Yearly', code: 'Yearly' }
   ];
-  public selectedFrequency: FrequencyOption | undefined;
 
+  public selectedFrequency: FrequencyOption | undefined;
   public schedules: Schedule[] = [];
   private scheduleIdCounter: number = 1;
 
-  // Menu for schedule actions
-  public scheduleMenuItems: MenuItem[] = [];
-  private selectedSchedule: Schedule | null = null;
+  ngOnInit(): void {}
 
-  ngOnInit(): void {
-    this.buildScheduleMenu();
-  }
-
-  private buildScheduleMenu(): void {
-    this.scheduleMenuItems = [
-      {
-        label: 'Cancel Schedule',
-        icon: 'pi pi-times',
-        command: () => {
-          if (this.selectedSchedule) {
-            this.cancelSchedule(this.selectedSchedule.id);
-          }
-        }
-      },
-      {
-        label: 'Edit Schedule',
-        icon: 'pi pi-pencil',
-        command: () => {
-          if (this.selectedSchedule) {
-            this.editSchedule(this.selectedSchedule);
-          }
-        }
-      }
-    ];
-  }
-
+  // -----------------------------
+  // Immediate Scan
+  // -----------------------------
   public performScan(): void {
     this.scanMessage = 'Scan performed successfully!';
-
-    // Clear message after 3 seconds
-    setTimeout(() => {
-      this.scanMessage = null;
-    }, 3000);
+    setTimeout(() => this.scanMessage = null, 3000);
   }
 
+  // -----------------------------
+  // Schedule Scan
+  // -----------------------------
   public scheduleScan(): void {
+
     if (!this.selectedFrequency) {
       this.scheduleMessage = 'Please select a frequency.';
       return;
@@ -109,54 +81,94 @@ export class Scanner implements OnInit {
       return;
     }
 
-    const newSchedule: Schedule = {
+    if (this.selectedFrequency.code !== 'Never') {
+      if (!this.endDate) {
+        this.scheduleMessage = 'Please select an end date for recurring scans.';
+        return;
+      }
+      if (!this.endTime) {
+        this.scheduleMessage = 'Please select an end time for recurring scans.';
+        return;
+      }
+
+      const start = new Date(`${this.scheduledDate}T${this.scheduledTime}`);
+      const end = new Date(`${this.endDate}T${this.endTime}`);
+      if (end <= start) {
+        this.scheduleMessage = 'End date and time must be after start.';
+        return;
+      }
+    }
+
+    this.schedules.push({
       date: this.scheduledDate,
       time: this.scheduledTime,
       frequency: this.selectedFrequency.code,
       endDate: this.endDate || undefined,
+      endTime: this.endTime || undefined,
       id: this.scheduleIdCounter++
-    };
+    });
 
-    this.schedules.push(newSchedule);
     this.scheduleMessage = 'Scan scheduled successfully!';
-
-    // Clear form
     this.clearForm();
-
-    // Clear message after 3 seconds
-    setTimeout(() => {
-      this.scheduleMessage = null;
-    }, 3000);
+    setTimeout(() => this.scheduleMessage = null, 3000);
   }
 
+  // -----------------------------
+  // Cancel / Edit Schedule
+  // -----------------------------
   public cancelSchedule(id: number): void {
-    const index = this.schedules.findIndex(s => s.id === id);
-    if (index > -1) {
-      this.schedules.splice(index, 1);
-    }
+    this.schedules = this.schedules.filter(s => s.id !== id);
   }
 
-  public onScheduleMenuClick(event: MouseEvent, schedule: Schedule, menu: any): void {
-    this.selectedSchedule = schedule;
-    menu.toggle(event);
-  }
-
-  // CHANGED FROM PRIVATE TO PUBLIC
   public editSchedule(schedule: Schedule): void {
-    // Populate form with selected schedule data
     this.scheduledDate = schedule.date;
     this.scheduledTime = schedule.time;
     this.endDate = schedule.endDate || '';
+    this.endTime = schedule.endTime || '';
     this.selectedFrequency = this.frequencyOptions.find(f => f.code === schedule.frequency);
-
-    // Remove the schedule being edited
     this.cancelSchedule(schedule.id);
   }
 
+  // -----------------------------
+  // Date / Time Change Handlers
+  // -----------------------------
+  public onStartDateChange(): void {
+    if (this.endDate && this.scheduledDate) {
+      if (this.endDate < this.scheduledDate) {
+        this.endDate = '';
+        this.endTime = '';
+      } else if (this.endDate === this.scheduledDate && this.endTime && this.scheduledTime) {
+        if (this.endTime <= this.scheduledTime) {
+          this.endTime = '';
+        }
+      }
+    }
+  }
+
+  public onStartTimeChange(): void {
+    if (this.endDate && this.scheduledDate && this.endDate === this.scheduledDate) {
+      if (this.endTime && this.scheduledTime && this.endTime <= this.scheduledTime) {
+        this.endTime = '';
+      }
+    }
+  }
+
+  public onEndDateChange(): void {
+    if (this.endDate && this.scheduledDate && this.endDate === this.scheduledDate) {
+      if (this.endTime && this.scheduledTime && this.endTime <= this.scheduledTime) {
+        this.endTime = '';
+      }
+    }
+  }
+
+  // -----------------------------
+  // Helpers
+  // -----------------------------
   private clearForm(): void {
     this.scheduledDate = '';
     this.scheduledTime = '';
     this.endDate = '';
+    this.endTime = '';
     this.selectedFrequency = undefined;
   }
 
@@ -164,4 +176,9 @@ export class Scanner implements OnInit {
     const freq = this.frequencyOptions.find(f => f.code === code);
     return freq ? freq.name : code;
   }
+
+  public getMinEndDate(): string {
+    return this.scheduledDate || '';
+  }
+
 }

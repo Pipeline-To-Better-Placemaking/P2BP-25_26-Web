@@ -33,6 +33,7 @@
               id="date"
               type="date"
               [(ngModel)]="scheduledDate"
+              (ngModelChange)="onStartDateChange()"
               pInputText
               class="w-full">
           </div>
@@ -43,6 +44,7 @@
               id="time"
               type="time"
               [(ngModel)]="scheduledTime"
+              (ngModelChange)="onStartTimeChange()"
               pInputText
               class="w-full">
           </div>
@@ -51,35 +53,49 @@
         <!-- Frequency Selection -->
         <div class="flex flex-col gap-2">
           <label for="frequency" class="font-medium">Frequency:</label>
-          <div class="relative w-full">
-            <select
-              id="frequency"
-              [(ngModel)]="selectedFrequency"
-              class="w-full p-inputtext p-component appearance-none pr-8"
-              style="padding: 0.5rem; cursor: pointer;">
-              <option [ngValue]="undefined" disabled selected>Select Frequency</option>
-              <option *ngFor="let freq of frequencyOptions" [ngValue]="freq">
-                {{ freq.name }}
-              </option>
-            </select>
-            <!-- Custom dropdown arrow -->
-            <div class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-              <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </div>
-          </div>
+          <select
+            id="frequency"
+            [(ngModel)]="selectedFrequency"
+            class="w-full p-inputtext p-component"
+            style="padding: 0.5rem;">
+            <option [ngValue]="undefined" disabled selected>
+              Select Frequency
+            </option>
+            <option *ngFor="let freq of frequencyOptions" [ngValue]="freq">
+              {{ freq.name }}
+            </option>
+          </select>
         </div>
 
-        <!-- End Date (conditional) -->
-        <div *ngIf="selectedFrequency && selectedFrequency.code !== 'Never'" class="flex flex-col gap-2">
-          <label for="endDate" class="font-medium">End at:</label>
-          <input
-            id="endDate"
-            type="date"
-            [(ngModel)]="endDate"
-            pInputText
-            class="w-full">
+        <!-- End Date / Time (for recurring) -->
+        <div
+          *ngIf="selectedFrequency && selectedFrequency.code !== 'Never'"
+          class="flex flex-col gap-4">
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-2">
+              <label for="endDate" class="font-medium">End date:</label>
+              <input
+                id="endDate"
+                type="date"
+                [(ngModel)]="endDate"
+                (ngModelChange)="onEndDateChange()"
+                [min]="getMinEndDate()"
+                pInputText
+                class="w-full">
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <label for="endTime" class="font-medium">End time:</label>
+              <input
+                id="endTime"
+                type="time"
+                [(ngModel)]="endTime"
+                pInputText
+                class="w-full">
+            </div>
+          </div>
+
         </div>
 
         <!-- Schedule Button -->
@@ -92,61 +108,62 @@
           </p-button>
         </div>
 
-        <!-- Schedule Message -->
+        <!-- Message -->
         <div *ngIf="scheduleMessage" class="mt-2">
           <p-message
             [text]="scheduleMessage"
-            [severity]="scheduleMessage.includes('Please') ? 'error' : 'success'"
+            [severity]="scheduleMessage.includes('Please') || scheduleMessage.includes('must') ? 'error' : 'success'"
             styleClass="w-full">
           </p-message>
         </div>
 
-        <!-- Current Schedules -->
+        <!-- Current Schedules Table -->
         <div *ngIf="schedules.length" class="mt-6">
-          <h3 class="text-lg font-semibold mb-3">Current Schedules:</h3>
-          <div class="overflow-x-auto">
-            <table class="w-full border-collapse">
-              <thead>
-                <tr >
-                  <th class="text-left p-3 font-medium border-b">Date & Time</th>
-                  <th class="text-left p-3 font-medium border-b">Frequency</th>
-                  <th class="text-left p-3 font-medium border-b">End Date</th>
-                  <th class="text-left p-3 font-medium border-b w-24">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let s of schedules" class="border-b">
-                  <td class="p-3">{{ s.date }} {{ s.time }}</td>
-                  <td class="p-3">{{ getScheduleFrequencyName(s.frequency) }}</td>
-                  <td class="p-3">{{ s.endDate || '-' }}</td>
-                  <td class="p-3">
-                    <div class="flex gap-2">
-                      <p-button
-                        icon="pi pi-pencil"
-                        styleClass="p-button-text p-button-rounded p-button-sm"
-                        (onClick)="editSchedule(s)"
-                        [title]="'Edit schedule'">
-                      </p-button>
-                      <p-button
-                        icon="pi pi-times"
-                        styleClass="p-button-text p-button-rounded p-button-danger p-button-sm"
-                        (onClick)="cancelSchedule(s.id)"
-                        [title]="'Cancel schedule'">
-                      </p-button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <h3 class="text-lg font-semibold mb-3">Current Test Schedules:</h3>
+
+          <table class="w-full border-collapse">
+            <thead>
+              <tr>
+                <th class="text-left p-3 border-b">Start Date & Time</th>
+                <th class="text-left p-3 border-b">Frequency</th>
+                <th class="text-left p-3 border-b">End Date & Time</th>
+                <th class="text-left p-3 border-b w-24">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr *ngFor="let s of schedules" class="border-b">
+                <td class="p-3">{{ s.date }} {{ s.time }}</td>
+                <td class="p-3">{{ getScheduleFrequencyName(s.frequency) }}</td>
+                <td class="p-3">
+                  <ng-container *ngIf="s.endDate; else noEndDate">
+                    {{ s.endDate }} {{ s.endTime }}
+                  </ng-container>
+                  <ng-template #noEndDate>-</ng-template>
+                </td>
+                <td class="p-3">
+                  <div class="flex gap-2">
+                    <p-button
+                      icon="pi pi-pencil"
+                      styleClass="p-button-text p-button-rounded p-button-sm"
+                      (onClick)="editSchedule(s)">
+                    </p-button>
+
+                    <p-button
+                      icon="pi pi-times"
+                      styleClass="p-button-text p-button-rounded p-button-danger p-button-sm"
+                      (onClick)="cancelSchedule(s.id)">
+                    </p-button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
         </div>
+
       </div>
     </p-card>
-  </div>
-
-  <!-- Point Cloud Viewer -->
-  <div class="mt-6">
-    <app-point-cloud-viewer></app-point-cloud-viewer>
   </div>
 
 </div>
