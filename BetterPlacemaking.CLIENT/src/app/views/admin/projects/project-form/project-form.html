@@ -1,0 +1,35 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="p-fluid flex flex-col gap-4 p-4">
+	<p-panel header="Project Details">
+		<div class="grid gap-4 md:grid-cols-2">
+			<div class="flex flex-col gap-1 md:col-span-2" *ngIf="form.get('Id')?.value">
+				<label for="project-id" class="font-semibold">Id</label>
+				<input id="project-id" pInputText formControlName="Id" />
+			</div>
+
+			<div class="flex flex-col gap-1 md:col-span-2">
+				<label for="project-title" class="font-semibold">Title</label>
+				<input id="project-title" pInputText formControlName="Title" />
+			</div>
+
+			<div class="flex flex-col gap-1 md:col-span-2">
+				<label for="project-description" class="font-semibold">Description</label>
+				<input id="project-description" pInputText formControlName="Description" />
+			</div>
+
+			<div class="flex flex-col gap-1">
+				<label for="project-location" class="font-semibold">Location</label>
+				<input id="project-location" pInputText formControlName="Location" />
+			</div>
+
+			<div class="flex flex-col gap-1">
+				<label for="project-size" class="font-semibold">Size</label>
+				<p-inputNumber inputId="project-size" formControlName="Size" [min]="0" showButtons></p-inputNumber>
+			</div>
+		</div>
+	</p-panel>
+
+	<div class="flex justify-end gap-2">
+		<p-button type="button" label="Cancel" styleClass="p-button-text" (onClick)="onCancel()"></p-button>
+		<p-button type="submit" label="Save" [disabled]="form.invalid"></p-button>
+	</div>
+</form>

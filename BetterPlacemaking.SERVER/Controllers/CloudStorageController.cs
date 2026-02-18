@@ -1,5 +1,3 @@
-using System.Security.Claims;
-using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,22 +8,21 @@ namespace BetterPlacemaking.Controllers
     [ApiController]
     [Route("api/files")]
     [Authorize(AuthenticationSchemes = "UserJwt,DeviceApiKey")]
-    public sealed class CloudStorageController(CloudStorageService gcs) : ControllerBase
+    public sealed class CloudStorageController(CloudStorageService gcs, MediaService mediaService) : ControllerBase
     {
         private readonly CloudStorageService _gcs = gcs;
+        private readonly MediaService _mediaService = mediaService;
 
         [HttpPost("request-upload")]
         public async Task<ActionResult<UploadUrlResponseDto>> RequestUpload(
             [FromBody] RequestUploadUrlDto req,
             CancellationToken ct)
         {
-            string ownerKey = GetOwnerKey();
-
             // Optional: enforce max size at API layer
-            const long maxBytes = 10L * 1024 * 1024; // 10 MB
-            if (req.SizeBytes > maxBytes) return BadRequest("File too large.");
+            // const long maxBytes = 10L * 1024 * 1024; // 10 MB
+            // if (req.SizeBytes > maxBytes) return BadRequest("File too large.");
 
-            var resp = await _gcs.CreateSignedUploadUrlAsync(ownerKey, req, ct);
+            var resp = await _gcs.CreateSignedUploadUrlAsync(req, ct);
             return Ok(resp);
         }
 
@@ -34,31 +31,24 @@ namespace BetterPlacemaking.Controllers
             [FromBody] RequestDownloadUrlDto req,
             CancellationToken ct)
         {
-            string ownerKey = GetOwnerKey();
-
-            var resp = await _gcs.CreateSignedDownloadUrlAsync(ownerKey, req, ct);
+            var resp = await _gcs.CreateSignedDownloadUrlAsync(req, ct);
             return Ok(resp);
         }
 
-        private string GetOwnerKey()
+        [HttpPost("confirm-upload")]
+        public ActionResult<MediaRecordResponseDto> ConfirmUpload(
+            [FromBody] ConfirmUploadedMediaDto req)
         {
-            // Device auth: handler sets HttpContext.Items["Device"] and deviceId claim.
-            if (HttpContext.Items.TryGetValue("Device", out var deviceObj) && deviceObj is Device device)
-            {
-                if (!string.IsNullOrWhiteSpace(device.Id))
-                    return $"device:{device.Id}";
-            }
+            // Validate/canonicalize with the same rules used for signed-upload.
+            // We don't store the full object path in Firestore (directory + name + extension are stored separately).
+            _ = _gcs.BuildObjectPath(req.PathFromRoot, req.FileName, req.Extension);
 
-            var deviceId = User.FindFirstValue("deviceId");
-            if (!string.IsNullOrWhiteSpace(deviceId))
-                return $"device:{deviceId}";
-
-            // User auth: NameIdentifier claim is set in TokenService.
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.IsNullOrWhiteSpace(userId))
-                return $"user:{userId}";
-
-            throw new UnauthorizedAccessException("No authenticated identity.");
+            var media = _mediaService.Create(req.PathFromRoot, req.FileName, req.Extension);
+            return Ok(new MediaRecordResponseDto(
+                media.Id,
+                media.Name,
+                media.PathFromRoot,
+                media.Extension));
         }
     }
 }

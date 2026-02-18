@@ -9,7 +9,6 @@ type ChangePasswordRequest = {
 
 @Injectable({ providedIn: 'root' })
 export class PasswordService {
-  // later you can move this to an environment file or proxy
   private readonly baseUrl = 'https://localhost:7058';
 
   constructor(private http: HttpClient) {}

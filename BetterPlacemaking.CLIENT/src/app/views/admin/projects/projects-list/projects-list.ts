@@ -1,0 +1,67 @@
+import { Component, OnInit } from '@angular/core';
+import { ButtonModule } from 'primeng/button';
+import { TableModule } from 'primeng/table';
+import { ProjectDto } from '../../../../models/ProjectDto';
+import { ProjectService } from '../../../../services/project-service';
+import { catchError, of } from 'rxjs';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { ProjectForm } from '../project-form/project-form';
+
+@Component({
+  selector: 'app-projects-list',
+  imports: [TableModule, ButtonModule],
+  providers: [DialogService],
+  templateUrl: './projects-list.html',
+  styleUrl: './projects-list.scss',
+})
+export class ProjectsList implements OnInit {
+  public projects: ProjectDto[] = [];
+
+  private formRef: DynamicDialogRef<ProjectForm> | null = null;
+
+  public constructor(
+    private readonly projectService: ProjectService,
+    private readonly dialogService: DialogService,
+  ) {}
+
+  ngOnInit(): void {
+    this.loadProjects();
+  }
+
+  private loadProjects(): void {
+    this.projectService
+      .getProjects()
+      .pipe(catchError(() => of([] as ProjectDto[])))
+      .subscribe({
+        next: (projects) => {
+          this.projects = projects ?? [];
+        },
+        error: (err) => {
+          // ErrorHandlerService already surfaces a toast; keep console for debugging.
+          console.error('Error loading projects:', err);
+        },
+      });
+  }
+
+  public addProject(): void {
+    this.formRef = this.dialogService.open(ProjectForm, {
+      header: 'Add Project',
+      width: '50vw',
+      modal: true,
+      breakpoints: {
+        '960px': '75vw',
+        '640px': '90vw',
+      },
+      closable: true,
+    });
+
+    this.formRef?.onClose.subscribe((project: ProjectDto | undefined) => {
+      if (!project) return;
+
+      this.projectService.addProject(project).subscribe({
+        next: () => this.loadProjects(),
+        error: (err) => console.error('Error adding project:', err),
+      });
+    });
+  }
+}

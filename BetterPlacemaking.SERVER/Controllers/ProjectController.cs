@@ -1,4 +1,5 @@
 using BetterPlacemaking.Models;
+using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,26 +12,45 @@ namespace BetterPlacemaking.Controllers
     {
         private readonly ProjectService _projectService = projectService;
 
+        private static ProjectDto ToDto(Project project) => new()
+        {
+            Id = project.Id,
+            Title = project.Title,
+            Description = project.Description,
+            Location = project.Location,
+            Size = project.Size,
+        };
+
+        private static Project FromDto(ProjectDto dto) => new()
+        {
+            Id = dto.Id,
+            Title = dto.Title,
+            Description = dto.Description,
+            Location = dto.Location,
+            Size = dto.Size,
+        };
+
         [HttpGet]
         [AllowAnonymous]
         public IActionResult GetProjects()
         {
             var projects = _projectService.GetAll();
-            return Ok(new { Projects = projects });
+            var dtos = projects.Select(ToDto).ToList();
+            return Ok(dtos);
         }
 
 
-        [HttpGet("id")]
+        [HttpGet("{id}")]
         [AllowAnonymous]
-        public IActionResult GetProject(string id)
+        public IActionResult GetProject([FromRoute] string id)
         {
             var project = _projectService.GetById(id);
             if (project == null)
             {
-                return NotFound(new { Success = false, Message = "Project not found" });
+                return NotFound();
             }
 
-            return Ok(new { Project = project });
+            return Ok(ToDto(project));
         }
 
         [HttpPost("create")]
@@ -47,11 +67,7 @@ namespace BetterPlacemaking.Controllers
 
             _projectService.Create(project);
 
-            return Ok(new
-            {
-                Message = "Project created successfully",
-                Project = project
-            });
+            return Ok(ToDto(project));
         }
 
         [HttpPut("update")]
@@ -62,10 +78,10 @@ namespace BetterPlacemaking.Controllers
 
             if (!success)
             {
-                return NotFound("Project not found");
+                return NotFound();
             }
 
-            return Ok("Project updated successfully");
+            return Ok();
         }
 
         [HttpDelete("delete")]
@@ -75,10 +91,10 @@ namespace BetterPlacemaking.Controllers
             var success = _projectService.Delete(id);
 
             if (!success){
-                return NotFound("Project not found");
+                return NotFound();
             }
 
-            return Ok("Project deleted successfully");
+            return Ok();
         }
     }
 }

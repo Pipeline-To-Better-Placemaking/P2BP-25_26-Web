@@ -49,7 +49,18 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration.GetSection("Gcs"));
 builder.Services.AddSingleton<CloudStorageService>();
+builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
+
+// Visualizer services (point cloud, mesh generation, export)
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PointCloudService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.GeometryCalculationService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.ObjParserService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.XyzParserService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.MeshGenerationService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.FastMeshService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.GeometryExportService>();
+builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PlyParserService>();
 
 // Caching
 // Cloud Run can scale to multiple instances, so use Redis when configured.
