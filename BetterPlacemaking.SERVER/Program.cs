@@ -49,6 +49,7 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration.GetSection("Gcs"));
 builder.Services.AddSingleton<CloudStorageService>();
+builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
 
 // Visualizer services (point cloud, mesh generation, export)

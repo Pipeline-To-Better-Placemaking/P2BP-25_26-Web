@@ -8,6 +8,7 @@ import { ProjectsList } from './views/admin/projects/projects-list/projects-list
 import { DevicesList } from './views/admin/devices/devices-list/devices-list';
 import { authGuard } from './guards/auth-guard';
 import { UserSettings } from './views/user-settings/user-settings';
+import { Scanner } from './views/admin/devices/scanner/scanner';
 
 const admin: Routes = [
   { path: 'permissions', component: Permissions },
@@ -32,7 +33,7 @@ export const routes: Routes = [
         children: [
           { path: '', component: Dashboard },
           { path: 'admin', children: admin },
-          { path: 'model', loadComponent: () => import('./views/admin/devices/scanner/scanner').then(m => m.Scanner) },
+          { path: 'model', component: Scanner },
           { path: 'dashboard', component: Dashboard },
         ],
       },

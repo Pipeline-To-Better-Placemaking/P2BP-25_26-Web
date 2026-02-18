@@ -29,30 +29,21 @@ namespace BetterPlacemaking.Services
         }
 
         public Task<UploadUrlResponseDto> CreateSignedUploadUrlAsync(
-            string ownerKey,
             RequestUploadUrlDto req,
             CancellationToken ct)
         {
             // Basic input hardening
             if (req.SizeBytes <= 0) throw new ArgumentOutOfRangeException(nameof(req.SizeBytes));
-            if (string.IsNullOrWhiteSpace(req.ContentType)) throw new ArgumentException("ContentType required.");
+            if (string.IsNullOrWhiteSpace(req.Extension)) throw new ArgumentException("Extension required.");
             if (string.IsNullOrWhiteSpace(req.FileName)) throw new ArgumentException("FileName required.");
 
-            string safeFileName = SanitizeFileName(req.FileName);
-            string safeFolder = string.IsNullOrWhiteSpace(req.Folder) ? "" : $"{SanitizePathSegment(req.Folder)}/";
-            string safeProject = string.IsNullOrWhiteSpace(req.ProjectId) ? "" : $"{SanitizePathSegment(req.ProjectId)}/";
-
-            // Object naming pattern:
-            // uploads/{ownerKey}/{projectId?}/{folder?}/{yyyy}/{MM}/{dd}/{guid}-{filename}
-            string objectName =
-                $"{_opt.BasePrefix}/{SanitizePathSegment(ownerKey)}/{safeProject}{safeFolder}" +
-                $"{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid():N}-{safeFileName}";
+            string objectName = BuildObjectPath(req.PathFromRoot, req.FileName, req.Extension);
 
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_opt.UrlTtlMinutes);
             var ttl = TimeSpan.FromMinutes(_opt.UrlTtlMinutes);
 
             // V4 signed URL for PUT.
-            // Force Content-Type match to prevent content-type swapping.
+
             string signedUrl = _urlSigner.Sign(
                 _opt.BucketName,
                 objectName,
@@ -63,28 +54,41 @@ namespace BetterPlacemaking.Services
         }
 
         public Task<DownloadUrlResponseDto> CreateSignedDownloadUrlAsync(
-            string ownerKey,
             RequestDownloadUrlDto req,
             CancellationToken ct)
         {
-            if (string.IsNullOrWhiteSpace(req.ObjectName)) throw new ArgumentException("ObjectName required.");
-
-            // Authorization hook: require that the object is under this owner's prefix.
-            // If your rules are different, change this check.
-            string expectedPrefix = $"{_opt.BasePrefix}/{SanitizePathSegment(ownerKey)}/";
-            if (!req.ObjectName.StartsWith(expectedPrefix, StringComparison.Ordinal))
-                throw new UnauthorizedAccessException("Not allowed to access this object.");
+            string objectName = NormalizeObjectPath(req.PathFromRoot);
 
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_opt.UrlTtlMinutes);
             var ttl = TimeSpan.FromMinutes(_opt.UrlTtlMinutes);
 
             string signedUrl = _urlSigner.Sign(
                 _opt.BucketName,
-                req.ObjectName,
+                objectName,
                 ttl,
                 HttpMethod.Get);
 
-            return Task.FromResult(new DownloadUrlResponseDto(req.ObjectName, signedUrl, expiresAt));
+            return Task.FromResult(new DownloadUrlResponseDto(objectName, signedUrl, expiresAt));
+        }
+
+        public string NormalizeObjectPath(string rawPath)
+        {
+            string objectPath = SanitizeObjectPath(rawPath);
+
+            return objectPath;
+        }
+
+        public string BuildObjectPath(
+            string rawDirectoryPath,
+            string rawFileName,
+            string rawExtension)
+        {
+            string directoryPath = NormalizeObjectPath(rawDirectoryPath).TrimEnd('/');
+            string fileNameWithoutExtension = SanitizeFileName(rawFileName);
+            string extension = NormalizeExtension(rawExtension);
+
+            string fullPath = $"{directoryPath}/{fileNameWithoutExtension}{extension}";
+            return NormalizeObjectPath(fullPath);
         }
 
         public async Task<string> UploadFromStreamAsync(
@@ -106,39 +110,87 @@ namespace BetterPlacemaking.Services
             return objectName;
         }
 
+        private static string SanitizeObjectPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("PathFromRoot required.");
+
+            path = path.Replace("\\", "/").Trim().Trim('/');
+            if (path.Length == 0) throw new ArgumentException("PathFromRoot required.");
+
+            var sb = new StringBuilder(path.Length);
+            bool lastWasSlash = false;
+
+            foreach (char c in path)
+            {
+                if (c == '/')
+                {
+                    if (!lastWasSlash)
+                    {
+                        sb.Append('/');
+                        lastWasSlash = true;
+                    }
+
+                    continue;
+                }
+
+                lastWasSlash = false;
+                if (char.IsLetterOrDigit(c) || c is '-' or '_' or ':' or '.' or ' ')
+                    sb.Append(c);
+                else
+                    sb.Append('_');
+            }
+
+            var cleaned = sb.ToString().Trim('/');
+            if (string.IsNullOrWhiteSpace(cleaned)) throw new ArgumentException("PathFromRoot required.");
+
+            return cleaned;
+        }
+
         private static string SanitizeFileName(string fileName)
         {
-            // Keep it simple: drop directory parts and replace bad chars.
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("FileName required.");
+
             fileName = fileName.Replace("\\", "/");
             fileName = fileName.Split('/').LastOrDefault() ?? "file";
-            fileName = fileName.Trim();
+            fileName = Path.GetFileNameWithoutExtension(fileName).Trim();
 
             var sb = new StringBuilder(fileName.Length);
             foreach (char c in fileName)
             {
-                if (char.IsLetterOrDigit(c) || c is '.' or '-' or '_' or ' ')
+                if (char.IsLetterOrDigit(c) || c is '-' or '_' or ' ')
                     sb.Append(c);
                 else
                     sb.Append('_');
             }
-            var cleaned = sb.ToString();
-            return string.IsNullOrWhiteSpace(cleaned) ? "file" : cleaned;
+
+            string cleaned = sb.ToString();
+            if (string.IsNullOrWhiteSpace(cleaned)) throw new ArgumentException("FileName required.");
+
+            return cleaned;
         }
 
-        private static string SanitizePathSegment(string segment)
+        private static string NormalizeExtension(string rawExtension)
         {
-            segment = segment.Trim();
-            var sb = new StringBuilder(segment.Length);
-            foreach (char c in segment)
+            if (string.IsNullOrWhiteSpace(rawExtension)) throw new ArgumentException("Extension required.");
+
+            string ext = rawExtension.Trim();
+            if (!ext.StartsWith('.')) ext = $".{ext}";
+            ext = ext.TrimEnd('.');
+
+            if (ext.Length < 2) throw new ArgumentException("Extension must be a file extension like .ply");
+
+            var sb = new StringBuilder(ext.Length);
+            sb.Append('.');
+            for (int i = 1; i < ext.Length; i++)
             {
-                if (char.IsLetterOrDigit(c) || c is '-' or '_' or ':')
-                    sb.Append(c);
+                char c = ext[i];
+                if (char.IsLetterOrDigit(c))
+                    sb.Append(char.ToLowerInvariant(c));
                 else
-                    sb.Append('_');
+                    throw new ArgumentException("Extension must be a file extension like .ply");
             }
-            var cleaned = sb.ToString();
-            if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "unknown";
-            return cleaned;
+
+            return sb.ToString();
         }
 
         public sealed class GcsOptions
