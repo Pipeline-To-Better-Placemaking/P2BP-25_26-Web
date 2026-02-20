@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgIf } from '@angular/common';
+import { RouterLink } from '@angular/router';
 
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { CardModule } from 'primeng/card';
@@ -21,6 +22,7 @@ import { PasswordService } from '../../services/password-service';
   styleUrls: ['./user-settings.scss'],
   imports: [
     NgIf,
+    RouterLink,
     FormsModule,
     CardModule,
     InputTextModule,
@@ -74,6 +76,8 @@ export class UserSettings implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.clearPassword();
+
     this.userSettingsService.getMySettings().subscribe({
       next: (settings) => {
         this.model.displayName = settings.displayName ?? this.model.displayName;

@@ -61,8 +61,12 @@
             <label for="currentPassword">Current password</label>
             <p-password
               inputId="currentPassword"
+              name="current-password-settings"
               [feedback]="false"
               [toggleMask]="true"
+              [fluid]="true"
+              inputStyleClass="w-full"
+              autocomplete="off"
               [(ngModel)]="password.current">
             </p-password>
           </div>
@@ -71,8 +75,12 @@
             <label for="newPassword">New password</label>
             <p-password
               inputId="newPassword"
+              name="new-password-settings"
               [feedback]="true"
               [toggleMask]="true"
+              [fluid]="true"
+              inputStyleClass="w-full"
+              autocomplete="new-password"
               [(ngModel)]="password.new">
             </p-password>
           </div>
@@ -81,8 +89,12 @@
             <label for="confirmPassword">Confirm new password</label>
             <p-password
               inputId="confirmPassword"
+              name="confirm-password-settings"
               [feedback]="false"
               [toggleMask]="true"
+              [fluid]="true"
+              inputStyleClass="w-full"
+              autocomplete="new-password"
               [(ngModel)]="password.confirm">
             </p-password>
           </div>
@@ -114,11 +126,13 @@
             severity="success"
             text="Password updated (placeholder).">
           </p-message>
-
-          <p-message
-            severity="warn"
-            text="Password update is not wired to the API yet.">
-          </p-message>
+          <p-button
+            label="Forgot password?"
+            variant="text"
+            [link]="true"
+            styleClass="p-0 text-sm"
+            routerLink="/forgot-password">
+          </p-button>
 
         </div>
       </p-card>

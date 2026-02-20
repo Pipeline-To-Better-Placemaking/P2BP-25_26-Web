@@ -81,3 +81,11 @@
   z-index: 5;
   pointer-events: auto;
 }
+
+/* Ensure password eye toggle stays visible and clickable */
+:host ::ng-deep .p-password .p-password-mask-icon,
+:host ::ng-deep .p-password .p-password-unmask-icon {
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 6;
+}

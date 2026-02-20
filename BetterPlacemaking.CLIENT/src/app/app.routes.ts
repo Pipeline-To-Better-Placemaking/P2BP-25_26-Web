@@ -9,6 +9,7 @@ import { DevicesList } from './views/admin/devices/devices-list/devices-list';
 import { authGuard } from './guards/auth-guard';
 import { UserSettings } from './views/user-settings/user-settings';
 import { Scanner } from './views/admin/devices/scanner/scanner';
+import { ForgotPassword } from './views/forgot-password/forgot-password';
 
 const admin: Routes = [
   { path: 'permissions', component: Permissions },
@@ -18,6 +19,7 @@ const admin: Routes = [
 
 export const routes: Routes = [
   { path: 'login', component: Login },
+  { path: 'forgot-password', component: ForgotPassword },
 
   {
     path: '',
