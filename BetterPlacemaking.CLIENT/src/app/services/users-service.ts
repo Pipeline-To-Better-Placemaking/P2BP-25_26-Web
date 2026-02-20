@@ -4,10 +4,9 @@ import { Observable } from 'rxjs';
 
 export type ApiUser = {
   id: string;          // Firestore doc id
-  displayName?: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
+  FirstName?: string;
+  LastName?: string;
+  Email?: string;
   // later: assignedProjects?: string[] or number[] depending on backend
 };
 

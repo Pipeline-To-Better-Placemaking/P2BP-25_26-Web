@@ -2,7 +2,8 @@ namespace BetterPlacemaking.Models.Dtos;
 
 public class UserSettingsDto
 {
-    public string? DisplayName { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
 
     public bool? EmailAlerts { get; set; }
     public bool? ScanCompletionAlerts { get; set; }

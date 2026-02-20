@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, catchError, finalize, firstValueFrom, map, of, shareReplay, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
-import type { AuthResponse, StoredAuth } from '../models/auth';
+import type { AuthResponse, AuthUser, StoredAuth } from '../models/auth';
 import { ErrorHandlerService } from './error-handler-service';
 
 const STORAGE_KEY = 'bp_auth';
@@ -56,7 +56,7 @@ export class AuthService {
     return this.http
 		.post(
 			`${environment.apiBaseUrl}/api/register`,
-			{ firstName, lastName, email, password },
+			{ FirstName: firstName, LastName: lastName, Email: email, Password: password },
 			{ withCredentials: true },
 		)
 		.pipe(catchError((err) => this.errorHandler.handleError(err, 'Signup failed')));
@@ -99,6 +99,22 @@ export class AuthService {
   isAuthenticatedSync(): boolean {
     const current = this.stateSubject.value;
     return !!current && !this.isExpired(current.ExpiresAtUtc);
+  }
+
+  setProfileNames(firstName: string, lastName: string): void {
+    const current = this.stateSubject.value;
+    if (!current) return;
+
+    const nextUser: AuthUser = {
+      ...current.User,
+      FirstName: firstName.trim() || null,
+      LastName: lastName.trim() || null,
+    };
+
+    this.setState({
+      ...current,
+      User: nextUser,
+    });
   }
 
   private applyAuthResponse(resp: AuthResponse): void {

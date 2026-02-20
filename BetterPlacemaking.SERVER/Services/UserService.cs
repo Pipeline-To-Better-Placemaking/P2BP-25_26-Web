@@ -91,12 +91,24 @@ namespace BetterPlacemaking.Services
             var docRef = _db.Collection(collectionName).Document(userId);
             var updates = new Dictionary<string, object>();
             
-            if (dto.DisplayName != null)
+            if (dto.FirstName != null)
             {
-                var dn = dto.DisplayName.Trim();
-                if (dn.Length == 0) throw new ArgumentException("DisplayName cannot be empty.");
-                if (dn.Length > 50) throw new ArgumentException("DisplayName must be <= 50 characters.");
-                updates["DisplayName"] = dn;
+                var first = dto.FirstName.Trim();
+                if (first.Length > 50) throw new ArgumentException("FirstName must be <= 50 characters.");
+                if (first.Length > 0)
+                {
+                    updates["FirstName"] = first;
+                }
+            }
+
+            if (dto.LastName != null)
+            {
+                var last = dto.LastName.Trim();
+                if (last.Length > 50) throw new ArgumentException("LastName must be <= 50 characters.");
+                if (last.Length > 0)
+                {
+                    updates["LastName"] = last;
+                }
             }
 
             if (dto.EmailAlerts.HasValue) updates["EmailAlerts"] = dto.EmailAlerts.Value;
@@ -116,7 +128,8 @@ namespace BetterPlacemaking.Services
 
             return new UserSettingsDto
             {
-                DisplayName = user.DisplayName,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
                 EmailAlerts = user.EmailAlerts,
                 ScanCompletionAlerts = user.ScanCompletionAlerts,
                 ChangeDetectionAlerts = user.ChangeDetectionAlerts,

@@ -45,7 +45,7 @@ export class Permissions implements OnInit {
       next: (apiUsers: ApiUser[]) => {
         this.users = apiUsers.map((u: ApiUser) => ({
           id: u.id,
-          name: this.pickDisplayName(u),
+          name: this.pickName(u),
           assignedProjects: [],
         }));
       },
@@ -55,14 +55,11 @@ export class Permissions implements OnInit {
     });
   }
 
-  private pickDisplayName(u: ApiUser): string {
-    const dn = (u.displayName ?? '').trim();
-    if (dn) return dn;
-
-    const full = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
+  private pickName(u: ApiUser): string {
+    const full = `${u.FirstName ?? ''} ${u.LastName ?? ''}`.trim();
     if (full) return full;
 
-    return u.email ?? '(unknown user)';
+    return u.Email ?? '(unknown user)';
   }
 
   saveUserPermissions(user: UserRow): void {

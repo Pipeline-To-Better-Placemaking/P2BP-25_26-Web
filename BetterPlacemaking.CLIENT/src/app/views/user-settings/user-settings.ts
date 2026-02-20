@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgIf } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { take } from 'rxjs/operators';
 
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { CardModule } from 'primeng/card';
@@ -14,6 +15,7 @@ import { ListboxModule } from 'primeng/listbox';
 
 import { UserSettingsService } from '../../services/user-settings-service';
 import { PasswordService } from '../../services/password-service';
+import { AuthService } from '../../services/auth-service';
 
 @Component({
   selector: 'app-user-settings',
@@ -35,15 +37,21 @@ import { PasswordService } from '../../services/password-service';
   ],
 })
 export class UserSettings implements OnInit {
+  private static readonly PROFILE_DRAFT_KEY = 'user_settings_profile_draft';
+
   constructor(
     private userSettingsService: UserSettingsService,
-    private passwordService: PasswordService
+    private passwordService: PasswordService,
+    private authService: AuthService
   ) {}
 
   saving = false;
+  settingsError = '';
+  settingsSuccess = false;
 
   model = {
-    displayName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     theme: 'system',
   };
@@ -77,15 +85,21 @@ export class UserSettings implements OnInit {
 
   ngOnInit(): void {
     this.clearPassword();
+    this.loadProfileDraft();
+    this.authService.state$.pipe(take(1)).subscribe((state) => {
+      this.model.email = state?.User?.Email ?? '';
+    });
 
     this.userSettingsService.getMySettings().subscribe({
       next: (settings) => {
-        this.model.displayName = settings.displayName ?? this.model.displayName;
-        this.notifications.emailAlerts = settings.emailAlerts ?? this.notifications.emailAlerts;
+        this.model.firstName = settings.FirstName ?? this.model.firstName;
+        this.model.lastName = settings.LastName ?? this.model.lastName;
+        this.notifications.emailAlerts = settings.EmailAlerts ?? this.notifications.emailAlerts;
         this.notifications.scanCompletionAlerts =
-          settings.scanCompletionAlerts ?? this.notifications.scanCompletionAlerts;
+          settings.ScanCompletionAlerts ?? this.notifications.scanCompletionAlerts;
         this.notifications.changeDetectionAlerts =
-          settings.changeDetectionAlerts ?? this.notifications.changeDetectionAlerts;
+          settings.ChangeDetectionAlerts ?? this.notifications.changeDetectionAlerts;
+        this.saveProfileDraft();
       },
       error: (err) => {
         console.error(err);
@@ -95,21 +109,39 @@ export class UserSettings implements OnInit {
 
   save(): void {
 
+    this.settingsError = '';
+    this.settingsSuccess = false;
     this.saving = true;
+    const firstName = this.model.firstName.trim();
+    const lastName = this.model.lastName.trim();
+    const payload: {
+      FirstName?: string;
+      LastName?: string;
+      EmailAlerts: boolean;
+      ScanCompletionAlerts: boolean;
+      ChangeDetectionAlerts: boolean;
+    } = {
+      EmailAlerts: this.notifications.emailAlerts,
+      ScanCompletionAlerts: this.notifications.scanCompletionAlerts,
+      ChangeDetectionAlerts: this.notifications.changeDetectionAlerts,
+    };
+
+    // Only send non-empty name fields so one blank name does not block saving the other.
+    if (firstName) payload.FirstName = firstName;
+    if (lastName) payload.LastName = lastName;
 
     this.userSettingsService
-      .updateMySettings({
-        displayName: this.model.displayName,
-        emailAlerts: this.notifications.emailAlerts,
-        scanCompletionAlerts: this.notifications.scanCompletionAlerts,
-        changeDetectionAlerts: this.notifications.changeDetectionAlerts,
-      })
+      .updateMySettings(payload)
       .subscribe({
         next: () => {
+          this.authService.setProfileNames(firstName, lastName);
+          this.saveProfileDraft();
+          this.settingsSuccess = true;
           this.saving = false;
         },
         error: (err) => {
-          console.error(err);
+          this.settingsError =
+            typeof err?.error === 'string' ? err.error : 'Failed to save settings.';
           this.saving = false;
         },
       });
@@ -158,5 +190,40 @@ export class UserSettings implements OnInit {
 
   clearPassword(): void {
     this.password = { current: '', new: '', confirm: '' };
+  }
+
+  onProfileNameInput(): void {
+    this.saveProfileDraft();
+  }
+
+  private saveProfileDraft(): void {
+    try {
+      localStorage.setItem(
+        UserSettings.PROFILE_DRAFT_KEY,
+        JSON.stringify({
+          firstName: this.model.firstName,
+          lastName: this.model.lastName,
+        }),
+      );
+    } catch {
+      // Ignore localStorage failures.
+    }
+  }
+
+  private loadProfileDraft(): void {
+    try {
+      const raw = localStorage.getItem(UserSettings.PROFILE_DRAFT_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as { firstName?: string; lastName?: string };
+      if (typeof parsed.firstName === 'string') {
+        this.model.firstName = parsed.firstName;
+      }
+      if (typeof parsed.lastName === 'string') {
+        this.model.lastName = parsed.lastName;
+      }
+    } catch {
+      // Ignore parse/localStorage failures.
+    }
   }
 }

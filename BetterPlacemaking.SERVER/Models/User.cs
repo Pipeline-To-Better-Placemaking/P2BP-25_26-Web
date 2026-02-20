@@ -16,9 +16,6 @@ namespace BetterPlacemaking.Models
         public string? LastName { get; set; }
 
         [FirestoreProperty]
-        public string? DisplayName { get; set; }
-
-        [FirestoreProperty]
         public bool? EmailAlerts { get; set; }
 
         [FirestoreProperty]

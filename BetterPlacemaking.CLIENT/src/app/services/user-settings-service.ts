@@ -4,10 +4,11 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 type UserSettingsDto = {
-  displayName?: string;
-  emailAlerts?: boolean;
-  scanCompletionAlerts?: boolean;
-  changeDetectionAlerts?: boolean;
+  FirstName?: string;
+  LastName?: string;
+  EmailAlerts?: boolean;
+  ScanCompletionAlerts?: boolean;
+  ChangeDetectionAlerts?: boolean;
 };
 
 @Injectable({ providedIn: 'root' })

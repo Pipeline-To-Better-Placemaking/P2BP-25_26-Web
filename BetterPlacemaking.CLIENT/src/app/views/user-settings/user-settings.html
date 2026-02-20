@@ -7,13 +7,18 @@
         <div class="settings-form">
 
           <div class="field">
-            <label for="name">Display name</label>
-            <input pInputText id="name" [(ngModel)]="model.displayName" />
+            <label for="email">Email</label>
+            <div id="email" class="text-sm">{{ model.email || '(not available)' }}</div>
           </div>
 
           <div class="field">
-            <label for="email">Email</label>
-            <input pInputText id="email" [(ngModel)]="model.email" />
+            <label for="firstName">First name</label>
+            <input pInputText id="firstName" [(ngModel)]="model.firstName" (ngModelChange)="onProfileNameInput()" />
+          </div>
+
+          <div class="field">
+            <label for="lastName">Last name</label>
+            <input pInputText id="lastName" [(ngModel)]="model.lastName" (ngModelChange)="onProfileNameInput()" />
           </div>
 
           <p-button
@@ -22,6 +27,18 @@
             [loading]="saving"
             (onClick)="save()"> 
           </p-button>
+
+          <p-message
+            *ngIf="settingsError"
+            severity="error"
+            [text]="settingsError">
+          </p-message>
+
+          <p-message
+            *ngIf="settingsSuccess"
+            severity="success"
+            text="Settings saved.">
+          </p-message>
 
         </div>
       </p-card>
