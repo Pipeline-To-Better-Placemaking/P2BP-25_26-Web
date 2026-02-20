@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { Observable, catchError } from 'rxjs';
 import { ErrorHandlerService } from './error-handler-service';
@@ -30,6 +30,11 @@ export interface ObjUploadResponse {
   pointCloudCount: number;
 }
 
+export interface UploadContext {
+  projectId?: string;
+  projectName?: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -49,33 +54,38 @@ export class VisualizerService {
   }
 
   /** Upload an OBJ file */
-  uploadObjFile(file: File): Observable<ObjUploadResponse> {
+  uploadObjFile(file: File, context?: UploadContext): Observable<ObjUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    const params = this.buildUploadParams(context);
     return this.http
-      .post<ObjUploadResponse>(`${this.baseUrl}/upload/obj`, formData)
+      .post<ObjUploadResponse>(`${this.baseUrl}/upload/obj`, formData, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to upload OBJ file')));
   }
 
   /** Upload XYZ file(s) */
-  uploadXyzFiles(fileA: File, fileB?: File): Observable<UploadResponse> {
+  uploadXyzFiles(fileA: File, fileB?: File, context?: UploadContext): Observable<UploadResponse> {
     const formData = new FormData();
     formData.append('fileA', fileA);
     if (fileB) {
       formData.append('fileB', fileB);
     }
+    const params = this.buildUploadParams(context);
     return this.http
-      .post<UploadResponse>(`${this.baseUrl}/upload/xyz`, formData)
+      .post<UploadResponse>(`${this.baseUrl}/upload/xyz`, formData, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to upload XYZ file')));
   }
 
   /** Upload a PLY file */
-  uploadPlyFile(file: File, maxPoints = 0): Observable<UploadResponse> {
+  uploadPlyFile(file: File, maxPoints = 0, context?: UploadContext): Observable<UploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const params = maxPoints > 0 ? `?maxPoints=${maxPoints}` : '';
+    let params = this.buildUploadParams(context);
+    if (maxPoints > 0) {
+      params = params.set('maxPoints', `${maxPoints}`);
+    }
     return this.http
-      .post<UploadResponse>(`${this.baseUrl}/upload/ply${params}`, formData)
+      .post<UploadResponse>(`${this.baseUrl}/upload/ply`, formData, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to upload PLY file')));
   }
 
@@ -98,5 +108,19 @@ export class VisualizerService {
     return this.http
       .delete(`${this.baseUrl}/points`)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to clear point cloud')));
+  }
+
+  private buildUploadParams(context?: UploadContext): HttpParams {
+    let params = new HttpParams();
+    if (!context) return params;
+
+    if (context.projectId) {
+      params = params.set('projectId', context.projectId);
+    }
+    if (context.projectName) {
+      params = params.set('projectName', context.projectName);
+    }
+
+    return params;
   }
 }

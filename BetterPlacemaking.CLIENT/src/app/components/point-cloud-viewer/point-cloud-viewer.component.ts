@@ -13,6 +13,7 @@ import { ButtonModule } from 'primeng/button';
 import { SelectModule } from 'primeng/select';
 import { MessageModule } from 'primeng/message';
 import { VisualizerService, LidarPoint3D } from '../../services/visualizer-service';
+import { ActivatedRoute } from '@angular/router';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -88,8 +89,12 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   private frameCount = 0;
   private lastFpsTime = 0;
   private resizeObserver?: ResizeObserver;
+  private projectId?: string;
 
-  constructor(private readonly visualizerService: VisualizerService) {}
+  constructor(
+    private readonly visualizerService: VisualizerService,
+    private readonly route: ActivatedRoute
+  ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -98,6 +103,10 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     if (saved && ['low', 'medium', 'high', 'ultra', 'maximum'].includes(saved)) {
       this.qualityPreset = saved as QualityPreset;
     }
+
+    this.route.paramMap.subscribe((params) => {
+      this.projectId = params.get('projectId') ?? undefined;
+    });
   }
 
   ngAfterViewInit(): void {
@@ -298,7 +307,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadObj(file: File): void {
-    this.visualizerService.uploadObjFile(file).subscribe({
+    this.visualizerService.uploadObjFile(file, { projectId: this.projectId }).subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(
@@ -316,7 +325,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadXyz(file: File): void {
-    this.visualizerService.uploadXyzFiles(file).subscribe({
+    this.visualizerService.uploadXyzFiles(file, undefined, { projectId: this.projectId }).subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(
@@ -334,7 +343,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadPly(file: File): void {
-    this.visualizerService.uploadPlyFile(file).subscribe({
+    this.visualizerService.uploadPlyFile(file, 0, { projectId: this.projectId }).subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(

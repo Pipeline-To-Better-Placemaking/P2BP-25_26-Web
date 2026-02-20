@@ -43,6 +43,7 @@ builder.Services.AddScoped<AuthSessionService>();
 builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<PasswordService>();
+builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<TokenService>();

@@ -102,11 +102,7 @@ namespace BetterPlacemaking.Controllers
 		{
 			try
 			{
-				var userId =
-					User.FindFirstValue(ClaimTypes.NameIdentifier) ??
-					User.FindFirstValue("userId") ??
-					User.FindFirstValue("uid") ??
-					User.FindFirstValue("id");
+				var userId = ResolveCurrentUserId();
 				
 				if (string.IsNullOrWhiteSpace(userId))
 					return Unauthorized("Missing user id claim.");
@@ -119,5 +115,35 @@ namespace BetterPlacemaking.Controllers
         	return Problem("An unexpected error occurred while updating user settings.");
     	}
 	}
+
+		[HttpGet("me/settings")]
+		public IActionResult GetMySettings()
+		{
+			try
+			{
+				var userId = ResolveCurrentUserId();
+				if (string.IsNullOrWhiteSpace(userId))
+					return Unauthorized("Missing user id claim.");
+
+				var settings = _userService.GetUserSettings(userId);
+				if (settings == null)
+					return NotFound();
+
+				return Ok(settings);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving user settings.");
+			}
+		}
+
+		private string? ResolveCurrentUserId()
+		{
+			return
+				User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+				User.FindFirstValue("userId") ??
+				User.FindFirstValue("uid") ??
+				User.FindFirstValue("id");
+		}
 	}
 }

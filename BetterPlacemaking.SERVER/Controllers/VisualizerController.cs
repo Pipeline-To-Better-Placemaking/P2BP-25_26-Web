@@ -1,5 +1,7 @@
 using BetterPlacemaking.Models.Visualizer;
+using BetterPlacemaking.Services;
 using BetterPlacemaking.Services.Visualizer;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using IOPath = System.IO.Path;
 
@@ -21,6 +23,7 @@ public class VisualizerController : ControllerBase
     private readonly FastMeshService _fastMeshService;
     private readonly GeometryExportService _exportService;
     private readonly PlyParserService _plyParser;
+    private readonly NotificationService _notificationService;
     private readonly IWebHostEnvironment _env;
 
     // In-memory point cloud storage (session-based, not persisted)
@@ -37,6 +40,7 @@ public class VisualizerController : ControllerBase
         FastMeshService fastMeshService,
         GeometryExportService exportService,
         PlyParserService plyParser,
+        NotificationService notificationService,
         IWebHostEnvironment env)
     {
         _pointCloudService = pointCloudService;
@@ -47,6 +51,7 @@ public class VisualizerController : ControllerBase
         _fastMeshService = fastMeshService;
         _exportService = exportService;
         _plyParser = plyParser;
+        _notificationService = notificationService;
         _env = env;
     }
 
@@ -68,11 +73,15 @@ public class VisualizerController : ControllerBase
     /// Upload scanner data as JSON points.
     /// </summary>
     [HttpPost("scanner/upload")]
-    public IActionResult UploadScannerData([FromBody] ScannerUploadRequest request)
+    public IActionResult UploadScannerData(
+        [FromBody] ScannerUploadRequest request,
+        [FromQuery] string? projectId = null,
+        [FromQuery] string? projectName = null)
     {
         if (request.Points == null || request.Points.Count == 0)
             return BadRequest("No points provided");
 
+        var shouldNotify = false;
         try
         {
             var points = new List<LidarPoint3D>();
@@ -125,6 +134,7 @@ public class VisualizerController : ControllerBase
                 }
             }
 
+            shouldNotify = true;
             return Ok(new
             {
                 pointCount = points.Count,
@@ -138,6 +148,11 @@ public class VisualizerController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        finally
+        {
+            if (shouldNotify)
+                TryNotifyScanCompleted(projectId, projectName);
+        }
     }
 
     /// <summary>
@@ -145,7 +160,10 @@ public class VisualizerController : ControllerBase
     /// </summary>
     [HttpPost("upload/obj")]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> UploadObjFile(IFormFile file)
+    public async Task<IActionResult> UploadObjFile(
+        IFormFile file,
+        [FromQuery] string? projectId = null,
+        [FromQuery] string? projectName = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded");
@@ -158,6 +176,7 @@ public class VisualizerController : ControllerBase
 
         var fileName = $"{Guid.NewGuid()}_{file.FileName}";
         var filePath = IOPath.Combine(uploadsDir, fileName);
+        var shouldNotify = false;
 
         try
         {
@@ -190,6 +209,7 @@ public class VisualizerController : ControllerBase
                     }
                 }
 
+                shouldNotify = true;
                 return Ok(new
                 {
                     fileName,
@@ -201,6 +221,8 @@ public class VisualizerController : ControllerBase
         }
         finally
         {
+            if (shouldNotify)
+                TryNotifyScanCompleted(projectId, projectName);
             // Clean up uploaded file
             try { if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath); }
             catch { }
@@ -212,7 +234,12 @@ public class VisualizerController : ControllerBase
     /// </summary>
     [HttpPost("upload/xyz")]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> UploadXyzFile(IFormFile? fileA, IFormFile? fileB, [FromQuery] string? sensorId)
+    public async Task<IActionResult> UploadXyzFile(
+        IFormFile? fileA,
+        IFormFile? fileB,
+        [FromQuery] string? sensorId,
+        [FromQuery] string? projectId = null,
+        [FromQuery] string? projectName = null)
     {
         if (fileA == null && fileB == null)
             return BadRequest("At least one .xyz file must be uploaded");
@@ -222,6 +249,7 @@ public class VisualizerController : ControllerBase
 
         string? filePathA = null;
         string? filePathB = null;
+        var shouldNotify = false;
 
         try
         {
@@ -266,6 +294,7 @@ public class VisualizerController : ControllerBase
                 }
             }
 
+            shouldNotify = true;
             return Ok(new
             {
                 pointCount = points.Count,
@@ -281,6 +310,8 @@ public class VisualizerController : ControllerBase
         }
         finally
         {
+            if (shouldNotify)
+                TryNotifyScanCompleted(projectId, projectName);
             try
             {
                 if (filePathA != null && System.IO.File.Exists(filePathA)) System.IO.File.Delete(filePathA);
@@ -295,7 +326,11 @@ public class VisualizerController : ControllerBase
     /// </summary>
     [HttpPost("upload/ply")]
     [DisableRequestSizeLimit]
-    public IActionResult UploadPlyFile(IFormFile file, [FromQuery] int maxPoints = 0)
+    public IActionResult UploadPlyFile(
+        IFormFile file,
+        [FromQuery] int maxPoints = 0,
+        [FromQuery] string? projectId = null,
+        [FromQuery] string? projectName = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded");
@@ -303,6 +338,7 @@ public class VisualizerController : ControllerBase
         if (!file.FileName.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
             return BadRequest("File must be a PLY file");
 
+        var shouldNotify = false;
         try
         {
             using var stream = file.OpenReadStream();
@@ -331,6 +367,7 @@ public class VisualizerController : ControllerBase
                 }
             }
 
+            shouldNotify = true;
             return Ok(new
             {
                 pointCount = points.Count,
@@ -343,6 +380,11 @@ public class VisualizerController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        finally
+        {
+            if (shouldNotify)
+                TryNotifyScanCompleted(projectId, projectName);
         }
     }
 
@@ -520,5 +562,30 @@ public class VisualizerController : ControllerBase
             _currentMesh = null;
             return Ok(new { message = "Point cloud cleared." });
         }
+    }
+
+    private void TryNotifyScanCompleted(string? projectId, string? projectName)
+    {
+        try
+        {
+            var userId = ResolveCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+                return;
+
+            _notificationService.NotifyScanCompleted(userId, projectId, projectName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to send scan completion notification: {ex.Message}");
+        }
+    }
+
+    private string? ResolveCurrentUserId()
+    {
+        return
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue("userId") ??
+            User.FindFirstValue("uid") ??
+            User.FindFirstValue("id");
     }
 }

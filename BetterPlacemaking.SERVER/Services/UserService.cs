@@ -48,7 +48,7 @@ namespace BetterPlacemaking.Services
 
             if (!string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(user.EmailVerificationToken))
             {
-                _emailService.SendEmail(user.Email, user.EmailVerificationToken);
+                _emailService.SendVerificationEmail(user.Email, user.EmailVerificationToken);
             }
             else
             {
@@ -106,6 +106,21 @@ namespace BetterPlacemaking.Services
             if (updates.Count == 0) return;
 
             docRef.UpdateAsync(updates).Wait();
+        }
+
+        public UserSettingsDto? GetUserSettings(string userId)
+        {
+            var user = GetUser(userId);
+            if (user == null)
+                return null;
+
+            return new UserSettingsDto
+            {
+                DisplayName = user.DisplayName,
+                EmailAlerts = user.EmailAlerts,
+                ScanCompletionAlerts = user.ScanCompletionAlerts,
+                ChangeDetectionAlerts = user.ChangeDetectionAlerts,
+            };
         }
 
     }

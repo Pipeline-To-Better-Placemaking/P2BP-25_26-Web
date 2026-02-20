@@ -32,7 +32,7 @@ namespace BetterPlacemaking.Services
 
             doc.Reference.UpdateAsync(updates).Wait();
 
-            _emailService.SendEmail(email, token, "Password Reset");
+            _emailService.SendPasswordResetEmail(email, token);
 
             return true;
         }

@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
-type UpdateUserSettingsDto = {
+type UserSettingsDto = {
   displayName?: string;
   emailAlerts?: boolean;
   scanCompletionAlerts?: boolean;
@@ -11,12 +12,15 @@ type UpdateUserSettingsDto = {
 
 @Injectable({ providedIn: 'root' })
 export class UserSettingsService {
-  // Use your backend base URL (or proxy later)
-  private readonly baseUrl = 'https://localhost:7058';
+  private readonly baseUrl = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 
-  updateMySettings(dto: UpdateUserSettingsDto): Observable<void> {
+  getMySettings(): Observable<UserSettingsDto> {
+    return this.http.get<UserSettingsDto>(`${this.baseUrl}/api/User/me/settings`);
+  }
+
+  updateMySettings(dto: UserSettingsDto): Observable<void> {
     return this.http.patch<void>(`${this.baseUrl}/api/User/me/settings`, dto);
   }
 }

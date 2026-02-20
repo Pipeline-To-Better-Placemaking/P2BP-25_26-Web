@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgIf } from '@angular/common';
 
@@ -32,7 +32,7 @@ import { PasswordService } from '../../services/password-service';
     ListboxModule,
   ],
 })
-export class UserSettings {
+export class UserSettings implements OnInit {
   constructor(
     private userSettingsService: UserSettingsService,
     private passwordService: PasswordService
@@ -72,6 +72,22 @@ export class UserSettings {
     { name: 'Classroom' },
     { name: 'Lake Eola' },
   ];
+
+  ngOnInit(): void {
+    this.userSettingsService.getMySettings().subscribe({
+      next: (settings) => {
+        this.model.displayName = settings.displayName ?? this.model.displayName;
+        this.notifications.emailAlerts = settings.emailAlerts ?? this.notifications.emailAlerts;
+        this.notifications.scanCompletionAlerts =
+          settings.scanCompletionAlerts ?? this.notifications.scanCompletionAlerts;
+        this.notifications.changeDetectionAlerts =
+          settings.changeDetectionAlerts ?? this.notifications.changeDetectionAlerts;
+      },
+      error: (err) => {
+        console.error(err);
+      },
+    });
+  }
 
   save(): void {
 
