@@ -1,4 +1,4 @@
-// dashboard.component.ts (or dashboard.ts if you keep that name)
+import { label } from './../../../../../../node_modules/@types/three/src/nodes/core/ContextNode.d';
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SplitterModule } from 'primeng/splitter';
@@ -7,6 +7,9 @@ import { BadgeModule } from 'primeng/badge';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
+import { DeviceService } from "../../../../services/device-service";
+import { DeviceDto } from '../../../../models/DeviceDto';
+import { HealthReport } from '../../../../models/jetson-dtos/HealthReport';
 
 interface Project {
   title: string;
@@ -15,13 +18,13 @@ interface Project {
   progress: number;
 }
 
-interface Device {
+/*interface Device {
   id: string;
   name: string;
   type: string;
   status: 'online' | 'offline' | 'warning';
   lastSeen: Date;
-}
+}*/
 
 interface Alert {
   id: string;
@@ -43,25 +46,31 @@ interface Alert {
     ButtonModule,
     TooltipModule
   ],
-  templateUrl: './dashboard.html', // Make sure this matches your HTML file name
-  styleUrls: ['./dashboard.scss']  // Make sure this matches your SCSS file name
+  templateUrl: './dashboard.html',
+  styleUrls: ['./dashboard.scss']
 })
+
 export class Dashboard implements OnInit {
   project: Project = {
-    title: 'Network Security Monitoring',
+    title: 'Better Placemaking SD 2026',
     status: 'active',
-    description: 'Real-time monitoring of network infrastructure and security devices across multiple locations.',
+    description: 'Real-time monitoring of infrastructure and devices.',
     progress: 75
   };
 
-  devices: Device[] = [
+  devices: DeviceDto[] = [];
+  deviceCounts = { total: 0, online: 0, offline: 0, warning: 0 };
+  loadingDevices = false;
+  error: string | null = null;
+
+  /*Device[] = [
     { id: 'D001', name: 'Firewall-01', type: 'Firewall', status: 'online', lastSeen: new Date() },
     { id: 'D002', name: 'Switch-Main', type: 'Switch', status: 'online', lastSeen: new Date() },
     { id: 'D003', name: 'Router-Core', type: 'Router', status: 'warning', lastSeen: new Date(Date.now() - 3600000) },
     { id: 'D004', name: 'IDS-Sensor', type: 'IDS', status: 'offline', lastSeen: new Date(Date.now() - 86400000) },
     { id: 'D005', name: 'Server-Web', type: 'Server', status: 'online', lastSeen: new Date() },
     { id: 'D006', name: 'AP-Wireless', type: 'Access Point', status: 'online', lastSeen: new Date() }
-  ];
+  ];*/
 
   alerts: Alert[] = [
     { id: 'A001', severity: 'high', message: 'Multiple failed login attempts detected', timestamp: new Date(Date.now() - 1800000), resolved: false },
@@ -71,6 +80,38 @@ export class Dashboard implements OnInit {
   ];
 
   lastScanTime: Date = new Date(Date.now() - 300000); // 5 minutes ago
+
+  constructor(private deviceService: DeviceService) {}
+
+  ngOnInit(): void {
+    this.loadDevices();
+  }
+
+  loadDevices(): void {
+    this.loadingDevices = true;
+    this.deviceService.getDevices().subscribe({
+      next: (data) => {
+        this.devices = data;
+        this.updateDeviceCounts();
+        this.loadingDevices = false;
+      },
+      error: (err) => {
+        console.error(err);
+        this.error = 'Failed to load devices. Please try again later.';
+        this.loadingDevices = false;
+      }
+    });
+  }
+
+  getDeviceStatus(device: DeviceDto): 'online' | 'offline' | 'warning' {
+    if (!device.HealthReport) return 'offline';
+
+    const hasWarning = Object.values(device.HealthReport.Services ?? {}).some(
+      (s) => s.Active?.toLowerCase() !== 'ok'
+    );
+
+    return hasWarning ? 'warning' : 'online';
+  }
 
   getStatusColor(status: string): string {
     const colors: any = {
@@ -88,6 +129,23 @@ export class Dashboard implements OnInit {
     return colors[status] || 'bg-gray-100 text-gray-800';
   }
 
+  private updateDeviceCounts(): void {
+    const total = this.devices.length;
+    let online =0;
+    let offline =0;
+    let warning =0;
+
+    this.devices.forEach(d => {
+      const status = this.getDeviceStatus(d);
+      if (status === 'online') online++;
+      else if (status === 'offline') offline++;
+      else if (status === 'warning') warning++;
+    });
+
+    this.deviceCounts = { total, online, offline, warning };
+
+  }
+
   getStatusBadge(status: string): string {
     const badges: any = {
       'active': 'Active',
@@ -100,7 +158,7 @@ export class Dashboard implements OnInit {
     return badges[status] || status;
   }
 
- // dashboard.component.ts - Update the getBadgeSeverity method
+
 getBadgeSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null {
   const severityMap: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null> = {
     'active': 'success',
@@ -117,13 +175,13 @@ getBadgeSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'seco
   return severityMap[status] || null;
 }
 
-  getDeviceCounts() {
+ /* getDeviceCounts() {
     const total = this.devices.length;
     const online = this.devices.filter(d => d.status === 'online').length;
     const offline = this.devices.filter(d => d.status === 'offline').length;
     const warning = this.devices.filter(d => d.status === 'warning').length;
     return { total, online, offline, warning };
-  }
+  }*/
 
   getAlertCounts() {
     const total = this.alerts.length;
@@ -150,7 +208,12 @@ getBadgeSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'seco
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   }
 
-  ngOnInit(): void {
-    // Initialization if needed
+  getDeviceLastSeen(device: DeviceDto): string {
+    if (!device.HealthReport?.Timestamp) return 'N/A';
+    return this.formatTimeAgo(new Date(device.HealthReport.Timestamp * 1000));
   }
+
+  //ngOnInit(): void {
+    // Initialization if needed
+ /// }
 }
