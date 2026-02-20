@@ -129,7 +129,7 @@ export class Dashboard implements OnInit {
     return colors[status] || 'bg-gray-100 text-gray-800';
   }
 
-  private updateDeviceCounts(): void {
+  /*private updateDeviceCounts(): void {
     const total = this.devices.length;
     let online =0;
     let offline =0;
@@ -144,6 +144,18 @@ export class Dashboard implements OnInit {
 
     this.deviceCounts = { total, online, offline, warning };
 
+  }*/
+
+  private updateDeviceCounts(): void {
+    const total = this.devices.length;
+    const offline = this.devices.filter(d => !d.HealthReport?.Services).length;
+    const warning = this.devices.filter(d => {
+      return d.HealthReport?.Services && Object.values(d.HealthReport.Services).some(s => s.Active !== 'true');
+    }).length;
+
+    const online = total - offline;
+
+    this.deviceCounts = { total, online, offline, warning };
   }
 
   getStatusBadge(status: string): string {
@@ -212,6 +224,7 @@ getBadgeSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'seco
     if (!device.HealthReport?.Timestamp) return 'N/A';
     return this.formatTimeAgo(new Date(device.HealthReport.Timestamp * 1000));
   }
+
 
   //ngOnInit(): void {
     // Initialization if needed
