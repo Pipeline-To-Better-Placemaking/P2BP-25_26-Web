@@ -85,9 +85,7 @@ const string DeviceApiKeyScheme = "DeviceApiKey";
 
 const string UserJwtPolicy = "UserJwt";
 const string DeviceApiKeyPolicy = "DeviceApiKey";
-const string ProjectCreate = "ProjectCreate";
-const string ProjectUpdate = "ProjectUpdate";
-const string ProjectDelete = "ProjectDelete";
+const string ProjectEdit = "ProjectEdit";
 const string ProjectRead = "ProjectRead";
 
 var jwtKey = config["Jwt:Key"];
@@ -142,21 +140,11 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
         policy.AddAuthenticationSchemes(DeviceApiKeyScheme);
     });
-    options.AddPolicy(ProjectCreate, policy =>
+    options.AddPolicy(ProjectEdit, policy =>
     {
         policy.RequireAuthenticatedUser();
-        policy.RequireClaim("permission", "Project.Create");
-    });
-    options.AddPolicy(ProjectUpdate, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("permission", "Project.Update");
-    });
-    options.AddPolicy(ProjectDelete, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("permission", "Project.Delete");    
-    });
+        policy.RequireClaim("permission", "Project.Create", "Project.Update", "Project.Delete");
+    }); 
     options.AddPolicy(ProjectRead, policy =>
     {
         policy.RequireAuthenticatedUser();
