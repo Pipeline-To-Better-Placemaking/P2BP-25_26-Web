@@ -4,19 +4,19 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
-import { SplitterModule } from 'primeng/splitter';
-import { CardModule } from 'primeng/card';
-import { BadgeModule } from 'primeng/badge';
-import { ProgressBarModule } from 'primeng/progressbar';
-import { ButtonModule } from 'primeng/button';
-import { TooltipModule } from 'primeng/tooltip';
-
 import { DeviceService } from '../../../../services/device-service';
 import { ProjectService } from '../../../../services/project-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ProjectDto } from '../../../../models/ProjectDto';
+import { ServiceStatus } from '../../../../models/jetson-dtos/HealthReport';
 
-interface ProjectViewModel {
+import { StatsWidget } from './components/statswidget';
+import { DevicesWidget } from './components/deviceswidget';
+import { AlertsWidget } from './components/alertswidget';
+import { ScanStatusWidget } from './components/scanstatuswidget';
+import { ProjectChecklistWidget } from './components/projectchecklistwidget';
+
+export interface ProjectViewModel {
   title: string;
   status: 'active' | 'inactive' | 'completed';
   description: string;
@@ -24,7 +24,7 @@ interface ProjectViewModel {
   checklistMessage: string | null;
 }
 
-interface Alert {
+export interface Alert {
   id: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
@@ -37,15 +37,55 @@ interface Alert {
   standalone: true,
   imports: [
     CommonModule,
-    SplitterModule,
-    CardModule,
-    BadgeModule,
-    ProgressBarModule,
-    ButtonModule,
-    TooltipModule
+    StatsWidget,
+    DevicesWidget,
+    AlertsWidget,
+    ScanStatusWidget,
+    ProjectChecklistWidget
   ],
-  templateUrl: './dashboard.html',
-  styleUrls: ['./dashboard.scss']
+  template: `
+    <div class="rounded-xl p-6 bg-surface-0 dark:bg-surface-900 grid grid-cols-12 gap-6">
+        <app-stats-widget
+        class="contents"
+        [project]="project"
+        [deviceCounts]="deviceCounts"
+        [alertCounts]="getAlertCounts()"
+        (refresh)="loadDashboard()">
+      </app-stats-widget>
+
+      <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+        <app-devices-widget
+          [devices]="devices"
+          [loading]="loading"
+          [error]="error"
+          [deviceStatusFn]="getDeviceStatus.bind(this)"
+          [deviceLastSeenFn]="getDeviceLastSeen.bind(this)"
+          (refresh)="loadDashboard()">
+        </app-devices-widget>
+
+        <app-scan-status-widget
+          [lastScanTime]="lastScanTime"
+          [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+          (refresh)="refreshLastScan()">
+        </app-scan-status-widget>
+      </div>
+
+      <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+        <app-alerts-widget
+          [alerts]="alerts"
+          [alertCounts]="getAlertCounts()"
+          [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+          (refresh)="loadDashboard()">
+        </app-alerts-widget>
+
+        <app-project-checklist-widget
+          [project]="project"
+          [deviceCounts]="deviceCounts"
+          (refresh)="loadDashboard()">
+        </app-project-checklist-widget>
+      </div>
+    </div>
+  `
 })
 export class Dashboard implements OnInit {
   public projectId: string | null = null;
@@ -102,21 +142,11 @@ export class Dashboard implements OnInit {
       devices: this.deviceService.getDevices().pipe(catchError(() => of([] as DeviceDto[])))
     }).subscribe({
       next: ({ project, devices }) => {
-        // TEMPORARY:
-        // Devices are not yet nested under projects, so use all devices for now.
         this.devices = devices ?? [];
-
-        /*
-        // FUTURE:
-        // Restore project-specific filtering after devices are moved under projects.
-        this.devices = (devices ?? []).filter(d => d.ProjectId === this.projectId);
-        */
-
         this.updateDeviceCounts();
         this.buildProject(project);
         this.buildAlerts();
         this.updateLastScanTime();
-
         this.loading = false;
       },
       error: (err) => {
@@ -142,176 +172,150 @@ export class Dashboard implements OnInit {
   }
 
   private hasProjectStarted(): boolean {
-    // TEMPORARY:
-    // Since devices are still global, treat "has any loaded devices" as project started.
     return this.devices.length > 0;
   }
 
   private getProjectChecklistMessage(): string | null {
-    if (this.devices.length === 0) {
-      return 'Needs to add devices.';
-    }
-
-    if (this.deviceCounts.offline > 0) {
-      return 'Needs to fix offline devices.';
-    }
-
-    if (this.deviceCounts.warning > 0) {
-      return 'Needs to resolve device warnings.';
-    }
-
-    return null;
+    if (this.devices.length === 0) return 'Needs to add devices.';
+    if (this.deviceCounts.offline > 0) return 'Needs to fix offline devices.';
+    if (this.deviceCounts.warning > 0) return 'Needs to resolve device warnings.';
+    return 'Project is ready.';
   }
 
   private calculateProjectProgress(): number {
-    // Initial project setup:
-    // If nothing exists yet, progress should be 0.
-    if (this.devices.length === 0) {
-      return 0;
-    }
+    if (this.devices.length === 0) return 0;
 
-    // Once a project has started, it should never fall back to 0
-    // unless everything is removed.
     let progress = 100;
-
-    if (this.deviceCounts.offline > 0) {
-      progress -= 35;
-    }
-
-    if (this.deviceCounts.warning > 0) {
-      progress -= 15;
-    }
+    if (this.deviceCounts.offline > 0) progress -= 35;
+    if (this.deviceCounts.warning > 0) progress -= 15;
 
     return Math.max(25, Math.min(100, progress));
   }
 
   private getProjectStatus(progress: number, started: boolean): 'active' | 'inactive' | 'completed' {
-    if (!started) {
-      return 'inactive';
-    }
-
-    if (progress >= 100) {
-      return 'completed';
-    }
-
+    if (!started) return 'inactive';
+    if (progress >= 100) return 'completed';
     return 'active';
   }
 
   private updateDeviceCounts(): void {
-  const total = this.devices.length;
-  let online = 0;
-  let offline = 0;
-  let warning = 0;
+    const total = this.devices.length;
+    let online = 0;
+    let offline = 0;
+    let warning = 0;
 
-  this.devices.forEach(device => {
-    const status = this.getDeviceStatus(device);
+    this.devices.forEach(device => {
+      const status = this.getDeviceStatus(device);
+      if (status === 'online') online++;
+      else if (status === 'offline') offline++;
+      else warning++;
+    });
 
-    if (status === 'online') {
-      online++;
-    } else if (status === 'offline') {
-      offline++;
-    } else {
-      warning++;
-    }
-  });
-
-  this.deviceCounts = { total, online, offline, warning };
-}
+    this.deviceCounts = { total, online, offline, warning };
+  }
 
   public getDeviceStatus(device: DeviceDto): 'online' | 'offline' | 'warning' {
-  if (!device.HealthReport?.Services) {
-    return 'offline';
+    if (!device.HealthReport?.Services) {
+      return 'offline';
+    }
+
+    const serviceStates = Object.values(device.HealthReport.Services)
+      .map((s: ServiceStatus) => (s.Active ?? '').toLowerCase());
+
+    const hasOfflineState = serviceStates.some(state =>
+      state === 'inactive' || state === 'failed' || state === 'dead'
+    );
+
+    if (hasOfflineState) {
+      return 'offline';
+    }
+
+    const allHealthy = serviceStates.every(state =>
+      state === 'active' || state === 'activating'
+    );
+
+    if (allHealthy) {
+      return 'online';
+    }
+
+    return 'warning';
   }
-
-  const serviceStates = Object.values(device.HealthReport.Services)
-    .map(s => (s.Active ?? '').toLowerCase());
-
-  const hasOfflineState = serviceStates.some(state =>
-    state === 'inactive' || state === 'failed' || state === 'dead'
-  );
-
-  if (hasOfflineState) {
-    return 'offline';
-  }
-
-  const allHealthy = serviceStates.every(state =>
-    state === 'active' || state === 'activating'
-  );
-
-  if (allHealthy) {
-    return 'online';
-  }
-
-  return 'warning';
-}
 
   private buildAlerts(): void {
-  const now = new Date();
-  const alerts: Alert[] = [];
+    const now = new Date();
+    const alerts: Alert[] = [];
 
-  this.devices.forEach((device, index) => {
-    const status = this.getDeviceStatus(device);
-    const timestamp = this.getHealthReportDate(device) ?? now;
-    const deviceName = device.Name || 'Unnamed device';
+    this.devices.forEach((device, index) => {
+      const status = this.getDeviceStatus(device);
+      const timestamp = this.getHealthReportDate(device) ?? now;
+      const deviceName = device.Name || 'Unnamed device';
 
-    if (status === 'offline') {
-      if (!device.HealthReport) {
+      if (status === 'offline') {
+        if (!device.HealthReport) {
+          alerts.push({
+            id: `device-offline-no-report-${device.Id ?? index}`,
+            severity: 'critical',
+            message: `${deviceName} is offline and not reporting health data.`,
+            timestamp,
+            resolved: false
+          });
+          return;
+        }
+
+        const failedServices = Object.entries(device.HealthReport.Services ?? {})
+          .filter(([, service]) => {
+            const typedService = service as ServiceStatus;
+            const state = (typedService.Active ?? '').toLowerCase();
+            return state === 'inactive' || state === 'failed' || state === 'dead';
+          })
+          .map(([serviceName, service]) => {
+            const typedService = service as ServiceStatus;
+            return `${serviceName} (${typedService.Active ?? 'unknown'})`;
+          });
+
         alerts.push({
-          id: `device-offline-no-report-${device.Id ?? index}`,
+          id: `device-offline-${device.Id ?? index}`,
           severity: 'critical',
-          message: `${deviceName} is offline and not reporting health data.`,
+          message: failedServices.length > 0
+            ? `${deviceName} has offline services: ${failedServices.join(', ')}.`
+            : `${deviceName} is offline.`,
           timestamp,
           resolved: false
         });
+
         return;
       }
 
-      const failedServices = Object.entries(device.HealthReport.Services ?? {})
-        .filter(([, service]) => {
-          const state = (service.Active ?? '').toLowerCase();
-          return state === 'inactive' || state === 'failed' || state === 'dead';
-        })
-        .map(([serviceName, service]) => `${serviceName} (${service.Active ?? 'unknown'})`);
+      if (status === 'warning') {
+        const warningServices = Object.entries(device.HealthReport?.Services ?? {})
+          .filter(([, service]) => {
+            const typedService = service as ServiceStatus;
+            const state = (typedService.Active ?? '').toLowerCase();
+            return state !== 'active' &&
+                   state !== 'activating' &&
+                   state !== 'inactive' &&
+                   state !== 'failed' &&
+                   state !== 'dead';
+          })
+          .map(([serviceName, service]) => {
+            const typedService = service as ServiceStatus;
+            return `${serviceName} (${typedService.Active ?? 'unknown'})`;
+          });
 
-      alerts.push({
-        id: `device-offline-${device.Id ?? index}`,
-        severity: 'critical',
-        message: failedServices.length > 0
-          ? `${deviceName} has offline services: ${failedServices.join(', ')}.`
-          : `${deviceName} is offline.`,
-        timestamp,
-        resolved: false
-      });
+        alerts.push({
+          id: `device-warning-${device.Id ?? index}`,
+          severity: 'high',
+          message: warningServices.length > 0
+            ? `${deviceName} has unexpected service states: ${warningServices.join(', ')}.`
+            : `${deviceName} has one or more services requiring attention.`,
+          timestamp,
+          resolved: false
+        });
+      }
+    });
 
-      return;
-    }
-
-    if (status === 'warning') {
-      const warningServices = Object.entries(device.HealthReport?.Services ?? {})
-        .filter(([, service]) => {
-          const state = (service.Active ?? '').toLowerCase();
-          return state !== 'active' &&
-                 state !== 'activating' &&
-                 state !== 'inactive' &&
-                 state !== 'failed' &&
-                 state !== 'dead';
-        })
-        .map(([serviceName, service]) => `${serviceName} (${service.Active ?? 'unknown'})`);
-
-      alerts.push({
-        id: `device-warning-${device.Id ?? index}`,
-        severity: 'high',
-        message: warningServices.length > 0
-          ? `${deviceName} has unexpected service states: ${warningServices.join(', ')}.`
-          : `${deviceName} has one or more services requiring attention.`,
-        timestamp,
-        resolved: false
-      });
-    }
-  });
-
-  this.alerts = alerts;
-}
+    this.alerts = alerts;
+  }
 
   private updateLastScanTime(): void {
     const validDates = this.devices
@@ -326,9 +330,7 @@ export class Dashboard implements OnInit {
 
   private getHealthReportDate(device: DeviceDto): Date | null {
     const timestamp = device.HealthReport?.Timestamp;
-    if (!timestamp) {
-      return null;
-    }
+    if (!timestamp) return null;
 
     const ms = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
     const date = new Date(ms);
@@ -338,58 +340,8 @@ export class Dashboard implements OnInit {
 
   public getDeviceLastSeen(device: DeviceDto): string {
     const date = this.getHealthReportDate(device);
-    if (!date) {
-      return 'N/A';
-    }
-
+    if (!date) return 'N/A';
     return this.formatTimeAgo(date);
-  }
-
-  public getStatusColor(status: string): string {
-    const colors: Record<string, string> = {
-      active: 'bg-green-500',
-      inactive: 'bg-gray-400',
-      completed: 'bg-blue-500',
-      online: 'bg-green-500',
-      offline: 'bg-red-500',
-      warning: 'bg-yellow-500',
-      low: 'bg-blue-100 text-blue-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800'
-    };
-
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  }
-
-  public getStatusBadge(status: string): string {
-    const badges: Record<string, string> = {
-      active: 'Active',
-      inactive: 'Inactive',
-      completed: 'Ready',
-      online: 'Online',
-      offline: 'Offline',
-      warning: 'Warning'
-    };
-
-    return badges[status] || status;
-  }
-
-  public getBadgeSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null {
-    const severityMap: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null> = {
-      active: 'warn',
-      inactive: 'danger',
-      completed: 'success',
-      online: 'success',
-      offline: 'danger',
-      warning: 'warn',
-      critical: 'danger',
-      high: 'danger',
-      medium: 'warn',
-      low: 'info'
-    };
-
-    return severityMap[status] || null;
   }
 
   public getAlertCounts(): { total: number; critical: number; high: number; unresolved: number } {
