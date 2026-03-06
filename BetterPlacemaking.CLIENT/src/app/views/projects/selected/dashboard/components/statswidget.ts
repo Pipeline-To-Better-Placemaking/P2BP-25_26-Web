@@ -15,7 +15,8 @@ interface ProjectViewModel {
   selector: 'app-stats-widget',
   imports: [CommonModule, ButtonModule],
   template: `
-    <div class="col-span-12 lg:col-span-6 xl:col-span-3">
+    <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
       <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
@@ -34,8 +35,9 @@ interface ProjectViewModel {
       </div>
     </div>
 
-    <div class="col-span-12 lg:col-span-6 xl:col-span-3">
-      <div class="card shadow-sm mb-0">
+      <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
+     <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Devices</span>
@@ -50,8 +52,9 @@ interface ProjectViewModel {
       </div>
     </div>
 
-    <div class="col-span-12 lg:col-span-6 xl:col-span-3">
-      <div class="card shadow-sm mb-0">
+      <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
+     <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Warnings</span>
@@ -66,8 +69,9 @@ interface ProjectViewModel {
       </div>
     </div>
 
-    <div class="col-span-12 lg:col-span-6 xl:col-span-3">
-      <div class="card shadow-sm mb-0">
+    <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
+    <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Alerts</span>

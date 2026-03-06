@@ -8,8 +8,9 @@ import { DeviceDto } from '../../../../../models/DeviceDto';
   selector: 'app-devices-widget',
   imports: [CommonModule, ButtonModule],
   template: `
-    <div class="card mb-8">
-      <div class="flex items-center justify-between mb-6">
+    <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
+    <div class="flex items-center justify-between mb-6">
         <div>
           <h3 class="text-xl font-semibold">Device Status</h3>
           <div class="text-xs text-gray-500 mt-1">

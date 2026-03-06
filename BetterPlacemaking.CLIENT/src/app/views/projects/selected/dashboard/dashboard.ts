@@ -44,47 +44,53 @@ export interface Alert {
     ProjectChecklistWidget
   ],
   template: `
-    <div class="rounded-xl p-6 bg-surface-0 dark:bg-surface-900 grid grid-cols-12 gap-6">
-        <app-stats-widget
-        class="contents"
+    <div class="rounded-xl">
+
+  <div class="grid grid-cols-12 gap-6">
+
+    <app-stats-widget
+      class="contents"
+      [project]="project"
+      [deviceCounts]="deviceCounts"
+      [alertCounts]="getAlertCounts()"
+      (refresh)="loadDashboard()">
+    </app-stats-widget>
+
+    <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+      <app-devices-widget
+        [devices]="devices"
+        [loading]="loading"
+        [error]="error"
+        [deviceStatusFn]="getDeviceStatus.bind(this)"
+        [deviceLastSeenFn]="getDeviceLastSeen.bind(this)"
+        (refresh)="loadDashboard()">
+      </app-devices-widget>
+
+      <app-scan-status-widget
+        [lastScanTime]="lastScanTime"
+        [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+        (refresh)="refreshLastScan()">
+      </app-scan-status-widget>
+    </div>
+
+    <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+      <app-alerts-widget
+        [alerts]="alerts"
+        [alertCounts]="getAlertCounts()"
+        [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+        (refresh)="loadDashboard()">
+      </app-alerts-widget>
+
+      <app-project-checklist-widget
         [project]="project"
         [deviceCounts]="deviceCounts"
-        [alertCounts]="getAlertCounts()"
         (refresh)="loadDashboard()">
-      </app-stats-widget>
-
-      <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
-        <app-devices-widget
-          [devices]="devices"
-          [loading]="loading"
-          [error]="error"
-          [deviceStatusFn]="getDeviceStatus.bind(this)"
-          [deviceLastSeenFn]="getDeviceLastSeen.bind(this)"
-          (refresh)="loadDashboard()">
-        </app-devices-widget>
-
-        <app-scan-status-widget
-          [lastScanTime]="lastScanTime"
-          [formatTimeAgoFn]="formatTimeAgo.bind(this)"
-          (refresh)="refreshLastScan()">
-        </app-scan-status-widget>
-      </div>
-
-      <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
-        <app-alerts-widget
-          [alerts]="alerts"
-          [alertCounts]="getAlertCounts()"
-          [formatTimeAgoFn]="formatTimeAgo.bind(this)"
-          (refresh)="loadDashboard()">
-        </app-alerts-widget>
-
-        <app-project-checklist-widget
-          [project]="project"
-          [deviceCounts]="deviceCounts"
-          (refresh)="loadDashboard()">
-        </app-project-checklist-widget>
-      </div>
+      </app-project-checklist-widget>
     </div>
+
+  </div>
+
+</div>
   `
 })
 export class Dashboard implements OnInit {

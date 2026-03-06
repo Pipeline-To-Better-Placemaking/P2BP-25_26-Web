@@ -52,6 +52,7 @@ builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration
 builder.Services.AddSingleton<CloudStorageService>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<LidarService>();
 
 // Visualizer services (point cloud, mesh generation, export)
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PointCloudService>();

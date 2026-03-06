@@ -16,8 +16,9 @@ interface Alert {
   selector: 'app-alerts-widget',
   imports: [CommonModule, ButtonModule, BadgeModule],
   template: `
-    <div class="card shadow-sm">
-      <div class="flex items-center justify-between mb-6">
+   <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+
+       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
           <h3 class="text-xl font-semibold">Alerts</h3>
           <p-button
