@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
@@ -56,21 +57,32 @@ export class Scanner implements OnInit {
   public schedules: Schedule[] = [];
   private scheduleIdCounter: number = 1;
 
+  constructor(private readonly http: HttpClient) {}
+
   ngOnInit(): void {}
 
   // -----------------------------
   // Immediate Scan
   // -----------------------------
   public performScan(): void {
-    this.scanMessage = 'Scan performed successfully!';
-    setTimeout(() => this.scanMessage = null, 3000);
+    const projectId = 'PROJECT_ID';
+    const deviceId = 'DEVICE_ID';
+
+    this.http.post(`/api/scan/${projectId}/${deviceId}`, {}).subscribe({
+      next: () => {
+        this.scanMessage = 'Scan request sent to device!';
+        setTimeout(() => this.scanMessage = null, 3000);
+      },
+      error: () => {
+        this.scanMessage = 'Failed to start scan.';
+      }
+    });
   }
 
   // -----------------------------
   // Schedule Scan
   // -----------------------------
   public scheduleScan(): void {
-
     if (!this.selectedFrequency) {
       this.scheduleMessage = 'Please select a frequency.';
       return;
@@ -86,6 +98,7 @@ export class Scanner implements OnInit {
         this.scheduleMessage = 'Please select an end date for recurring scans.';
         return;
       }
+
       if (!this.endTime) {
         this.scheduleMessage = 'Please select an end time for recurring scans.';
         return;
@@ -93,6 +106,7 @@ export class Scanner implements OnInit {
 
       const start = new Date(`${this.scheduledDate}T${this.scheduledTime}`);
       const end = new Date(`${this.endDate}T${this.endTime}`);
+
       if (end <= start) {
         this.scheduleMessage = 'End date and time must be after start.';
         return;
@@ -180,5 +194,4 @@ export class Scanner implements OnInit {
   public getMinEndDate(): string {
     return this.scheduledDate || '';
   }
-
 }
