@@ -10,9 +10,15 @@ import { DeviceDto } from '../../../../../models/DeviceDto';
   template: `
     <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
 
-    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6">
         <div>
-          <h3 class="text-xl font-semibold">Device Status</h3>
+          <button
+            type="button"
+            class="text-xl font-semibold text-left hover:underline"
+            (click)="openDevicesPage.emit()">
+            Device Status
+          </button>
+
           <div class="text-xs text-gray-500 mt-1">
             Showing all devices temporarily until devices are assigned under projects.
           </div>
@@ -73,7 +79,9 @@ export class DevicesWidget {
   @Input({ required: true }) error!: string | null;
   @Input({ required: true }) deviceStatusFn!: (device: DeviceDto) => 'online' | 'offline' | 'warning';
   @Input({ required: true }) deviceLastSeenFn!: (device: DeviceDto) => string;
+
   @Output() refresh = new EventEmitter<void>();
+  @Output() openDevicesPage = new EventEmitter<void>();
 
   getStatusColor(status: string): string {
     const colors: Record<string, string> = {

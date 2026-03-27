@@ -15,10 +15,9 @@ interface ProjectViewModel {
   selector: 'app-project-checklist-widget',
   imports: [CommonModule, ButtonModule],
   template: `
+    <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
 
-   <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-
-   <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6">
         <h3 class="text-xl font-semibold">Project Checklist</h3>
         <p-button
           icon="pi pi-refresh"
@@ -41,22 +40,31 @@ interface ProjectViewModel {
       </div>
 
       <div class="space-y-3">
-        <div class="flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2 text-left hover:bg-surface-50 dark:hover:bg-surface-800 rounded px-2 py-2 transition"
+          (click)="devicesAddedClick.emit()">
           <span>Devices added</span>
           <span class="font-medium">{{ deviceCounts.total > 0 ? 'Yes' : 'No' }}</span>
-        </div>
+        </button>
 
-        <div class="flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2 text-left hover:bg-surface-50 dark:hover:bg-surface-800 rounded px-2 py-2 transition"
+          (click)="offlineDevicesFixedClick.emit()">
           <span>Offline devices fixed</span>
           <span class="font-medium">{{ deviceCounts.offline === 0 ? 'Yes' : 'No' }}</span>
-        </div>
+        </button>
 
-        <div class="flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center border-b border-surface-200 dark:border-surface-700 pb-2 text-left hover:bg-surface-50 dark:hover:bg-surface-800 rounded px-2 py-2 transition"
+          (click)="warningsResolvedClick.emit()">
           <span>Warnings resolved</span>
           <span class="font-medium">{{ deviceCounts.warning === 0 ? 'Yes' : 'No' }}</span>
-        </div>
+        </button>
 
-        <div class="flex justify-between items-center">
+        <div class="flex justify-between items-center px-2 py-2">
           <span>Project ready</span>
           <span class="font-medium">{{ project.progress === 100 ? 'Yes' : 'No' }}</span>
         </div>
@@ -66,6 +74,15 @@ interface ProjectViewModel {
 })
 export class ProjectChecklistWidget {
   @Input({ required: true }) project!: ProjectViewModel;
-  @Input({ required: true }) deviceCounts!: { total: number; online: number; offline: number; warning: number };
+  @Input({ required: true }) deviceCounts!: {
+    total: number;
+    online: number;
+    offline: number;
+    warning: number;
+  };
+
   @Output() refresh = new EventEmitter<void>();
+  @Output() devicesAddedClick = new EventEmitter<void>();
+  @Output() offlineDevicesFixedClick = new EventEmitter<void>();
+  @Output() warningsResolvedClick = new EventEmitter<void>();
 }

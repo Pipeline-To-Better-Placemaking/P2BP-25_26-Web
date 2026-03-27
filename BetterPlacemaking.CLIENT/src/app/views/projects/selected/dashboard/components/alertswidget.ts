@@ -16,11 +16,16 @@ interface Alert {
   selector: 'app-alerts-widget',
   imports: [CommonModule, ButtonModule, BadgeModule],
   template: `
-   <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-
-       <div class="flex items-center justify-between mb-6">
+    <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+      <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
-          <h3 class="text-xl font-semibold">Alerts</h3>
+          <button
+            type="button"
+            class="text-xl font-semibold text-left hover:underline"
+            (click)="openAlertsPage.emit()">
+            Alerts
+          </button>
+
           <p-button
             icon="pi pi-refresh"
             [text]="true"
@@ -29,7 +34,10 @@ interface Alert {
           </p-button>
         </div>
 
-        <div class="flex items-center space-x-2">
+        <button
+          type="button"
+          class="flex items-center space-x-2 hover:opacity-80 transition"
+          (click)="openAlertsPage.emit()">
           <p-badge
             [value]="alertCounts.unresolved"
             severity="danger"
@@ -38,18 +46,25 @@ interface Alert {
           <span class="text-sm text-gray-600">
             {{ alertCounts.unresolved }} unresolved
           </span>
-        </div>
+        </button>
       </div>
 
       <div class="grid grid-cols-2 gap-4 mb-6">
-        <div class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border  dark:border-surface-700">
+        <button
+          type="button"
+          class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
+          (click)="openAlertsPage.emit()">
           <div class="text-3xl font-bold">{{ alertCounts.critical }}</div>
           <div class="text-sm mt-1">Critical</div>
-        </div>
-        <div class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border  dark:border-surface-700">
+        </button>
+
+        <button
+          type="button"
+          class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
+          (click)="openAlertsPage.emit()">
           <div class="text-3xl font-bold">{{ alertCounts.high }}</div>
           <div class="text-sm mt-1">High</div>
-        </div>
+        </button>
       </div>
 
       <h4 class="text-lg font-semibold mb-3">Recent Alerts</h4>
@@ -61,7 +76,7 @@ interface Alert {
       <div class="space-y-3 max-h-80 overflow-y-auto pr-2" *ngIf="alerts.length > 0">
         <div
           *ngFor="let alert of alerts"
-          class="p-3 rounded border-l-4 border  dark:border-surface-700"
+          class="p-3 rounded border-l-4 border dark:border-surface-700"
           [ngClass]="{
             'border-red-400': alert.severity === 'critical',
             'border-orange-400': alert.severity === 'high',
@@ -90,9 +105,16 @@ interface Alert {
 })
 export class AlertsWidget {
   @Input({ required: true }) alerts!: Alert[];
-  @Input({ required: true }) alertCounts!: { total: number; critical: number; high: number; unresolved: number };
+  @Input({ required: true }) alertCounts!: {
+    total: number;
+    critical: number;
+    high: number;
+    unresolved: number;
+  };
   @Input({ required: true }) formatTimeAgoFn!: (date: Date) => string;
+
   @Output() refresh = new EventEmitter<void>();
+  @Output() openAlertsPage = new EventEmitter<void>();
 
   getStatusColor(status: string): string {
     const colors: Record<string, string> = {

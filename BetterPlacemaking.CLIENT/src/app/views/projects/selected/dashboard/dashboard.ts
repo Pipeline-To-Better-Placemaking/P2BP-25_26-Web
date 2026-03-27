@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
@@ -15,6 +15,8 @@ import { DevicesWidget } from './components/deviceswidget';
 import { AlertsWidget } from './components/alertswidget';
 import { ScanStatusWidget } from './components/scanstatuswidget';
 import { ProjectChecklistWidget } from './components/projectchecklistwidget';
+
+import { DialogModule } from 'primeng/dialog';
 
 export interface ProjectViewModel {
   title: string;
@@ -41,56 +43,86 @@ export interface Alert {
     DevicesWidget,
     AlertsWidget,
     ScanStatusWidget,
-    ProjectChecklistWidget
+    ProjectChecklistWidget,
+    DialogModule
   ],
   template: `
     <div class="rounded-xl">
+      <div class="grid grid-cols-12 gap-6">
 
-  <div class="grid grid-cols-12 gap-6">
+        <app-stats-widget
+          class="contents"
+          [project]="project"
+          [deviceCounts]="deviceCounts"
+          [alertCounts]="getAlertCounts()"
+          (refresh)="loadDashboard()"
+          (projectProgressClick)="onProjectProgressClick()">
+        </app-stats-widget>
 
-    <app-stats-widget
-      class="contents"
-      [project]="project"
-      [deviceCounts]="deviceCounts"
-      [alertCounts]="getAlertCounts()"
-      (refresh)="loadDashboard()">
-    </app-stats-widget>
+        <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+          <app-devices-widget
+            [devices]="devices"
+            [loading]="loading"
+            [error]="error"
+            [deviceStatusFn]="getDeviceStatus.bind(this)"
+            [deviceLastSeenFn]="getDeviceLastSeen.bind(this)"
+            (refresh)="loadDashboard()"
+            (openDevicesPage)="goToDevicesPage()">
+          </app-devices-widget>
 
-    <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
-      <app-devices-widget
-        [devices]="devices"
-        [loading]="loading"
-        [error]="error"
-        [deviceStatusFn]="getDeviceStatus.bind(this)"
-        [deviceLastSeenFn]="getDeviceLastSeen.bind(this)"
-        (refresh)="loadDashboard()">
-      </app-devices-widget>
+          <app-scan-status-widget
+            [lastScanTime]="lastScanTime"
+            [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+            (refresh)="refreshLastScan()"
+            (openModelPage)="goTo3DModelPage()">
+          </app-scan-status-widget>
+        </div>
 
-      <app-scan-status-widget
-        [lastScanTime]="lastScanTime"
-        [formatTimeAgoFn]="formatTimeAgo.bind(this)"
-        (refresh)="refreshLastScan()">
-      </app-scan-status-widget>
+        <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
+          <app-alerts-widget
+            [alerts]="alerts"
+            [alertCounts]="getAlertCounts()"
+            [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+            (refresh)="loadDashboard()"
+            (openAlertsPage)="goToAlertsPage()">
+          </app-alerts-widget>
+
+          <div id="project-checklist-section">
+            <app-project-checklist-widget
+              [project]="project"
+              [deviceCounts]="deviceCounts"
+              (refresh)="loadDashboard()"
+              (devicesAddedClick)="goToDevicesPage()"
+              (offlineDevicesFixedClick)="goToDevicesPage()"
+              (warningsResolvedClick)="goToAlertsPage()">
+            </app-project-checklist-widget>
+
+
+            <p-dialog
+              header="Project Checklist"
+              [(visible)]="showProjectChecklistDialog"
+              [modal]="true"
+              [closable]="true"
+              [draggable]="false"
+              [resizable]="false"
+              [maximizable]="true"
+              [style]="{ width: '90vw' }"
+              [contentStyle]="{ overflow: 'auto' }">
+
+              <app-project-checklist-widget
+                [project]="project"
+                [deviceCounts]="deviceCounts"
+                (refresh)="loadDashboard()"
+                (devicesAddedClick)="goToDevicesPage(); showProjectChecklistDialog = false"
+                (offlineDevicesFixedClick)="goToDevicesPage(); showProjectChecklistDialog = false"
+                (warningsResolvedClick)="goToAlertsPage(); showProjectChecklistDialog = false">
+              </app-project-checklist-widget>
+            </p-dialog>
+          </div>
+        </div>
+
+      </div>
     </div>
-
-    <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
-      <app-alerts-widget
-        [alerts]="alerts"
-        [alertCounts]="getAlertCounts()"
-        [formatTimeAgoFn]="formatTimeAgo.bind(this)"
-        (refresh)="loadDashboard()">
-      </app-alerts-widget>
-
-      <app-project-checklist-widget
-        [project]="project"
-        [deviceCounts]="deviceCounts"
-        (refresh)="loadDashboard()">
-      </app-project-checklist-widget>
-    </div>
-
-  </div>
-
-</div>
   `
 })
 export class Dashboard implements OnInit {
@@ -113,8 +145,10 @@ export class Dashboard implements OnInit {
 
   public lastScanTime: Date = new Date();
 
+  public showProjectChecklistDialog = false;
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly deviceService: DeviceService,
     private readonly projectService: ProjectService
   ) {}
@@ -358,21 +392,51 @@ export class Dashboard implements OnInit {
 
     return { total, critical, high, unresolved };
   }
+public refreshLastScan(): void {
+  this.loadDashboard();
+}
 
-  public refreshLastScan(): void {
-    this.loadDashboard();
-  }
+public formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
-  public formatTimeAgo(date: Date): string {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+}
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  }
+//Public onProjectProgressClick(): void {
+  //const checklistElement = document.getElementById('project-checklist-section');
+
+  //if (checklistElement) {
+    //checklistElement.scrollIntoView({
+      //behavior: 'smooth',
+      //block: 'center'
+    //});
+  //}
+//}
+public onProjectProgressClick(): void {
+  this.showProjectChecklistDialog = true;
+}
+
+public goToDevicesPage(): void {
+  if (!this.projectId) return;
+  this.router.navigate(['/projects', this.projectId, 'devices']);
+}
+
+public goToAlertsPage(): void {
+  if (!this.projectId) return;
+  this.router.navigate(['/projects', this.projectId, 'alerts']);
+}
+
+public goTo3DModelPage(): void {
+  if (!this.projectId) return;
+  this.router.navigate(['/projects', this.projectId, 'model']);
+}
+
+
 }

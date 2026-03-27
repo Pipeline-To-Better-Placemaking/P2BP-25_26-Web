@@ -15,7 +15,9 @@ interface ProjectViewModel {
   selector: 'app-stats-widget',
   imports: [CommonModule, ButtonModule],
   template: `
-    <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+    <div
+      class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black cursor-pointer hover:opacity-95 transition"
+      (click)="projectProgressClick.emit()">
 
       <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
@@ -24,7 +26,12 @@ interface ProjectViewModel {
             <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">{{ project.progress }}%</div>
           </div>
           <div class="flex items-center gap-2">
-            <p-button icon="pi pi-refresh" [text]="true" [rounded]="true" (onClick)="refresh.emit()"></p-button>
+            <p-button
+              icon="pi pi-refresh"
+              [text]="true"
+              [rounded]="true"
+              (onClick)="onRefreshClick($event)">
+            </p-button>
             <div class="flex items-center justify-center bg-blue-100 dark:bg-blue-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
               <i class="pi pi-chart-line text-blue-500 text-xl!"></i>
             </div>
@@ -35,9 +42,8 @@ interface ProjectViewModel {
       </div>
     </div>
 
-      <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-
-     <div class="card shadow-sm mb-0">
+    <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+      <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Devices</span>
@@ -52,9 +58,8 @@ interface ProjectViewModel {
       </div>
     </div>
 
-      <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-
-     <div class="card shadow-sm mb-0">
+    <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+      <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Warnings</span>
@@ -70,8 +75,7 @@ interface ProjectViewModel {
     </div>
 
     <div class="col-span-12 lg:col-span-6 xl:col-span-3 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-
-    <div class="card shadow-sm mb-0">
+      <div class="card shadow-sm mb-0">
         <div class="flex justify-between mb-4">
           <div>
             <span class="block text-muted-color font-medium mb-4">Alerts</span>
@@ -91,5 +95,12 @@ export class StatsWidget {
   @Input({ required: true }) project!: ProjectViewModel;
   @Input({ required: true }) deviceCounts!: { total: number; online: number; offline: number; warning: number };
   @Input({ required: true }) alertCounts!: { total: number; critical: number; high: number; unresolved: number };
+
   @Output() refresh = new EventEmitter<void>();
+  @Output() projectProgressClick = new EventEmitter<void>();
+
+  public onRefreshClick(event: Event): void {
+    event.stopPropagation();
+    this.refresh.emit();
+  }
 }
