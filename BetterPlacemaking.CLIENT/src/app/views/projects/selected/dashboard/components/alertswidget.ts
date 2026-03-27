@@ -16,13 +16,14 @@ interface Alert {
   selector: 'app-alerts-widget',
   imports: [CommonModule, ButtonModule, BadgeModule],
   template: `
-    <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+    <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black"
+      (click)="openDevicesPage.emit()">
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
           <button
             type="button"
             class="text-xl font-semibold text-left hover:underline"
-            (click)="openAlertsPage.emit()">
+            (click)="openDevicesPage.emit()">
             Alerts
           </button>
 
@@ -37,7 +38,7 @@ interface Alert {
         <button
           type="button"
           class="flex items-center space-x-2 hover:opacity-80 transition"
-          (click)="openAlertsPage.emit()">
+          (click)="openDevicesPage.emit()">
           <p-badge
             [value]="alertCounts.unresolved"
             severity="danger"
@@ -53,7 +54,7 @@ interface Alert {
         <button
           type="button"
           class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
-          (click)="openAlertsPage.emit()">
+          (click)="openDevicesPage.emit()">
           <div class="text-3xl font-bold">{{ alertCounts.critical }}</div>
           <div class="text-sm mt-1">Critical</div>
         </button>
@@ -61,7 +62,7 @@ interface Alert {
         <button
           type="button"
           class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
-          (click)="openAlertsPage.emit()">
+          (click)="openDevicesPage.emit()">
           <div class="text-3xl font-bold">{{ alertCounts.high }}</div>
           <div class="text-sm mt-1">High</div>
         </button>
@@ -115,6 +116,8 @@ export class AlertsWidget {
 
   @Output() refresh = new EventEmitter<void>();
   @Output() openAlertsPage = new EventEmitter<void>();
+  @Output() openDevicesPage = new EventEmitter<void>();
+
 
   getStatusColor(status: string): string {
     const colors: Record<string, string> = {

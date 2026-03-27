@@ -18,6 +18,7 @@ import { ProjectChecklistWidget } from './components/projectchecklistwidget';
 
 import { DialogModule } from 'primeng/dialog';
 
+
 export interface ProjectViewModel {
   title: string;
   status: 'active' | 'inactive' | 'completed';
@@ -56,8 +57,12 @@ export interface Alert {
           [deviceCounts]="deviceCounts"
           [alertCounts]="getAlertCounts()"
           (refresh)="loadDashboard()"
-          (projectProgressClick)="onProjectProgressClick()">
+          (projectProgressClick)="onProjectProgressClick()"
+          (devicesClick)="goToDevicesPage()"
+          (warningsClick)="openAlertsDialog()"
+          (alertsClick)="openAlertsDialog()">
         </app-stats-widget>
+
 
         <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
           <app-devices-widget
@@ -82,9 +87,10 @@ export interface Alert {
           <app-alerts-widget
             [alerts]="alerts"
             [alertCounts]="getAlertCounts()"
+            (openDevicesPage)="goToDevicesPage()"   
             [formatTimeAgoFn]="formatTimeAgo.bind(this)"
             (refresh)="loadDashboard()"
-            (openAlertsPage)="goToAlertsPage()">
+            (openAlertsPage)="goToDevicesPage()">
           </app-alerts-widget>
 
           <div id="project-checklist-section">
@@ -115,8 +121,29 @@ export interface Alert {
                 (refresh)="loadDashboard()"
                 (devicesAddedClick)="goToDevicesPage(); showProjectChecklistDialog = false"
                 (offlineDevicesFixedClick)="goToDevicesPage(); showProjectChecklistDialog = false"
-                (warningsResolvedClick)="goToAlertsPage(); showProjectChecklistDialog = false">
+                (warningsResolvedClick)="goToDevicesPage(); showProjectChecklistDialog = false">
               </app-project-checklist-widget>
+            </p-dialog>
+
+            <p-dialog
+              header="Alerts"
+              [(visible)]="showAlertsDialog"
+              [modal]="true"
+              [closable]="true"
+              [draggable]="false"
+              [resizable]="false"
+              [maximizable]="true"
+              [style]="{ width: '90vw' }"
+              [contentStyle]="{ overflow: 'auto' }">
+
+              <app-alerts-widget
+                [alerts]="alerts"
+                [alertCounts]="getAlertCounts()"
+                (openDevicesPage)="goToDevicesPage(); showAlertsDialog = false"
+                [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+                (refresh)="loadDashboard()"
+                (openAlertsPage)="showAlertsDialog = false">
+              </app-alerts-widget>
             </p-dialog>
           </div>
         </div>
@@ -146,6 +173,8 @@ export class Dashboard implements OnInit {
   public lastScanTime: Date = new Date();
 
   public showProjectChecklistDialog = false;
+  public showAlertsDialog = false;
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
@@ -168,6 +197,9 @@ export class Dashboard implements OnInit {
     this.loadDashboard();
   }
 
+  public openAlertsDialog(): void {
+    this.showAlertsDialog = true;
+  }
   public loadDashboard(): void {
     if (!this.projectId) {
       this.error = 'No project selected.';
@@ -423,20 +455,21 @@ public onProjectProgressClick(): void {
   this.showProjectChecklistDialog = true;
 }
 
+
 public goToDevicesPage(): void {
   if (!this.projectId) return;
-  this.router.navigate(['/projects', this.projectId, 'devices']);
-}
-
-public goToAlertsPage(): void {
-  if (!this.projectId) return;
-  this.router.navigate(['/projects', this.projectId, 'alerts']);
+  this.router.navigate(['/', this.projectId, 'admin', 'devices']);
 }
 
 public goTo3DModelPage(): void {
   if (!this.projectId) return;
-  this.router.navigate(['/projects', this.projectId, 'model']);
+  this.router.navigate(['/', this.projectId, 'model']);
 }
 
 
+public goToAlertsPage(): void {
+  //if (!this.projectId) return;
+  //this.router.navigate(['/projects', this.projectId, 'alerts']);
+  this.showAlertsDialog = true;
+}
 }
