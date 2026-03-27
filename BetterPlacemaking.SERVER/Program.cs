@@ -86,8 +86,6 @@ const string DeviceApiKeyScheme = "DeviceApiKey";
 
 const string UserJwtPolicy = "UserJwt";
 const string DeviceApiKeyPolicy = "DeviceApiKey";
-const string ProjectEdit = "ProjectEdit";
-const string ProjectRead = "ProjectRead";
 
 var jwtKey = config["Jwt:Key"];
 var jwtIssuer = config["Jwt:Issuer"];
@@ -128,28 +126,25 @@ builder.Services.AddAuthentication(options =>
         DeviceApiKeyScheme,
         options => { });
 
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<FirestoreAuthorizationDataService>();
+builder.Services.AddSingleton<AuthorizationRoleSeeder>();
+
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(UserJwtPolicy, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.AddAuthenticationSchemes(UserJwtScheme);
-    });
+    var userJwtDefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .AddAuthenticationSchemes(UserJwtScheme)
+        .Build();
+
+    options.DefaultPolicy = userJwtDefaultPolicy;
+    options.AddPolicy(UserJwtPolicy, userJwtDefaultPolicy);
 
     options.AddPolicy(DeviceApiKeyPolicy, policy =>
     {
         policy.RequireAuthenticatedUser();
         policy.AddAuthenticationSchemes(DeviceApiKeyScheme);
-    });
-    options.AddPolicy(ProjectEdit, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("permission", "Project.Create", "Project.Update", "Project.Delete");
-    }); 
-    options.AddPolicy(ProjectRead, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("permission", "Project.Read");
     });
 });
 
@@ -248,6 +243,12 @@ if (!string.IsNullOrEmpty(allowedOrigins))
 // Build
 
 var app = builder.Build();
+
+using (var seedScope = app.Services.CreateScope())
+{
+    var roleSeeder = seedScope.ServiceProvider.GetRequiredService<AuthorizationRoleSeeder>();
+    await roleSeeder.SeedAsync();
+}
 
 // Middleware
 

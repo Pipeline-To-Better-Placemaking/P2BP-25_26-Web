@@ -137,6 +137,54 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+		[HttpGet("project-roles/options")]
+		public IActionResult GetProjectRoleOptions()
+		{
+			try
+			{
+				var response = _userService.GetProjectRoleOptions();
+				return Ok(response);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving project role options.");
+			}
+		}
+
+		[HttpGet("project-roles")]
+		public IActionResult GetProjectRoles()
+		{
+			try
+			{
+				var response = _userService.GetProjectRoleAssignments();
+				return Ok(response);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving project role assignments.");
+			}
+		}
+
+		[HttpPut("project-roles")]
+		public IActionResult SetProjectRoles([FromBody] UserProjectRoleAssignmentsUpdateDto request)
+		{
+			if (request == null || string.IsNullOrWhiteSpace(request.UserId))
+				return BadRequest("UserId is required.");
+
+			try
+			{
+				var success = _userService.SetUserProjectRoleAssignments(request);
+				if (!success)
+					return NotFound("User not found.");
+
+				return NoContent();
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while updating project role assignments.");
+			}
+		}
+
 		private string? ResolveCurrentUserId()
 		{
 			return
