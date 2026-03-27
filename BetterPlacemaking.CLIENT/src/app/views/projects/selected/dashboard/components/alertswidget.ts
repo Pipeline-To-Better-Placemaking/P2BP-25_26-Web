@@ -51,13 +51,6 @@ interface Alert {
       </div>
 
       <div class="grid grid-cols-2 gap-4 mb-6">
-        <button
-          type="button"
-          class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
-          (click)="openDevicesPage.emit()">
-          <div class="text-3xl font-bold">{{ alertCounts.critical }}</div>
-          <div class="text-sm mt-1">Critical</div>
-        </button>
 
         <button
           type="button"
@@ -66,6 +59,16 @@ interface Alert {
           <div class="text-3xl font-bold">{{ alertCounts.high }}</div>
           <div class="text-sm mt-1">High</div>
         </button>
+
+        <button
+          type="button"
+          class="p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition"
+          (click)="openDevicesPage.emit()">
+          <div class="text-3xl font-bold">{{ alertCounts.critical }}</div>
+          <div class="text-sm mt-1">Critical</div>
+        </button>
+
+      
       </div>
 
       <h4 class="text-lg font-semibold mb-3">Recent Alerts</h4>

@@ -96,6 +96,7 @@ export interface Alert {
           <div id="project-checklist-section">
             <app-project-checklist-widget
               [project]="project"
+              (projectProgressClick)="onProjectProgressClick()"
               [deviceCounts]="deviceCounts"
               (refresh)="loadDashboard()"
               (devicesAddedClick)="goToDevicesPage()"
@@ -422,7 +423,7 @@ export class Dashboard implements OnInit {
     const high = this.alerts.filter(a => a.severity === 'high').length;
     const unresolved = this.alerts.filter(a => !a.resolved).length;
 
-    return { total, critical, high, unresolved };
+    return { total, high, critical, unresolved };
   }
 public refreshLastScan(): void {
   this.loadDashboard();
