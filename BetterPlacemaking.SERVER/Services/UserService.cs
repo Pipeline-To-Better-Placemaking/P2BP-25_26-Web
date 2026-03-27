@@ -136,5 +136,134 @@ namespace BetterPlacemaking.Services
             };
         }
 
+        public List<string> GetProjectRoleOptions()
+        {
+            var response = _db.Collection("role_definitions_project")
+                .GetSnapshotAsync()
+                .Result
+                .Documents
+                .Select(doc => doc.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(id => id)
+                .ToList();
+
+            return response;
+        }
+
+        public List<UserProjectRoleAssignmentsDto> GetProjectRoleAssignments()
+        {
+            var users = GetUsers();
+            var projects = _db.Collection("projects")
+                .GetSnapshotAsync()
+                .Result
+                .Documents
+                .Select(doc => doc.ConvertTo<Project>())
+                .Where(project => !string.IsNullOrWhiteSpace(project.Id))
+                .ToList();
+
+            var assignmentMap = new Dictionary<string, List<ProjectRoleAssignmentDto>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var project in projects)
+            {
+                var members = _db.Collection("projects")
+                    .Document(project.Id!)
+                    .Collection("members")
+                    .GetSnapshotAsync()
+                    .Result
+                    .Documents;
+
+                foreach (var member in members)
+                {
+                    if (!member.TryGetValue("roles", out IEnumerable<string> roles))
+                        continue;
+
+                    var normalizedRoles = roles
+                        .Where(role => !string.IsNullOrWhiteSpace(role))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (normalizedRoles.Count == 0)
+                        continue;
+
+                    if (!assignmentMap.TryGetValue(member.Id, out var assignments))
+                    {
+                        assignments = [];
+                        assignmentMap[member.Id] = assignments;
+                    }
+
+                    assignments.Add(new ProjectRoleAssignmentDto
+                    {
+                        ProjectId = project.Id,
+                        ProjectName = project.Title,
+                        Roles = normalizedRoles
+                    });
+                }
+            }
+
+            return users.Select(user => new UserProjectRoleAssignmentsDto
+            {
+                UserId = user.Id,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email,
+                Assignments = user.Id != null && assignmentMap.TryGetValue(user.Id, out var assignments)
+                    ? assignments
+                    : []
+            }).ToList();
+        }
+
+        public bool SetUserProjectRoleAssignments(UserProjectRoleAssignmentsUpdateDto request)
+        {
+            if (string.IsNullOrWhiteSpace(request.UserId))
+                return false;
+
+            var userSnap = _db.Collection(collectionName).Document(request.UserId).GetSnapshotAsync().Result;
+            if (!userSnap.Exists)
+                return false;
+
+            foreach (var assignment in request.Assignments)
+            {
+                if (string.IsNullOrWhiteSpace(assignment.ProjectId))
+                    continue;
+
+                var roles = assignment.Roles
+                    .Where(role => !string.IsNullOrWhiteSpace(role))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                var memberDocRef = _db.Collection("projects")
+                    .Document(assignment.ProjectId)
+                    .Collection("members")
+                    .Document(request.UserId);
+
+                if (roles.Length == 0)
+                {
+                    var existing = memberDocRef.GetSnapshotAsync().Result;
+                    if (existing.Exists)
+                        memberDocRef.DeleteAsync().Wait();
+
+                    continue;
+                }
+
+                var memberSnapshot = memberDocRef.GetSnapshotAsync().Result;
+                var currentVersion = 0;
+
+                if (memberSnapshot.Exists && memberSnapshot.TryGetValue("authzVersion", out long authzVersion))
+                    currentVersion = (int)authzVersion;
+                else if (memberSnapshot.Exists && memberSnapshot.TryGetValue("authzVersion", out int authzVersionInt))
+                    currentVersion = authzVersionInt;
+
+                memberDocRef.SetAsync(new Dictionary<string, object>
+                {
+                    ["roles"] = roles,
+                    ["authzVersion"] = currentVersion + 1,
+                    ["updatedAt"] = Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc))
+                }).Wait();
+            }
+
+            return true;
+        }
+
     }
 }

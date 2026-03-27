@@ -30,6 +30,16 @@ namespace BetterPlacemaking.Authorization
                     Permissions.Project.Read
                 ],
                 cancellationToken: cancellationToken);
+
+            await SeedRoleIfMissingAsync(
+                collection: "role_definitions_project",
+                roleName: "ProjectEditor",
+                permissions:
+                [
+                    Permissions.Project.Read,
+                    Permissions.Project.Update
+                ],
+                cancellationToken: cancellationToken);
         }
 
         private async Task SeedRoleIfMissingAsync(
