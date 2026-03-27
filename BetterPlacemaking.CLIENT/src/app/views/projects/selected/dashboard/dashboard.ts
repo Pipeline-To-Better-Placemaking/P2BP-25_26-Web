@@ -255,7 +255,7 @@ export class Dashboard implements OnInit {
     return 'Project is ready.';
   }
 
-  private calculateProjectProgress(): number {
+  /*private calculateProjectProgress(): number {
     if (this.devices.length === 0) return 0;
 
     let progress = 100;
@@ -263,7 +263,22 @@ export class Dashboard implements OnInit {
     if (this.deviceCounts.warning > 0) progress -= 15;
 
     return Math.max(25, Math.min(100, progress));
-  }
+  }*/
+
+  private calculateProjectProgress(): number {
+  if (this.devices.length === 0) return 0;
+
+  const total = this.deviceCounts.total;
+  const offlineRatio = this.deviceCounts.offline / total;
+  const warningRatio = this.deviceCounts.warning / total;
+
+  let progress = 100;
+
+  progress -= offlineRatio * 60;  // offline = big impact
+  progress -= warningRatio * 30;  // warnings = medium impact
+
+  return Math.max(0, Math.round(progress));
+}
 
   private getProjectStatus(progress: number, started: boolean): 'active' | 'inactive' | 'completed' {
     if (!started) return 'inactive';
