@@ -18,6 +18,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { MenuItem } from 'primeng/api';
 import { ThemeService } from '../../services/theme-service';
+import { ProjectService } from '../../services/project-service';
 import { filter, startWith, Subscription } from 'rxjs';
 import { NgIf } from '@angular/common';
 import { AuthService } from '../../services/auth-service';
@@ -37,11 +38,14 @@ export class DefaultLayout implements OnInit, OnDestroy {
   public readonly faMoon = faMoon;
   public readonly faUser = faUser;
 
+  public currentProjectName: string | null = null;
+
   constructor(
     public themeService: ThemeService,
     private router: Router,
     private route: ActivatedRoute,
-    private authService: AuthService
+    private authService: AuthService,
+    private projectService: ProjectService
   ) {}
 
   navItems: MenuItem[] = [];
@@ -73,8 +77,18 @@ export class DefaultLayout implements OnInit, OnDestroy {
       .pipe(filter((event) => event instanceof NavigationEnd), startWith(null))
       .subscribe(() => {
         const newId = this.getProjectIdFromRoute(this.route);
+        const changed = newId !== this.projectId;
         this.projectId = newId;
         this.buildNavMenus(this.projectId);
+
+        if (newId && changed) {
+          this.projectService.getProject(newId).subscribe({
+            next: (project) => this.currentProjectName = project.Title || null,
+            error: () => this.currentProjectName = null,
+          });
+        } else if (!newId) {
+          this.currentProjectName = null;
+        }
       });
   }
 

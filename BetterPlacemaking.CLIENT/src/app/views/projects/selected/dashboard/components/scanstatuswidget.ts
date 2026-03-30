@@ -47,8 +47,14 @@ import { ButtonModule } from 'primeng/button';
         <p-button
           label="Run Full Scan"
           icon="pi pi-search"
-          styleClass="w-full">
+          styleClass="w-full"
+          [loading]="scanLoading"
+          [disabled]="scanLoading"
+          (onClick)="runFullScan.emit()">
         </p-button>
+        <div *ngIf="scanMessage" class="mt-2 text-center text-sm" [class]="scanMessage.includes('Failed') ? 'text-red-500' : 'text-green-600'">
+          {{ scanMessage }}
+        </div>
       </div>
     </div>
   `
@@ -57,6 +63,10 @@ export class ScanStatusWidget {
   @Input({ required: true }) lastScanTime!: Date;
   @Input({ required: true }) formatTimeAgoFn!: (date: Date) => string;
 
+  @Input() scanLoading = false;
+  @Input() scanMessage: string | null = null;
+
   @Output() refresh = new EventEmitter<void>();
   @Output() openModelPage = new EventEmitter<void>();
+  @Output() runFullScan = new EventEmitter<void>();
 }

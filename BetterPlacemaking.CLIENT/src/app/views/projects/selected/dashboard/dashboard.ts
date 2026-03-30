@@ -6,6 +6,7 @@ import { catchError } from 'rxjs/operators';
 
 import { DeviceService } from '../../../../services/device-service';
 import { ProjectService } from '../../../../services/project-service';
+import { ScanService } from '../../../../services/scan-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ProjectDto } from '../../../../models/ProjectDto';
 import { ServiceStatus } from '../../../../models/jetson-dtos/HealthReport';
@@ -78,8 +79,11 @@ export interface Alert {
           <app-scan-status-widget
             [lastScanTime]="lastScanTime"
             [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+            [scanLoading]="scanLoading"
+            [scanMessage]="scanMessage"
             (refresh)="refreshLastScan()"
-            (openModelPage)="goTo3DModelPage()">
+            (openModelPage)="goTo3DModelPage()"
+            (runFullScan)="onRunFullScan()">
           </app-scan-status-widget>
         </div>
 
@@ -170,6 +174,8 @@ export class Dashboard implements OnInit {
 
   public loading = false;
   public error: string | null = null;
+  public scanLoading = false;
+  public scanMessage: string | null = null;
 
   public lastScanTime: Date = new Date();
 
@@ -180,7 +186,8 @@ export class Dashboard implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly deviceService: DeviceService,
-    private readonly projectService: ProjectService
+    private readonly projectService: ProjectService,
+    private readonly scanService: ScanService
   ) {}
 
   ngOnInit(): void {
@@ -484,8 +491,37 @@ public goTo3DModelPage(): void {
 
 
 public goToAlertsPage(): void {
-  //if (!this.projectId) return;
-  //this.router.navigate(['/projects', this.projectId, 'alerts']);
   this.showAlertsDialog = true;
+}
+
+public onRunFullScan(): void {
+  if (!this.projectId) return;
+
+  this.scanLoading = true;
+  this.scanMessage = null;
+
+  const projectDevices = this.devices.filter(d => d.ProjectId === this.projectId);
+
+  if (projectDevices.length === 0) {
+    this.scanMessage = 'No devices assigned to this project.';
+    this.scanLoading = false;
+    return;
+  }
+
+  const scanRequests = projectDevices.map(d =>
+    this.scanService.startScan(this.projectId!, d.Id)
+  );
+
+  forkJoin(scanRequests).subscribe({
+    next: (results) => {
+      this.scanMessage = `Scan requested for ${results.length} device(s).`;
+      this.scanLoading = false;
+      setTimeout(() => this.scanMessage = null, 5000);
+    },
+    error: () => {
+      this.scanMessage = 'Failed to start scan.';
+      this.scanLoading = false;
+    }
+  });
 }
 }

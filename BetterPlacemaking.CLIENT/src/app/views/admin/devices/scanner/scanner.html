@@ -8,6 +8,8 @@
           label="Perform Scan"
           icon="pi pi-play"
           styleClass="p-button-primary w-full md:w-auto"
+          [loading]="scanning"
+          [disabled]="scanning"
           (onClick)="performScan()">
         </p-button>
 
@@ -101,8 +103,8 @@
         <!-- Schedule Button -->
         <div class="pt-2">
           <p-button
-            label="Schedule Scan"
-            icon="pi pi-calendar-plus"
+            [label]="editingScheduleId ? 'Update Schedule' : 'Schedule Scan'"
+            [icon]="editingScheduleId ? 'pi pi-check' : 'pi pi-calendar-plus'"
             styleClass="p-button-accent w-full md:w-auto"
             (onClick)="scheduleScan()">
           </p-button>
@@ -119,7 +121,7 @@
 
         <!-- Current Schedules Table -->
         <div *ngIf="schedules.length" class="mt-6">
-          <h3 class="text-lg font-semibold mb-3">Current Test Schedules:</h3>
+          <h3 class="text-lg font-semibold mb-3">Scheduled Scans:</h3>
 
           <table class="w-full border-collapse">
             <thead>
@@ -133,11 +135,11 @@
 
             <tbody>
               <tr *ngFor="let s of schedules" class="border-b">
-                <td class="p-3">{{ s.date }} {{ s.time }}</td>
-                <td class="p-3">{{ getScheduleFrequencyName(s.frequency) }}</td>
+                <td class="p-3">{{ s.StartDate }} {{ s.StartTime }}</td>
+                <td class="p-3">{{ getScheduleFrequencyName(s.Frequency) }}</td>
                 <td class="p-3">
-                  <ng-container *ngIf="s.endDate; else noEndDate">
-                    {{ s.endDate }} {{ s.endTime }}
+                  <ng-container *ngIf="s.EndDate; else noEndDate">
+                    {{ s.EndDate }} {{ s.EndTime }}
                   </ng-container>
                   <ng-template #noEndDate>-</ng-template>
                 </td>
@@ -152,7 +154,7 @@
                     <p-button
                       icon="pi pi-times"
                       styleClass="p-button-text p-button-rounded p-button-danger p-button-sm"
-                      (onClick)="cancelSchedule(s.id)">
+                      (onClick)="cancelSchedule(s.Id!)">
                     </p-button>
                   </div>
                 </td>
