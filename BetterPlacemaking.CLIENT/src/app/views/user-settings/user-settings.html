@@ -48,21 +48,24 @@
           <p-checkbox
             inputId="emailAlerts"
             [binary]="true"
-            [(ngModel)]="notifications.emailAlerts">
+            [(ngModel)]="notifications.emailAlerts"
+            (ngModelChange)="saveNotifications()">
           </p-checkbox>
           <label for="emailAlerts">Email alerts</label>
 
           <p-checkbox
             inputId="scanCompletion"
             [binary]="true"
-            [(ngModel)]="notifications.scanCompletionAlerts">
+            [(ngModel)]="notifications.scanCompletionAlerts"
+            (ngModelChange)="saveNotifications()">
           </p-checkbox>
           <label for="scanCompletion">Scan completion alerts</label>
 
           <p-checkbox
             inputId="changeDetection"
             [binary]="true"
-            [(ngModel)]="notifications.changeDetectionAlerts">
+            [(ngModel)]="notifications.changeDetectionAlerts"
+            (ngModelChange)="saveNotifications()">
           </p-checkbox>
           <label for="changeDetection">Change detection alerts</label>
         </div>
@@ -155,16 +158,25 @@
       </p-card>
 
       <p-card header="Assigned Projects" class="subcard">
-        <p-listbox
-          [options]="assignedProjects"
-          optionLabel="name"
-          [listStyle]="{ 'max-height': '260px' }">
-        </p-listbox>
-
-        <p-message
-          severity="info"
-          text="This list is static for now and will be wired later.">
-        </p-message>
+        <p-table [value]="assignedProjects" [scrollable]="true" scrollHeight="260px">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Project</th>
+              <th>Role</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td>{{ row.name }}</td>
+              <td><p-tag [value]="row.role"></p-tag></td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr>
+              <td colspan="2" class="text-center text-sm text-surface-500">No projects assigned.</td>
+            </tr>
+          </ng-template>
+        </p-table>
       </p-card>
     </div>
 

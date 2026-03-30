@@ -105,10 +105,7 @@ namespace BetterPlacemaking.Services
             {
                 var last = dto.LastName.Trim();
                 if (last.Length > 50) throw new ArgumentException("LastName must be <= 50 characters.");
-                if (last.Length > 0)
-                {
-                    updates["LastName"] = last;
-                }
+                updates["LastName"] = last;
             }
 
             if (dto.EmailAlerts.HasValue) updates["EmailAlerts"] = dto.EmailAlerts.Value;

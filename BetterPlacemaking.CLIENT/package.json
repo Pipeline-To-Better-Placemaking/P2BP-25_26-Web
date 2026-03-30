@@ -48,6 +48,7 @@
     "@types/jasmine": "~5.1.0",
     "@types/three": "^0.170.0",
     "autoprefixer": "^10.4.22",
+    "baseline-browser-mapping": "^2.10.10",
     "jasmine-core": "~5.9.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",

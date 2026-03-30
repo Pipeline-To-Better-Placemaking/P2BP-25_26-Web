@@ -8,6 +8,7 @@ import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { CheckboxModule } from 'primeng/checkbox';
 import { AuthService } from '../../services/auth-service';
+import { ThemeService } from '../../services/theme-service';
 
 @Component({
   selector: 'app-login',
@@ -28,7 +29,8 @@ export class Login {
     private readonly authService: AuthService,
     private readonly router: Router,
     private readonly route: ActivatedRoute,
-    private readonly fb: FormBuilder
+    private readonly fb: FormBuilder,
+    public readonly themeService: ThemeService
   ) {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],

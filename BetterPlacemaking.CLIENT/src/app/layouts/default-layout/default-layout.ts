@@ -57,7 +57,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.footerItems = [
-      { label: 'Toggle dark mode', faIcon: faMoon, command: () => this.toggleDarkMode() },
+      { label: 'Toggle appearance', faIcon: faMoon, command: () => this.toggleDarkMode() },
       { label: 'User', faIcon: faUser, command: (event) => this.openUserMenu(event) },
     ];
 

@@ -1,0 +1,7 @@
+{
+  "_comment": "Pin .NET 8 SDK",
+  "sdk": {
+    "version": "8.0.125",
+    "rollForward": "latestFeature"
+  }
+}

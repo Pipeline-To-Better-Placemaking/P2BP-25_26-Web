@@ -12,10 +12,13 @@ import { CheckboxModule } from 'primeng/checkbox';
 import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
 import { ListboxModule } from 'primeng/listbox';
+import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 
 import { UserSettingsService } from '../../services/user-settings-service';
 import { PasswordService } from '../../services/password-service';
 import { AuthService } from '../../services/auth-service';
+import { UsersService } from '../../services/users-service';
 
 @Component({
   selector: 'app-user-settings',
@@ -34,6 +37,8 @@ import { AuthService } from '../../services/auth-service';
     PasswordModule,
     MessageModule,
     ListboxModule,
+    TableModule,
+    TagModule,
   ],
 })
 export class UserSettings implements OnInit {
@@ -42,7 +47,8 @@ export class UserSettings implements OnInit {
   constructor(
     private userSettingsService: UserSettingsService,
     private passwordService: PasswordService,
-    private authService: AuthService
+    private authService: AuthService,
+    private usersService: UsersService
   ) {}
 
   saving = false;
@@ -77,17 +83,17 @@ export class UserSettings implements OnInit {
   passwordError = '';
   passwordSuccess = false;
 
-  assignedProjects = [
-    { name: 'UCF Art Gallery' },
-    { name: 'Classroom' },
-    { name: 'Lake Eola' },
-  ];
+  assignedProjects: { name: string; role: string }[] = [];
 
   ngOnInit(): void {
     this.clearPassword();
     this.loadProfileDraft();
     this.authService.state$.pipe(take(1)).subscribe((state) => {
       this.model.email = state?.User?.Email ?? '';
+      const userId = state?.User?.Id;
+      if (userId) {
+        this.loadAssignedProjects(userId);
+      }
     });
 
     this.userSettingsService.getMySettings().subscribe({
@@ -108,27 +114,31 @@ export class UserSettings implements OnInit {
   }
 
   save(): void {
-
     this.settingsError = '';
     this.settingsSuccess = false;
-    this.saving = true;
+
     const firstName = this.model.firstName.trim();
     const lastName = this.model.lastName.trim();
+
+    if (!firstName) {
+      this.settingsError = 'First name is required.';
+      return;
+    }
+
+    this.saving = true;
     const payload: {
-      FirstName?: string;
-      LastName?: string;
+      FirstName: string;
+      LastName: string;
       EmailAlerts: boolean;
       ScanCompletionAlerts: boolean;
       ChangeDetectionAlerts: boolean;
     } = {
+      FirstName: firstName,
+      LastName: lastName,
       EmailAlerts: this.notifications.emailAlerts,
       ScanCompletionAlerts: this.notifications.scanCompletionAlerts,
       ChangeDetectionAlerts: this.notifications.changeDetectionAlerts,
     };
-
-    // Only send non-empty name fields so one blank name does not block saving the other.
-    if (firstName) payload.FirstName = firstName;
-    if (lastName) payload.LastName = lastName;
 
     this.userSettingsService
       .updateMySettings(payload)
@@ -145,6 +155,16 @@ export class UserSettings implements OnInit {
           this.saving = false;
         },
       });
+  }
+
+  saveNotifications(): void {
+    this.userSettingsService.updateMySettings({
+      EmailAlerts: this.notifications.emailAlerts,
+      ScanCompletionAlerts: this.notifications.scanCompletionAlerts,
+      ChangeDetectionAlerts: this.notifications.changeDetectionAlerts,
+    }).subscribe({
+      error: (err) => console.error('Failed to save notification settings', err),
+    });
   }
 
   canSubmitPassword(): boolean {
@@ -194,6 +214,25 @@ export class UserSettings implements OnInit {
 
   onProfileNameInput(): void {
     this.saveProfileDraft();
+  }
+
+  private loadAssignedProjects(userId: string): void {
+    this.usersService.getProjectRoleAssignments().subscribe({
+      next: (allAssignments) => {
+        const mine = allAssignments.find((a) => a.UserId === userId);
+        if (!mine?.Assignments) {
+          this.assignedProjects = [];
+          return;
+        }
+        this.assignedProjects = mine.Assignments
+          .filter((a) => a.Roles?.length > 0)
+          .map((a) => ({
+            name: a.ProjectName || a.ProjectId || '(unknown)',
+            role: a.Roles[0],
+          }));
+      },
+      error: (err) => console.error('Failed to load assigned projects', err),
+    });
   }
 
   private saveProfileDraft(): void {

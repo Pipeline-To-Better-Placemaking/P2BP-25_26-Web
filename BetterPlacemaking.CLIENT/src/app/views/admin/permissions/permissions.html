@@ -2,29 +2,92 @@
   <p-toast key="permissions" position="bottom-right"></p-toast>
 
   <p-table
-    [value]="users"
+    [value]="filteredUsers"
     class="rounded-lg overflow-hidden"
     [paginator]="true"
     [rows]="10"
     [loading]="isLoading"
   >
     <ng-template #caption>
-      <div class="w-full flex flex-col md:flex-row justify-between md:items-center gap-2">
-        <div class="flex items-center gap-3">
-          <span class="font-semibold text-xl">Project Access Permissions</span>
-          <span class="text-muted-color text-xl">{{ users.length || 0 }}</span>
+      <div class="w-full flex flex-col gap-3">
+        <div class="flex flex-col md:flex-row justify-between md:items-center gap-2">
+          <div class="flex items-center gap-3">
+            <span class="font-semibold text-xl">Project Access Permissions</span>
+            <span class="text-muted-color text-xl">{{ filteredUsers.length || 0 }}</span>
+          </div>
+          <span class="text-sm text-muted-color">
+            Assign each user a role per project.
+          </span>
         </div>
-        <span class="text-sm text-muted-color">
-          Assign each user a role per project.
-        </span>
+
+        <div class="flex flex-col md:flex-row flex-wrap items-start md:items-center gap-2">
+          <p-iconfield>
+            <p-inputicon styleClass="pi pi-search" />
+            <input
+              pInputText
+              type="text"
+              placeholder="Search"
+              [(ngModel)]="searchText"
+              (ngModelChange)="onSearchChange()"
+              class="w-64"
+            />
+          </p-iconfield>
+
+          <p-select
+            [options]="projectFilterOptions"
+            [(ngModel)]="filterProject"
+            (ngModelChange)="onFilterChange()"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="All projects"
+            [showClear]="true"
+            class="w-48"
+          ></p-select>
+
+          <p-select
+            [options]="roleFilterOptions"
+            [(ngModel)]="filterRole"
+            (ngModelChange)="onFilterChange()"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="All roles"
+            [showClear]="true"
+            class="w-48"
+          ></p-select>
+
+          <p-toggleButton
+            [(ngModel)]="showUnassignedOnly"
+            (onChange)="onFilterChange()"
+            [onLabel]="'Unassigned'"
+            [offLabel]="'Unassigned'"
+            [onIcon]="'pi pi-check'"
+            [offIcon]="'pi pi-filter'"
+            styleClass="text-sm"
+          ></p-toggleButton>
+
+          <p-button
+            *ngIf="hasActiveFilters"
+            label="Clear"
+            icon="pi pi-times"
+            severity="secondary"
+            [text]="true"
+            (onClick)="clearFilters()"
+          ></p-button>
+        </div>
       </div>
     </ng-template>
 
     <ng-template pTemplate="header">
       <tr>
-        <th>User</th>
+        <th class="cursor-pointer select-none" (click)="toggleSort('name')">
+          User
+          <i *ngIf="sortField === 'name'" [class]="sortAsc ? 'pi pi-sort-up' : 'pi pi-sort-down'" class="ml-1 text-xs"></i>
+        </th>
         <th>Email</th>
-        <th>Assigned Projects</th>
+        <th class="cursor-pointer select-none" (click)="toggleSort('assignedCount')">
+          Assigned Projects
+          <i *ngIf="sortField === 'assignedCount'" [class]="sortAsc ? 'pi pi-sort-up' : 'pi pi-sort-down'" class="ml-1 text-xs"></i>
+        </th>
         <th>Current Access</th>
         <th class="w-40">Actions</th>
       </tr>
@@ -45,6 +108,14 @@
             class="p-button-sm"
             (onClick)="openManageDialog(user)"
           ></p-button>
+        </td>
+      </tr>
+    </ng-template>
+
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="5" class="text-center text-sm text-muted-color p-4">
+          No users match the current filters.
         </td>
       </tr>
     </ng-template>

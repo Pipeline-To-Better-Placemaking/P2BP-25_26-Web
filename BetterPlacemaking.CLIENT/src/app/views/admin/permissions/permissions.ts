@@ -7,6 +7,10 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
+import { InputTextModule } from 'primeng/inputtext';
+import { IconFieldModule } from 'primeng/iconfield';
+import { InputIconModule } from 'primeng/inputicon';
+import { ToggleButtonModule } from 'primeng/togglebutton';
 import { forkJoin } from 'rxjs';
 import { MessageService } from 'primeng/api';
 
@@ -21,6 +25,7 @@ import {
 
 interface UserRow {
   id: string;
+  firstName: string;
   name: string;
   email: string;
   assignedCount: number;
@@ -43,12 +48,17 @@ interface SelectOption {
     ButtonModule,
     TagModule,
     ToastModule,
+    InputTextModule,
+    IconFieldModule,
+    InputIconModule,
+    ToggleButtonModule,
   ],
   templateUrl: './permissions.html',
   styleUrls: ['./permissions.scss'],
 })
 export class Permissions implements OnInit {
   users: UserRow[] = [];
+  filteredUsers: UserRow[] = [];
   projects: ProjectDto[] = [];
   roleOptions: SelectOption[] = [];
   roleOptionsWithNone: SelectOption[] = [];
@@ -56,6 +66,16 @@ export class Permissions implements OnInit {
   isDialogVisible = false;
   isLoading = false;
   isSaving = false;
+
+  searchText = '';
+  filterProject: string | null = null;
+  filterRole: string | null = null;
+  showUnassignedOnly = false;
+  sortField: 'name' | 'assignedCount' = 'name';
+  sortAsc = true;
+
+  projectFilterOptions: SelectOption[] = [];
+  roleFilterOptions: SelectOption[] = [];
 
   private assignmentByUser = new Map<string, Map<string, string>>();
   draftProjectRoles: Record<string, string | null> = {};
@@ -103,6 +123,7 @@ export class Permissions implements OnInit {
 
             return {
               id: userId,
+              firstName: (u.FirstName ?? '').trim(),
               name: this.pickName(u),
               email: u.Email ?? '',
               assignedCount: this.countAssignedProjects(userId),
@@ -115,6 +136,12 @@ export class Permissions implements OnInit {
           { label: 'No Access', value: '' },
           ...this.roleOptions,
         ];
+        this.roleFilterOptions = [...this.roleOptions];
+        this.projectFilterOptions = projects
+          .filter((p) => !!p.Id)
+          .map((p) => ({ label: p.Title || p.Id, value: p.Id }));
+
+        this.applyFilters();
       },
       error: () => {
         this.messageService.add({
@@ -187,6 +214,99 @@ export class Permissions implements OnInit {
       names.push(`+${projectRoles.size - names.length} more`);
 
     return names.join(', ');
+  }
+
+  applyFilters(): void {
+    const search = this.searchText.toLowerCase().trim();
+
+    let result = this.users.filter((user) => {
+      // Text search: name, email, or project titles
+      if (search) {
+        const nameMatch = user.name.toLowerCase().includes(search);
+        const emailMatch = user.email.toLowerCase().includes(search);
+        const projectRoles = this.assignmentByUser.get(user.id);
+        let projectMatch = false;
+        if (projectRoles) {
+          for (const project of this.projects) {
+            const pid = project.Id?.trim();
+            if (pid && projectRoles.has(pid)) {
+              const title = (project.Title || '').toLowerCase();
+              if (title.includes(search)) {
+                projectMatch = true;
+                break;
+              }
+            }
+          }
+        }
+        if (!nameMatch && !emailMatch && !projectMatch) return false;
+      }
+
+      // Filter by project + role (combined when both active)
+      const projectRoles = this.assignmentByUser.get(user.id);
+      if (this.filterProject && this.filterRole) {
+        const roleOnProject = projectRoles?.get(this.filterProject);
+        if (roleOnProject !== this.filterRole) return false;
+      } else if (this.filterProject) {
+        if (!projectRoles?.has(this.filterProject)) return false;
+      } else if (this.filterRole) {
+        if (!projectRoles) return false;
+        let hasRole = false;
+        for (const role of projectRoles.values()) {
+          if (role === this.filterRole) { hasRole = true; break; }
+        }
+        if (!hasRole) return false;
+      }
+
+      // Unassigned only
+      if (this.showUnassignedOnly && user.assignedCount > 0) return false;
+
+      return true;
+    });
+
+    // Sort
+    result.sort((a, b) => {
+      let cmp: number;
+      if (this.sortField === 'name') {
+        cmp = a.firstName.localeCompare(b.firstName);
+      } else {
+        cmp = a.assignedCount - b.assignedCount;
+      }
+      return this.sortAsc ? cmp : -cmp;
+    });
+
+    this.filteredUsers = result;
+  }
+
+  onSearchChange(): void {
+    this.applyFilters();
+  }
+
+  onFilterChange(): void {
+    this.applyFilters();
+  }
+
+  toggleSort(field: 'name' | 'assignedCount'): void {
+    if (this.sortField === field) {
+      this.sortAsc = !this.sortAsc;
+    } else {
+      this.sortField = field;
+      this.sortAsc = true;
+    }
+    this.applyFilters();
+  }
+
+  clearFilters(): void {
+    this.searchText = '';
+    this.filterProject = null;
+    this.filterRole = null;
+    this.showUnassignedOnly = false;
+    this.sortField = 'name';
+    this.sortAsc = true;
+    this.applyFilters();
+  }
+
+  get hasActiveFilters(): boolean {
+    return !!this.searchText || !!this.filterProject || !!this.filterRole || this.showUnassignedOnly;
   }
 
   openManageDialog(user: UserRow): void {
@@ -266,6 +386,7 @@ export class Permissions implements OnInit {
           ? { ...user, assignedCount: newMap.size }
           : user);
 
+        this.applyFilters();
         this.closeManageDialog();
 
         this.messageService.add({

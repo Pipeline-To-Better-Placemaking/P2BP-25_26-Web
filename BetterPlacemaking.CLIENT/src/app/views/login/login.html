@@ -106,4 +106,13 @@
 			</form>
 		</ng-template>
 	</p-card>
+
+	<p-button
+		[icon]="themeService.isDark ? 'pi pi-sun' : 'pi pi-moon'"
+		[rounded]="true"
+		[text]="true"
+		severity="secondary"
+		(onClick)="themeService.toggleDarkMode()"
+		class="fixed bottom-4 right-4"
+	/>
 </div>
