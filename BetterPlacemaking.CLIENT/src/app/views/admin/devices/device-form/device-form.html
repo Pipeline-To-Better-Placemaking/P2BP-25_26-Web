@@ -2,8 +2,17 @@
 	<p-panel header="Device Details">
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class="flex flex-col gap-1">
-				<label for="project-id" class="font-semibold">Project Id</label>
-				<input id="project-id" pInputText formControlName="ProjectId" />
+				<label for="project-id" class="font-semibold">Project</label>
+				<p-select
+					inputId="project-id"
+					[options]="projectOptions"
+					formControlName="ProjectId"
+					optionLabel="label"
+					optionValue="value"
+					placeholder="Select a project"
+					[showClear]="true"
+					class="w-full">
+				</p-select>
 			</div>
 			<div class="flex flex-col gap-1">
 				<label for="device-name" class="font-semibold">Name</label>

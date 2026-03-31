@@ -1,30 +1,71 @@
 <div class="w-full flex flex-col content-background rounded-lg">
-  <p-table [value]="devices" class="rounded-lg overflow-hidden">
+  <p-table [value]="filteredDevices" class="rounded-lg overflow-hidden">
     <ng-template #caption>
-      <div class="w-full flex justify-between items-center">
-        <div class="flex items-center gap-3">
-          <span class="font-semibold text-xl">Devices</span>
-          <span class="text-muted-color text-xl">{{ devices.length || 0 }}</span>
+      <div class="w-full flex flex-col gap-3">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <span class="font-semibold text-xl">Devices</span>
+            <span class="text-muted-color text-xl">{{ filteredDevices.length || 0 }}</span>
+          </div>
+          <p-button label="Add" icon="pi pi-plus" (onClick)="addDevice()"> </p-button>
         </div>
-        <p-button label="Add" icon="pi pi-plus" (onClick)="addDevice()"> </p-button>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <p-select
+            [options]="projectFilterOptions"
+            [(ngModel)]="filterProject"
+            (ngModelChange)="onFilterChange()"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="All projects"
+            [showClear]="true"
+            class="w-48">
+          </p-select>
+
+          <p-toggleButton
+            [(ngModel)]="showUnassignedOnly"
+            (onChange)="onFilterChange()"
+            [onLabel]="'Unassigned'"
+            [offLabel]="'Unassigned'"
+            [onIcon]="'pi pi-check'"
+            [offIcon]="'pi pi-filter'"
+            styleClass="text-sm">
+          </p-toggleButton>
+
+          <p-button
+            *ngIf="hasActiveFilters"
+            label="Clear"
+            icon="pi pi-times"
+            severity="secondary"
+            [text]="true"
+            (onClick)="clearFilters()">
+          </p-button>
+        </div>
       </div>
     </ng-template>
 
     <ng-template #header>
       <tr>
-        <th style="width: 3rem"></th>
-        <th>Id</th>
         <th>Device</th>
         <th>Project</th>
+        <th>Id</th>
         <th>Last Heartbeat</th>
         <th>Cameras Enabled</th>
         <th>Tracking</th>
         <th>Heartbeat Interval</th>
+        <th style="width: 3rem"></th>
       </tr>
     </ng-template>
 
     <ng-template #body let-device>
       <tr>
+        <td>{{ device.Name }}</td>
+        <td>{{ getProjectName(device.ProjectId) }}</td>
+        <td>{{ device.Id }}</td>
+        <td>{{ formatLastHeartbeat(device) }}</td>
+        <td>{{ countCamerasEnabled(device) }}</td>
+        <td>{{ device?.Config?.Tracking?.Enabled ? 'Yes' : 'No' }}</td>
+        <td>{{ device?.Config?.HeartbeatInterval ? device.Config.HeartbeatInterval : '—' }}</td>
         <td>
           <p-button
             icon="pi pi-ellipsis-v"
@@ -33,13 +74,6 @@
           >
           </p-button>
         </td>
-        <td>{{ device.Id }}</td>
-        <td>{{ device.Name }}</td>
-        <td>{{ device.ProjectId }}</td>
-        <td>{{ formatLastHeartbeat(device) }}</td>
-        <td>{{ countCamerasEnabled(device) }}</td>
-        <td>{{ device?.Config?.Tracking?.Enabled ? 'Yes' : 'No' }}</td>
-        <td>{{ device?.Config?.HeartbeatInterval ? device.Config.HeartbeatInterval : '—' }}</td>
       </tr>
     </ng-template>
   </p-table>

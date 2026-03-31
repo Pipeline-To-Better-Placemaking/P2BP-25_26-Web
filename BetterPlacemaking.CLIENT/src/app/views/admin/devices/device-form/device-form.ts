@@ -6,8 +6,10 @@ import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
 import { PanelModule } from 'primeng/panel';
+import { SelectModule } from 'primeng/select';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { DeviceDto } from '../../../../models/DeviceDto';
+import { ProjectService } from '../../../../services/project-service';
 import {
   CameraConfig,
   CharucoBoardConfig,
@@ -66,7 +68,7 @@ type DeviceFormValue = {
 
 @Component({
   selector: 'app-device-form',
-  imports: [CommonModule, ReactiveFormsModule, ButtonModule, InputTextModule, InputNumberModule, CheckboxModule, PanelModule],
+  imports: [CommonModule, ReactiveFormsModule, ButtonModule, InputTextModule, InputNumberModule, CheckboxModule, PanelModule, SelectModule],
   templateUrl: './device-form.html',
   styleUrl: './device-form.scss',
 })
@@ -76,10 +78,13 @@ export class DeviceForm implements OnInit {
   @Output() deviceChange = new EventEmitter<DeviceDto>();
   private originalDevice: DeviceDto | null = null;
 
+  projectOptions: { label: string; value: string }[] = [];
+
   constructor(
     private readonly fb: FormBuilder,
     private readonly ref: DynamicDialogRef,
     private readonly config: DynamicDialogConfig,
+    private readonly projectService: ProjectService,
   ) {}
 
   ngOnInit(): void {
@@ -89,8 +94,16 @@ export class DeviceForm implements OnInit {
     this.form = this.fb.group({
       Id: [existing?.Id ?? ''],
       Name: [existing?.Name ?? '', Validators.required],
-      ProjectId: [existing?.ProjectId ?? ''],
+      ProjectId: [existing?.ProjectId ?? null],
       Config: this.createConfigGroup(existing?.Config),
+    });
+
+    this.projectService.getProjects().subscribe({
+      next: (projects) => {
+        this.projectOptions = projects
+          .filter(p => !!p.Id)
+          .map(p => ({ label: p.Title || p.Id, value: p.Id }));
+      },
     });
   }
 
