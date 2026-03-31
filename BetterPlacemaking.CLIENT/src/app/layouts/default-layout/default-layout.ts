@@ -15,6 +15,7 @@ import {
   faUserShield,
   faFolderOpen,
   faMicrochip,
+  faDownload,
 } from '@fortawesome/free-solid-svg-icons';
 import { MenuItem } from 'primeng/api';
 import { ThemeService } from '../../services/theme-service';
@@ -22,6 +23,7 @@ import { ProjectService } from '../../services/project-service';
 import { filter, startWith, Subscription } from 'rxjs';
 import { NgIf } from '@angular/common';
 import { AuthService } from '../../services/auth-service';
+import { ExportService } from '../../services/export-service';
 
 @Component({
   selector: 'app-default-layout',
@@ -45,7 +47,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
     private router: Router,
     private route: ActivatedRoute,
     private authService: AuthService,
-    private projectService: ProjectService
+    private projectService: ProjectService,
+    private exportService: ExportService
   ) {}
 
   navItems: MenuItem[] = [];
@@ -125,6 +128,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
             { label: '3D Model', faIcon: faCube, routerLink: `${base}/model` },
             { label: 'Vision', faIcon: faEye, routerLink: `${base}/vision` },
             { label: 'Edit Room', faIcon: faPenToSquare, routerLink: `${base}/edit` },
+            { label: 'Export Data', faIcon: faDownload, command: () => this.exportProjectData() },
           ],
         },
       ];
@@ -151,6 +155,12 @@ export class DefaultLayout implements OnInit, OnDestroy {
           ],
         },
       ];
+    }
+  }
+
+  private exportProjectData(): void {
+    if (this.projectId) {
+      this.exportService.exportProjectPdf(this.projectId);
     }
   }
 
