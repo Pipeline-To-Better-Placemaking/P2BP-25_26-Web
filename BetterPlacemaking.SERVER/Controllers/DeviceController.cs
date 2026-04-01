@@ -112,13 +112,10 @@ namespace BetterPlacemaking.Controllers
 
 			try
 			{
-                if (HttpContext.Items["Device"] is not Device device)
+                if (HttpContext.Items["Device"] is not Device device || string.IsNullOrWhiteSpace(device.Id))
                     return Unauthorized("Invalid API key");
 
-				if (string.IsNullOrWhiteSpace(device.Id))
-					return Unauthorized("Invalid device");
-
-				var config = _deviceService.UpdateDeviceHealthReport(device.Id, heartbeat);
+				var config = _deviceService.UpdateDeviceHealthReport(device, heartbeat);
 				if (config == null)
 					return NotFound("Device not found");
 

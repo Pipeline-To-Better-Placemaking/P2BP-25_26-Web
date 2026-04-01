@@ -19,11 +19,18 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         public CharucoBoardConfig? CharucoBoard { get; set; }
 
         [FirestoreProperty]
+        public ArucoLockConfig? ArucoLock { get; set; }
+
+        [FirestoreProperty]
+        public IntrinsicsConfig? Intrinsics { get; set; }
+
+        [FirestoreProperty]
         public int HeartbeatInterval { get; set; }
 
         [FirestoreProperty]
         public string? Version { get; set; }
-        public string? UploadLink {get; set; }
+
+        public string? UploadLink { get; set; }
     }
 
     [FirestoreData]
@@ -59,33 +66,16 @@ namespace BetterPlacemaking.Models.JetsonDTOs
     public class CharucoBoardConfig
     {
         [FirestoreProperty]
-        public CharucoReferencePoints? ReferencePoints { get; set; }
-
-        [FirestoreProperty]
         public CharucoBoardDetails? Board { get; set; }
 
         [FirestoreProperty]
         public bool BeginScanning { get; set; }
-    }
-
-    [FirestoreData]
-    public class CharucoReferencePoints
-    {
-        [FirestoreProperty]
-        public CharucoPoint? P1 { get; set; }
 
         [FirestoreProperty]
-        public CharucoPoint? P2 { get; set; }
-    }
+        public string? Status { get; set; }
 
-    [FirestoreData]
-    public class CharucoPoint
-    {
-        [FirestoreProperty("x")]
-        public int X { get; set; }
-
-        [FirestoreProperty("y")]
-        public int Y { get; set; }
+        [FirestoreProperty]
+        public double? LastRunUnix { get; set; }
     }
 
     [FirestoreData]
@@ -105,5 +95,46 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public string? Dictionary { get; set; }
+    }
+
+    [FirestoreData]
+    public class IntrinsicsConfig
+    {
+        [FirestoreProperty]
+        public bool BeginCalibration { get; set; }
+
+        [FirestoreProperty]
+        public string? ModelId { get; set; }
+
+        [FirestoreProperty]
+        public List<string>? PerUnitOverrideMacs { get; set; }
+
+        [FirestoreProperty]
+        public int MinSightings { get; set; } = 40;
+
+        [FirestoreProperty]
+        public int GridCells { get; set; } = 9;
+    }
+
+    [FirestoreData]
+    public class ArucoLockConfig
+    {
+        [FirestoreProperty]
+        public bool BeginScanning { get; set; }
+
+        [FirestoreProperty]
+        public string ArucoDict { get; set; } = "DICT_4X4_50";
+
+        [FirestoreProperty]
+        public int MinFrames { get; set; } = 10;
+
+        [FirestoreProperty]
+        public double MaxSecondsPerCam { get; set; } = 10.0;
+
+        [FirestoreProperty]
+        public string? Status { get; set; }
+
+        [FirestoreProperty]
+        public double? LastRunUnix { get; set; }
     }
 }

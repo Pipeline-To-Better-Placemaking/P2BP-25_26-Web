@@ -23,7 +23,6 @@ namespace BetterPlacemaking.Models
         public HealthReport? HealthReport { get; set; }
 
         [FirestoreProperty]
-        [JsonIgnore]
         public string? ApiKeyHash { get; set; }
     }
 }

@@ -21,6 +21,7 @@ namespace BetterPlacemaking.Services
         private static readonly TimeSpan GoodApiKeyTtl = TimeSpan.FromDays(7);
 
         private const string CachePrefix = "deviceapikey";
+        private const int DefaultHeartbeatInterval = 10;
 
         private static string ComputeApiKeyHashBase64(string apiKey)
         {
@@ -240,16 +241,20 @@ namespace BetterPlacemaking.Services
             return true;
         }
 
-        public Config? UpdateDeviceHealthReport(string deviceId, HealthReport healthReport)
+        private static string ComputeStableHealthHash(HealthReport report)
         {
-            var docRef = _db.Collection(collectionName).Document(deviceId);
-            var snap = docRef.GetSnapshotAsync().Result;
-            if (!snap.Exists)
+            var stable = new { report.Services, report.Cameras };
+            var json = JsonSerializer.Serialize(stable);
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+            return Convert.ToHexString(bytes)[..16];
+        }
+
+        public Config? UpdateDeviceHealthReport(Device device, HealthReport healthReport)
+        {
+            if (device == null || string.IsNullOrWhiteSpace(device.Id))
                 return null;
 
-            var device = snap.ConvertTo<Device>();
-            if (device == null)
-                return null;
+            var docRef = _db.Collection(collectionName).Document(device.Id);
 
             device.Config ??= new Config();
 
@@ -291,11 +296,76 @@ namespace BetterPlacemaking.Services
             device.Config.TrackingCameras = mergedTracking;
             device.HealthReport = healthReport;
 
-            docRef.UpdateAsync(new Dictionary<string, object>
+            // Skip Firestore write when only noisy fields (Timestamp, System) changed.
+            var stableHashKey = $"healthreport:stable:{device.Id}";
+            var newHash = ComputeStableHealthHash(healthReport);
+            var cachedHash = _cache.GetString(stableHashKey);
+            var baseInterval = device.Config.HeartbeatInterval > 0
+                ? device.Config.HeartbeatInterval
+                : DefaultHeartbeatInterval;
+
+            if (cachedHash != newHash)
             {
-                { nameof(Device.HealthReport), device.HealthReport! },
-                { nameof(Device.Config), device.Config! }
-            }).Wait();
+                docRef.UpdateAsync(new Dictionary<string, object>
+                {
+                    { nameof(Device.HealthReport), device.HealthReport! },
+                    { nameof(Device.Config), device.Config! }
+                }).Wait();
+
+                _cache.SetString(stableHashKey, newHash,
+                    new DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(baseInterval)
+                    });
+            }
+
+            // Always update Redis device cache so next heartbeat auth sees fresh TrackingCameras.
+            if (TryGetCacheSuffixFromHashBase64(device.ApiKeyHash ?? "", out var suffix))
+            {
+                _cache.SetString(
+                    GoodCacheKey(suffix),
+                    JsonSerializer.Serialize(device),
+                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = GoodApiKeyTtl }
+                );
+            }
+
+            // Clear one-shot trigger flags on first delivery.
+            // Snapshot which flags are true before clearing so this response delivers them as true.
+            bool charucoBeginScanning = device.Config.CharucoBoard?.BeginScanning == true;
+            bool arucoBeginScanning = device.Config.ArucoLock?.BeginScanning == true;
+            bool intrinsicsBeginCalibration = device.Config.Intrinsics?.BeginCalibration == true;
+
+            var flagsToClear = new Dictionary<string, object>();
+            if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
+            if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
+            if (intrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
+
+            if (flagsToClear.Count > 0)
+            {
+                docRef.UpdateAsync(flagsToClear).Wait();
+
+                // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
+                if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
+                if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
+                if (device.Config.Intrinsics != null) device.Config.Intrinsics.BeginCalibration = false;
+
+                if (TryGetCacheSuffixFromHashBase64(device.ApiKeyHash ?? "", out var flagSuffix))
+                {
+                    _cache.SetString(
+                        GoodCacheKey(flagSuffix),
+                        JsonSerializer.Serialize(device),
+                        new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = GoodApiKeyTtl }
+                    );
+                }
+
+                // Restore the true values on the return object so the Jetson receives them exactly once.
+                if (charucoBeginScanning && device.Config.CharucoBoard != null)
+                    device.Config.CharucoBoard.BeginScanning = true;
+                if (arucoBeginScanning && device.Config.ArucoLock != null)
+                    device.Config.ArucoLock.BeginScanning = true;
+                if (intrinsicsBeginCalibration && device.Config.Intrinsics != null)
+                    device.Config.Intrinsics.BeginCalibration = true;
+            }
 
             return device.Config;
         }
