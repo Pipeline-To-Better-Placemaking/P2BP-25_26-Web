@@ -8,6 +8,8 @@ import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
+import { DatePickerModule } from 'primeng/datepicker';
+import { SelectModule } from 'primeng/select';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
@@ -27,7 +29,9 @@ interface FrequencyOption {
     CardModule,
     ButtonModule,
     InputTextModule,
-    MessageModule
+    MessageModule,
+    DatePickerModule,
+    SelectModule
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
@@ -39,10 +43,9 @@ export class Scanner implements OnInit {
   public scanning = false;
   public scheduleMessage: string | null = null;
 
-  public scheduledDate = '';
-  public scheduledTime = '';
-  public endDate = '';
-  public endTime = '';
+  public scheduledDateTime: Date | null = null;
+  public endDateTime: Date | null = null;
+
 
   public frequencyOptions: FrequencyOption[] = [
     { name: 'Never', code: 'Never' },
@@ -54,6 +57,7 @@ export class Scanner implements OnInit {
   public selectedFrequency: FrequencyOption | undefined;
   public schedules: ScanScheduleDto[] = [];
   public editingScheduleId: string | null = null;
+  public minEndDate: Date | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -68,9 +72,6 @@ export class Scanner implements OnInit {
     }
   }
 
-  // -----------------------------
-  // Immediate Scan
-  // -----------------------------
   public performScan(): void {
     if (!this.projectId) {
       this.scanMessage = 'No project selected.';
@@ -113,9 +114,6 @@ export class Scanner implements OnInit {
     });
   }
 
-  // -----------------------------
-  // Schedule CRUD
-  // -----------------------------
   private loadSchedules(): void {
     this.scanService.getSchedules(this.projectId).subscribe({
       next: (schedules) => this.schedules = schedules,
@@ -128,33 +126,30 @@ export class Scanner implements OnInit {
       this.scheduleMessage = 'Please select a frequency.';
       return;
     }
-    if (!this.scheduledDate || !this.scheduledTime) {
-      this.scheduleMessage = 'Please select both date and time.';
+
+    if (!this.scheduledDateTime) {
+      this.scheduleMessage = 'Please select a start date and time.';
       return;
     }
+
     if (this.selectedFrequency.code !== 'Never') {
-      if (!this.endDate) {
-        this.scheduleMessage = 'Please select an end date for recurring scans.';
+      if (!this.endDateTime) {
+        this.scheduleMessage = 'Please select an end date and time for recurring scans.';
         return;
       }
-      if (!this.endTime) {
-        this.scheduleMessage = 'Please select an end time for recurring scans.';
-        return;
-      }
-      const start = new Date(`${this.scheduledDate}T${this.scheduledTime}`);
-      const end = new Date(`${this.endDate}T${this.endTime}`);
-      if (end <= start) {
+
+      if (this.endDateTime <= this.scheduledDateTime) {
         this.scheduleMessage = 'End date and time must be after start.';
         return;
       }
     }
 
     const payload: ScanScheduleDto = {
-      StartDate: this.scheduledDate,
-      StartTime: this.scheduledTime,
+      StartDate: this.formatDate(this.scheduledDateTime),
+      StartTime: this.formatTime(this.scheduledDateTime),
       Frequency: this.selectedFrequency.code,
-      EndDate: this.endDate || undefined,
-      EndTime: this.endTime || undefined,
+      EndDate: this.endDateTime ? this.formatDate(this.endDateTime) : undefined,
+      EndTime: this.endDateTime ? this.formatTime(this.endDateTime) : undefined,
     };
 
     if (this.editingScheduleId) {
@@ -189,56 +184,30 @@ export class Scanner implements OnInit {
   }
 
   public editSchedule(schedule: ScanScheduleDto): void {
-    this.scheduledDate = schedule.StartDate;
-    this.scheduledTime = schedule.StartTime;
-    this.endDate = schedule.EndDate || '';
-    this.endTime = schedule.EndTime || '';
+    this.scheduledDateTime = this.combineDateAndTime(schedule.StartDate, schedule.StartTime);
+    this.endDateTime = schedule.EndDate && schedule.EndTime
+      ? this.combineDateAndTime(schedule.EndDate, schedule.EndTime)
+      : null;
+
     this.selectedFrequency = this.frequencyOptions.find(f => f.code === schedule.Frequency);
     this.editingScheduleId = schedule.Id ?? null;
+    this.minEndDate = this.scheduledDateTime;
   }
 
-  // -----------------------------
-  // Date / Time Change Handlers
-  // -----------------------------
-  public onStartDateChange(): void {
-    if (this.endDate && this.scheduledDate) {
-      if (this.endDate < this.scheduledDate) {
-        this.endDate = '';
-        this.endTime = '';
-      } else if (this.endDate === this.scheduledDate && this.endTime && this.scheduledTime) {
-        if (this.endTime <= this.scheduledTime) {
-          this.endTime = '';
-        }
-      }
+  public onStartDateTimeChange(): void {
+    this.minEndDate = this.scheduledDateTime;
+
+    if (this.scheduledDateTime && this.endDateTime && this.endDateTime <= this.scheduledDateTime) {
+      this.endDateTime = null;
     }
   }
 
-  public onStartTimeChange(): void {
-    if (this.endDate && this.scheduledDate && this.endDate === this.scheduledDate) {
-      if (this.endTime && this.scheduledTime && this.endTime <= this.scheduledTime) {
-        this.endTime = '';
-      }
-    }
-  }
-
-  public onEndDateChange(): void {
-    if (this.endDate && this.scheduledDate && this.endDate === this.scheduledDate) {
-      if (this.endTime && this.scheduledTime && this.endTime <= this.scheduledTime) {
-        this.endTime = '';
-      }
-    }
-  }
-
-  // -----------------------------
-  // Helpers
-  // -----------------------------
   private clearForm(): void {
-    this.scheduledDate = '';
-    this.scheduledTime = '';
-    this.endDate = '';
-    this.endTime = '';
+    this.scheduledDateTime = null;
+    this.endDateTime = null;
     this.selectedFrequency = undefined;
     this.editingScheduleId = null;
+    this.minEndDate = null;
   }
 
   public getScheduleFrequencyName(code: string): string {
@@ -246,7 +215,20 @@ export class Scanner implements OnInit {
     return freq ? freq.name : code;
   }
 
-  public getMinEndDate(): string {
-    return this.scheduledDate || '';
+  private formatDate(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatTime(value: Date): string {
+    const hours = String(value.getHours()).padStart(2, '0');
+    const minutes = String(value.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  private combineDateAndTime(dateStr: string, timeStr: string): Date {
+    return new Date(`${dateStr}T${timeStr}`);
   }
 }

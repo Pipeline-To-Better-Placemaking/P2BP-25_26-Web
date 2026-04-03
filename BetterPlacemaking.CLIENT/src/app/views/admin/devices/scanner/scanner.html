@@ -1,6 +1,5 @@
 <div class="lidar-dashboard">
 
-  <!-- Immediate Scan Panel -->
   <div class="p-card shadow-lg rounded-lg overflow-hidden mb-6">
     <p-card header="Immediate Lidar Scan">
       <div class="flex flex-col gap-4">
@@ -15,92 +14,70 @@
 
         <p-message
           *ngIf="scanMessage"
-          [text]="scanMessage"
-          severity="success">
+          [text]="scanMessage">
         </p-message>
+
+
       </div>
     </p-card>
   </div>
 
-  <!-- Schedule Scan Panel -->
   <div class="p-card shadow-lg rounded-lg overflow-hidden">
     <p-card header="Schedule Lidar Scan">
       <div class="flex flex-col gap-4">
 
-        <!-- Date and Time Inputs -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="flex flex-col gap-2">
-            <label for="date" class="font-medium">Pick a date:</label>
-            <input
-              id="date"
-              type="date"
-              [(ngModel)]="scheduledDate"
-              (ngModelChange)="onStartDateChange()"
-              pInputText
-              class="w-full">
+            <label for="startDateTime" class="font-medium">Pick a date and time:</label>
+            <p-datepicker
+              inputId="startDateTime"
+              [(ngModel)]="scheduledDateTime"
+              (ngModelChange)="onStartDateTimeChange()"
+              [showIcon]="true"
+              [showTime]="true"
+              hourFormat="12"
+              appendTo="body"
+              placeholder="Select start date and time"
+              styleClass="w-full">
+            </p-datepicker>
           </div>
 
           <div class="flex flex-col gap-2">
-            <label for="time" class="font-medium">Pick a time:</label>
-            <input
-              id="time"
-              type="time"
-              [(ngModel)]="scheduledTime"
-              (ngModelChange)="onStartTimeChange()"
-              pInputText
-              class="w-full">
+            <label for="frequency" class="font-medium">Frequency:</label>
+            <p-select
+              inputId="frequency"
+              [options]="frequencyOptions"
+              [(ngModel)]="selectedFrequency"
+              optionLabel="name"
+              placeholder="Select Frequency"
+              styleClass="w-full">
+            </p-select>
           </div>
         </div>
 
-        <!-- Frequency Selection -->
-        <div class="flex flex-col gap-2">
-          <label for="frequency" class="font-medium">Frequency:</label>
-          <select
-            id="frequency"
-            [(ngModel)]="selectedFrequency"
-            class="w-full p-inputtext p-component"
-            style="padding: 0.5rem;">
-            <option [ngValue]="undefined" disabled selected>
-              Select Frequency
-            </option>
-            <option *ngFor="let freq of frequencyOptions" [ngValue]="freq">
-              {{ freq.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- End Date / Time (for recurring) -->
         <div
           *ngIf="selectedFrequency && selectedFrequency.code !== 'Never'"
           class="flex flex-col gap-4">
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="flex flex-col gap-2">
-              <label for="endDate" class="font-medium">End date:</label>
-              <input
-                id="endDate"
-                type="date"
-                [(ngModel)]="endDate"
-                (ngModelChange)="onEndDateChange()"
-                [min]="getMinEndDate()"
-                pInputText
-                class="w-full">
-            </div>
-
-            <div class="flex flex-col gap-2">
-              <label for="endTime" class="font-medium">End time:</label>
-              <input
-                id="endTime"
-                type="time"
-                [(ngModel)]="endTime"
-                pInputText
-                class="w-full">
+              <label for="endDateTime" class="font-medium">End date and time:</label>
+              <p-datepicker
+                inputId="endDateTime"
+                [(ngModel)]="endDateTime"
+                [showIcon]="true"
+                [showTime]="true"
+                hourFormat="12"
+                [minDate]="minEndDate"
+                appendTo="body"
+                placeholder="Select end date and time"
+                styleClass="w-full">
+              </p-datepicker>
             </div>
           </div>
 
         </div>
 
-        <!-- Schedule Button -->
         <div class="pt-2">
           <p-button
             [label]="editingScheduleId ? 'Update Schedule' : 'Schedule Scan'"
@@ -110,7 +87,6 @@
           </p-button>
         </div>
 
-        <!-- Message -->
         <div *ngIf="scheduleMessage" class="mt-2">
           <p-message
             [text]="scheduleMessage"
@@ -119,7 +95,6 @@
           </p-message>
         </div>
 
-        <!-- Current Schedules Table -->
         <div *ngIf="schedules.length" class="mt-6">
           <h3 class="text-lg font-semibold mb-3">Scheduled Scans:</h3>
 
@@ -161,7 +136,6 @@
               </tr>
             </tbody>
           </table>
-
         </div>
 
       </div>
