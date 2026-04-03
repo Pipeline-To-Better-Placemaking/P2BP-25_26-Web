@@ -43,24 +43,24 @@ public class TrackEvent
 
 public class TrackObject
 {
-    public string        Cam     { get; set; } = "";
-    public int           Sid     { get; set; }
-    public float[]       Rep     { get; set; } = Array.Empty<float>();
-    public long          TStart  { get; set; }
-    public long          TEnd    { get; set; }
-    public double        X       { get; set; }
-    public double        Y       { get; set; }
+    public string Cam { get; set; } = "";
+    public int Sid { get; set; }
+    public float[] Rep { get; set; } = Array.Empty<float>();
+    public long TStart { get; set; }
+    public long TEnd { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
     public List<TrackEvent> Events { get; set; } = new();
 }
 
 public class FusedIdentity
 {
-    public int               Gid     { get; set; }
-    public float[]           Rep     { get; set; } = Array.Empty<float>();
-    public long              TStart  { get; set; }
-    public long              TEnd    { get; set; }
-    public double            X       { get; set; }
-    public double            Y       { get; set; }
+    public int Gid { get; set; }
+    public float[] Rep { get; set; } = Array.Empty<float>();
+    public long TStart { get; set; }
+    public long TEnd { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
     public List<List<TrackEvent>> Tracks  { get; set; } = new();
     public List<(string Cam, int Sid)> Sources { get; set; } = new();
 }
@@ -68,15 +68,15 @@ public class FusedIdentity
 public class FusionRequest
 {
     public string  InputFilePath { get; set; } = FusionConfig.InputFile;
-    public DateTime? From        { get; set; }
-    public DateTime? To          { get; set; }
+    public DateTime? From { get; set; }
+    public DateTime? To { get; set; }
 }
 
 public class FusionResult
 {
-    public bool   Success { get; set; }
+    public bool Success { get; set; }
     public string Message { get; set; } = "";
-    public object? Data   { get; set; }
+    public object? Data { get; set; }
 }
 
 // ─────────────────────────────────────────────
