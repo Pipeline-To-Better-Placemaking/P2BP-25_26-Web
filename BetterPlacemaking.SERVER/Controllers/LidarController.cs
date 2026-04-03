@@ -33,7 +33,7 @@ public IActionResult GetScans(string projectId)
         {
             try
             {
-                var scans = _lidarService.GetScans();
+                var scans = _lidarService.GetScans(projectId);
                 return Ok(scans);
             }
             catch (Exception)
@@ -47,7 +47,7 @@ public IActionResult GetScan(string projectId, string id)
         {
             try
             {
-                var scan = _lidarService.GetScan(id);
+                var scan = _lidarService.GetScan(projectId, id);
                 if (scan == null)
                     return NotFound();
 
@@ -67,7 +67,7 @@ public IActionResult UpdateScanStatus(string projectId, string id, [FromBody] Up
 
     try
     {
-        var updated = _lidarService.UpdateScanStatus(id, request.Status, request.FileUrl, request.Error);
+        var updated = _lidarService.UpdateScanStatus(projectId, id, request.Status, request.FileUrl, request.Error);
 
         if (!updated)
             return NotFound();
