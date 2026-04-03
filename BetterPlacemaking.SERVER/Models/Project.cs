@@ -15,9 +15,6 @@ namespace BetterPlacemaking.Models
         public string? Description { get; set; }
 
         [FirestoreProperty]
-        public int Size { get; set; }
-
-        [FirestoreProperty]
         public string? Location { get; set; }
     }
 
@@ -25,9 +22,6 @@ namespace BetterPlacemaking.Models
     {
         public string? Title { get; set; }
         public string? Description { get; set; }
-        public int Size { get; set; }
         public string? Location { get; set; }
-
     }
-
 }

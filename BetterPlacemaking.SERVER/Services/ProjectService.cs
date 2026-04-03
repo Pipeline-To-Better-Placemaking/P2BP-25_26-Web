@@ -53,7 +53,6 @@ namespace BetterPlacemaking.Services
             {
                 { "Title", project.Title! },
                 { "Description", project.Description! },
-                { "Size", project.Size },
                 { "Location", project.Location! }
             }).Wait();
 

@@ -18,7 +18,6 @@ namespace BetterPlacemaking.Controllers
             Title = project.Title,
             Description = project.Description,
             Location = project.Location,
-            Size = project.Size,
         };
 
         private static Project FromDto(ProjectDto dto) => new()
@@ -27,7 +26,6 @@ namespace BetterPlacemaking.Controllers
             Title = dto.Title,
             Description = dto.Description,
             Location = dto.Location,
-            Size = dto.Size,
         };
 
         [HttpGet]
@@ -61,7 +59,6 @@ namespace BetterPlacemaking.Controllers
             {
                 Title = request.Title,
                 Description = request.Description,
-                Size = request.Size,
                 Location = request.Location
             };
 

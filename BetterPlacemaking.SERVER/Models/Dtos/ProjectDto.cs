@@ -8,8 +8,6 @@ namespace BetterPlacemaking.Models.Dtos
 
         public string? Description { get; set; }
 
-        public int Size { get; set; }
-
         public string? Location { get; set; }
     }
 }

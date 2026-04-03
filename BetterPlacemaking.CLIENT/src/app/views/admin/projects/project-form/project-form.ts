@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { PanelModule } from 'primeng/panel';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
@@ -10,7 +9,7 @@ import { ProjectDto } from '../../../../models/ProjectDto';
 
 @Component({
   selector: 'app-project-form',
-  imports: [CommonModule, ReactiveFormsModule, ButtonModule, InputTextModule, InputNumberModule, PanelModule],
+  imports: [CommonModule, ReactiveFormsModule, ButtonModule, InputTextModule, PanelModule],
   templateUrl: './project-form.html',
   styleUrl: './project-form.scss',
 })
@@ -37,7 +36,6 @@ export class ProjectForm implements OnInit {
       Title: [existing?.Title ?? '', [Validators.required]],
       Description: [existing?.Description ?? ''],
       Location: [existing?.Location ?? ''],
-      Size: [existing?.Size ?? 0, [Validators.required, Validators.min(0)]],
     });
   }
 
@@ -52,7 +50,6 @@ export class ProjectForm implements OnInit {
       Title: string;
       Description: string;
       Location: string;
-      Size: number;
     };
 
     const project: ProjectDto = {
@@ -61,7 +58,6 @@ export class ProjectForm implements OnInit {
       Title: raw.Title,
       Description: raw.Description,
       Location: raw.Location,
-      Size: raw.Size ?? 0,
     };
 
     this.projectChange.emit(project);

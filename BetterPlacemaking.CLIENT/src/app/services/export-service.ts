@@ -33,7 +33,7 @@ export class ExportService {
       },
       error: () => {
         // Generate with whatever we have
-        this.generatePdf({ Id: projectId, Title: 'Unknown', Description: '', Size: 0, Location: '' }, [], []);
+        this.generatePdf({ Id: projectId, Title: 'Unknown', Description: '', Location: '' }, [], []);
       },
     });
   }
@@ -80,7 +80,6 @@ export class ExportService {
       ['Title', project.Title || '-'],
       ['Description', project.Description || '-'],
       ['Location', project.Location || '-'],
-      ['Size', project.Size ? `${project.Size} sq ft` : '-'],
     ];
 
     for (const [label, value] of projectRows) {
