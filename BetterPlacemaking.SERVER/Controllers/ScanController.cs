@@ -1,3 +1,4 @@
+//scan history / per-project scan records, not the command queue
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

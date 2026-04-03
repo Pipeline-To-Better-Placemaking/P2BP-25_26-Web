@@ -7,77 +7,102 @@ namespace BetterPlacemaking.Services
         private readonly FirestoreDb _db = db;
         private const string collectionName = "scan_requests";
 
-        public object StartScan(string deviceId)
+       public object StartScan(string projectId, string deviceId)
+{
+    if (string.IsNullOrWhiteSpace(projectId))
+        throw new ArgumentException("ProjectId is required.");
+
+    if (string.IsNullOrWhiteSpace(deviceId))
+        throw new ArgumentException("DeviceId is required.");
+
+    var collection = _db.Collection(collectionName);
+    var docRef = collection.Document();
+
+    var scanRequest = new Dictionary<string, object>
+    {
+        { "ScanId", docRef.Id },
+        { "ProjectId", projectId },
+        { "DeviceId", deviceId },
+        { "Status", "requested" },
+        { "Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds() },
+        { "FileUrl", "" },
+        { "Error", "" }
+    };
+
+    docRef.SetAsync(scanRequest).Wait();
+
+    return new
+    {
+        ScanId = docRef.Id,
+        ProjectId = projectId,
+        DeviceId = deviceId,
+        Status = "requested"
+    };
+}
+
+      public List<Dictionary<string, object>> GetScans(string projectId)
+{
+    var response = _db.Collection(collectionName)
+        .WhereEqualTo("ProjectId", projectId)
+        .GetSnapshotAsync()
+        .Result
+        .Documents
+        .Select(doc =>
         {
-            if (string.IsNullOrWhiteSpace(deviceId))
-                throw new ArgumentException("DeviceId is required.");
+            var data = doc.ToDictionary();
+            data["ScanId"] = doc.Id;
+            return data;
+        })
+        .ToList();
 
-            var scanRequest = new Dictionary<string, object>
-            {
-                { "DeviceId", deviceId },
-                { "Status", "requested" },
-                { "Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }
-            };
+    return response;
+}
 
-            var collection = _db.Collection(collectionName);
-            var docRef = collection.Document();
+        public Dictionary<string, object>? GetScan(string projectId, string id)
+{
+    var snap = _db.Collection(collectionName)
+        .Document(id)
+        .GetSnapshotAsync()
+        .Result;
 
-            docRef.SetAsync(scanRequest).Wait();
+    if (!snap.Exists)
+        return null;
 
-            return new
-            {
-                ScanId = docRef.Id,
-                DeviceId = deviceId,
-                Status = "requested"
-            };
-        }
+    var data = snap.ToDictionary();
 
-        public List<Dictionary<string, object>> GetScans()
-        {
-            var response = _db.Collection(collectionName)
-                .GetSnapshotAsync()
-                .Result
-                .Documents
-                .Select(doc => doc.ToDictionary())
-                .ToList();
+    if (!data.TryGetValue("ProjectId", out var storedProjectId) || storedProjectId?.ToString() != projectId)
+        return null;
 
-            return response;
-        }
+    data["ScanId"] = snap.Id;
+    return data;
+}
 
-        public Dictionary<string, object>? GetScan(string id)
-        {
-            var snap = _db.Collection(collectionName)
-                .Document(id)
-                .GetSnapshotAsync()
-                .Result;
+        public bool UpdateScanStatus(string projectId, string id, string status, string? fileUrl = null, string? error = null)
+{
+    var docRef = _db.Collection(collectionName).Document(id);
+    var snap = docRef.GetSnapshotAsync().Result;
 
-            if (!snap.Exists)
-                return null;
+    if (!snap.Exists)
+        return false;
 
-            return snap.ToDictionary();
-        }
+    var data = snap.ToDictionary();
 
-        public bool UpdateScanStatus(string id, string status, string? fileUrl = null)
-        {
-            var docRef = _db.Collection(collectionName).Document(id);
-            var snap = docRef.GetSnapshotAsync().Result;
+    if (!data.TryGetValue("ProjectId", out var storedProjectId) || storedProjectId?.ToString() != projectId)
+        return false;
 
-            if (!snap.Exists)
-                return false;
+    var updates = new Dictionary<string, object>
+    {
+        { "Status", status }
+    };
 
-            var updates = new Dictionary<string, object>
-            {
-                { "Status", status }
-            };
+    if (!string.IsNullOrWhiteSpace(fileUrl))
+        updates["FileUrl"] = fileUrl;
 
-            if (!string.IsNullOrWhiteSpace(fileUrl))
-            {
-                updates["FileUrl"] = fileUrl;
-            }
+    if (!string.IsNullOrWhiteSpace(error))
+        updates["Error"] = error;
 
-            docRef.UpdateAsync(updates).Wait();
-
-            return true;
-        }
+    docRef.UpdateAsync(updates).Wait();
+    return true;
+}
     }
 }
