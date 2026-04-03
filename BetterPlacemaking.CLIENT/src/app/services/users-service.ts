@@ -30,6 +30,19 @@ export type UserProjectRoleAssignmentsUpdateDto = {
   Assignments: ProjectRoleAssignmentDto[];
 };
 
+export type ProjectMemberRoleDto = {
+  UserId?: string;
+  FirstName?: string;
+  LastName?: string;
+  Email?: string;
+  Role?: string;
+};
+
+export type ProjectMemberRoleUpdateDto = {
+  UserId: string;
+  Role: string;
+};
+
 @Injectable({ providedIn: 'root' })
 export class UsersService {
   private readonly baseUrl = environment.apiBaseUrl;
@@ -50,5 +63,13 @@ export class UsersService {
 
   setUserProjectRoleAssignments(payload: UserProjectRoleAssignmentsUpdateDto): Observable<void> {
     return this.http.put<void>(`${this.baseUrl}/api/User/project-roles`, payload);
+  }
+
+  getProjectMemberRoles(projectId: string): Observable<ProjectMemberRoleDto[]> {
+    return this.http.get<ProjectMemberRoleDto[]>(`${this.baseUrl}/api/User/project-roles/project/${projectId}`);
+  }
+
+  setProjectMemberRole(projectId: string, payload: ProjectMemberRoleUpdateDto): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/api/User/project-roles/project/${projectId}`, payload);
   }
 }

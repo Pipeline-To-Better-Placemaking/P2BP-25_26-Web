@@ -124,10 +124,11 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Project',
           items: [
-            { label: 'Dashboard', faIcon: faChartLine, routerLink: `${base}/dashboard` },
-            { label: '3D Model', faIcon: faCube, routerLink: `${base}/model` },
-            { label: 'Vision', faIcon: faEye, routerLink: `${base}/vision` },
-            { label: 'Edit Room', faIcon: faPenToSquare, routerLink: `${base}/edit` },
+            { label: 'Dashboard', faIcon: faChartLine, routerLink: `/${base}/dashboard` },
+            { label: '3D Model', faIcon: faCube, routerLink: `/${base}/model` },
+            { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision` },
+            { label: 'Edit Room', faIcon: faPenToSquare, routerLink: `/${base}/edit` },
+            { label: 'Permissions', faIcon: faUserShield, routerLink: `/${base}/admin/permissions` },
             { label: 'Export Data', faIcon: faDownload, command: () => this.exportProjectData() },
           ],
         },
@@ -136,9 +137,9 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Permissions', faIcon: faUserShield, routerLink: `${base}/admin/permissions` },
-            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `${base}/admin/projects` },
-            { label: 'Devices', faIcon: faMicrochip, routerLink: `${base}/admin/devices` },
+            { label: 'Users', faIcon: faUserShield, routerLink: `/${base}/admin/users` },
+            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `/${base}/admin/projects` },
+            { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/admin/devices` },
           ],
         },
       ];
@@ -149,7 +150,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Permissions', faIcon: faUserShield, routerLink: '/admin/permissions' },
+            { label: 'Users', faIcon: faUserShield, routerLink: '/admin/users' },
             { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: '/admin/projects' },
             { label: 'Devices', faIcon: faMicrochip, routerLink: '/admin/devices' },
           ],

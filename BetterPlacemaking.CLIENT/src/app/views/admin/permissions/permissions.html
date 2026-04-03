@@ -12,58 +12,26 @@
       <div class="w-full flex flex-col gap-3">
         <div class="flex flex-col md:flex-row justify-between md:items-center gap-2">
           <div class="flex items-center gap-3">
-            <span class="font-semibold text-xl">Project Access Permissions</span>
+            <span class="font-semibold text-xl">Users</span>
             <span class="text-muted-color text-xl">{{ filteredUsers.length || 0 }}</span>
           </div>
           <span class="text-sm text-muted-color">
-            Assign each user a role per project.
+            View registered users and their assigned project counts.
           </span>
         </div>
 
-        <div class="flex flex-col md:flex-row flex-wrap items-start md:items-center gap-2">
+        <div class="flex flex-col md:flex-row items-start md:items-center gap-2">
           <p-iconfield>
             <p-inputicon styleClass="pi pi-search" />
             <input
               pInputText
               type="text"
-              placeholder="Search"
+              placeholder="Search name or email"
               [(ngModel)]="searchText"
               (ngModelChange)="onSearchChange()"
               class="w-64"
             />
           </p-iconfield>
-
-          <p-select
-            [options]="projectFilterOptions"
-            [(ngModel)]="filterProject"
-            (ngModelChange)="onFilterChange()"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="All projects"
-            [showClear]="true"
-            class="w-48"
-          ></p-select>
-
-          <p-select
-            [options]="roleFilterOptions"
-            [(ngModel)]="filterRole"
-            (ngModelChange)="onFilterChange()"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="All roles"
-            [showClear]="true"
-            class="w-48"
-          ></p-select>
-
-          <p-toggleButton
-            [(ngModel)]="showUnassignedOnly"
-            (onChange)="onFilterChange()"
-            [onLabel]="'Unassigned'"
-            [offLabel]="'Unassigned'"
-            [onIcon]="'pi pi-check'"
-            [offIcon]="'pi pi-filter'"
-            styleClass="text-sm"
-          ></p-toggleButton>
 
           <p-button
             *ngIf="hasActiveFilters"
@@ -88,8 +56,6 @@
           Assigned Projects
           <i *ngIf="sortField === 'assignedCount'" [class]="sortAsc ? 'pi pi-sort-up' : 'pi pi-sort-down'" class="ml-1 text-xs"></i>
         </th>
-        <th>Current Access</th>
-        <th class="w-40">Actions</th>
       </tr>
     </ng-template>
 
@@ -100,87 +66,15 @@
         <td>
           <p-tag [value]="user.assignedCount + ' project(s)'" severity="info"></p-tag>
         </td>
-        <td class="text-sm text-muted-color">{{ getUserProjectSummary(user.id) }}</td>
-        <td>
-          <p-button
-            label="Manage"
-            icon="pi pi-shield"
-            class="p-button-sm"
-            (onClick)="openManageDialog(user)"
-          ></p-button>
-        </td>
       </tr>
     </ng-template>
 
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="5" class="text-center text-sm text-muted-color p-4">
+        <td colspan="3" class="text-center text-sm text-muted-color p-4">
           No users match the current filters.
         </td>
       </tr>
     </ng-template>
   </p-table>
-
-  <p-dialog
-    [(visible)]="isDialogVisible"
-    [modal]="true"
-    [dismissableMask]="true"
-    [draggable]="false"
-    [resizable]="false"
-    [style]="{ width: 'min(960px, 96vw)' }"
-    [header]="selectedUser ? ('Manage Access - ' + selectedUser.name) : 'Manage Access'"
-    (onHide)="closeManageDialog()"
-  >
-    <div class="flex flex-col gap-4">
-      <div class="text-sm text-muted-color">
-        Set one role per project. Select No Access to remove project membership.
-      </div>
-
-      <div class="max-h-[58vh] overflow-auto border border-surface rounded-lg">
-        <table class="w-full text-sm">
-          <thead class="bg-surface-100 dark:bg-surface-800 sticky top-0 z-10">
-            <tr>
-              <th class="text-left p-3">Project</th>
-              <th class="text-left p-3 w-80">Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let project of projects; trackBy: trackByProjectId" class="border-t border-surface-200 dark:border-surface-700">
-              <td class="p-3 align-top">
-                <div class="font-medium">{{ project.Title || project.Id }}</div>
-                <div class="text-xs text-muted-color">{{ project.Description || 'No description' }}</div>
-              </td>
-              <td class="p-3">
-                <p-select
-                  [options]="roleOptionsWithNone"
-                  [ngModel]="getDraftRole(project.Id || '')"
-                  (ngModelChange)="setDraftRole(project.Id || '', $event)"
-                  optionLabel="label"
-                  optionValue="value"
-                  appendTo="body"
-                  placeholder="Select role"
-                  class="w-full"
-                ></p-select>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="flex justify-end gap-2 pt-2">
-        <p-button
-          label="Cancel"
-          severity="secondary"
-          [outlined]="true"
-          (onClick)="closeManageDialog()"
-        ></p-button>
-        <p-button
-          label="Save Roles"
-          icon="pi pi-check"
-          [loading]="isSaving"
-          (onClick)="saveUserPermissions()"
-        ></p-button>
-      </div>
-    </div>
-  </p-dialog>
 </div>
