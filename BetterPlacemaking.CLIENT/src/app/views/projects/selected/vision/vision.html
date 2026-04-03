@@ -1,0 +1,205 @@
+<div class="p-4 flex flex-col gap-4">
+
+  <!-- Recommended action bar -->
+  <p-message *ngIf="recommendedAction" severity="warn" [text]="recommendedAction" styleClass="w-full" />
+
+  <!-- Stat bar -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <p-card styleClass="h-full">
+      <div class="text-sm text-muted-color">Cameras Ready</div>
+      <div class="text-2xl font-bold mt-1">
+        <span [class.text-green-500]="statCamerasReady === allCameras.length && allCameras.length > 0"
+              [class.text-yellow-500]="statCamerasReady > 0 && statCamerasReady < allCameras.length"
+              [class.text-red-500]="statCamerasReady === 0">
+          {{ statCamerasReady }}
+        </span>
+        <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
+      </div>
+      <div class="text-xs text-muted-color mt-1">Fully calibrated</div>
+    </p-card>
+
+    <p-card styleClass="h-full">
+      <div class="text-sm text-muted-color">Intrinsics Done</div>
+      <div class="text-2xl font-bold mt-1">
+        <span [class.text-green-500]="statIntrinsicsDone === allCameras.length && allCameras.length > 0"
+              [class.text-yellow-500]="statIntrinsicsDone > 0 && statIntrinsicsDone < allCameras.length"
+              [class.text-red-500]="statIntrinsicsDone === 0">
+          {{ statIntrinsicsDone }}
+        </span>
+        <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
+      </div>
+      <div class="text-xs text-muted-color mt-1">Lens distortion calibrated</div>
+    </p-card>
+
+    <p-card styleClass="h-full">
+      <div class="text-sm text-muted-color">Homographies</div>
+      <div class="text-2xl font-bold mt-1">
+        <span class="text-muted-color">N/A</span>
+        <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
+      </div>
+      <div class="text-xs text-muted-color mt-1">Pixel → world mapping</div>
+    </p-card>
+
+    <p-card styleClass="h-full">
+      <div class="text-sm text-muted-color">ArUco Lock</div>
+      <div class="text-2xl font-bold mt-1">
+        <span [class.text-green-500]="statArUcoLocked" [class.text-red-500]="!statArUcoLocked">
+          {{ statArUcoLocked ? 'Locked' : 'Unlocked' }}
+        </span>
+      </div>
+      <div class="text-xs text-muted-color mt-1">Origin established</div>
+    </p-card>
+  </div>
+
+  <!-- Cameras + Devices row -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+
+    <!-- Cameras panel -->
+    <p-panel
+      [header]="camsNeedingAttention > 0 ? 'Cameras (' + camsNeedingAttention + ' need attention)' : 'Cameras'"
+      [toggleable]="true">
+      <div *ngIf="loading" class="text-muted-color text-sm py-4 text-center">Loading cameras...</div>
+
+      <div *ngIf="!loading && allCameras.length === 0" class="text-muted-color text-sm py-4 text-center">
+        No cameras reported. Ensure devices are online.
+      </div>
+
+      <div *ngIf="!loading && allCameras.length > 0" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4 gap-3">
+        <div
+          *ngFor="let cam of allCameras"
+          class="border-l-4 rounded-lg p-3 cursor-pointer hover:opacity-90 transition-opacity bg-surface-100 dark:bg-surface-800"
+          [ngClass]="cameraStatusClass(cam)"
+          (click)="openCameraModal(cam)">
+          <div class="flex justify-between items-start mb-2">
+            <div class="min-w-0">
+              <div class="font-semibold text-sm truncate">{{ cam.nickname || 'Camera ' + cam.index }}</div>
+              <div class="text-xs text-muted-color font-mono truncate">{{ cam.mac }}</div>
+            </div>
+            <span class="w-2 h-2 rounded-full mt-1 flex-shrink-0 ml-1"
+                  [class.bg-green-500]="cam.info.Enabled"
+                  [class.bg-red-500]="!cam.info.Enabled"></span>
+          </div>
+          <div class="text-xs text-muted-color mb-2">{{ cam.info.Ip }}</div>
+          <div class="flex gap-1">
+            <p-tag [severity]="intrinsicsSeverity(cam)" value="I"
+                   pTooltip="Intrinsics" tooltipPosition="bottom"
+                   styleClass="flex-1 justify-center text-xs cursor-pointer" />
+            <p-tag severity="secondary" value="H"
+                   pTooltip="Homography (N/A)" tooltipPosition="bottom"
+                   styleClass="flex-1 justify-center text-xs cursor-pointer" />
+            <p-tag severity="secondary" value="A"
+                   pTooltip="ArUco Lock (device-level)" tooltipPosition="bottom"
+                   styleClass="flex-1 justify-center text-xs cursor-pointer" />
+          </div>
+        </div>
+      </div>
+    </p-panel>
+
+    <!-- Devices panel -->
+    <p-panel header="Devices" [toggleable]="true">
+      <div *ngIf="loading" class="text-muted-color text-sm py-4 text-center">Loading devices...</div>
+
+      <div *ngIf="!loading && devices.length === 0" class="text-muted-color text-sm py-4 text-center">
+        No devices assigned to this project.
+      </div>
+
+      <div *ngIf="!loading && devices.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div
+          *ngFor="let device of devices"
+          class="border-l-4 rounded-lg p-3 cursor-pointer hover:opacity-90 transition-opacity bg-surface-100 dark:bg-surface-800"
+          [class.border-green-500]="isOnline(device)"
+          [class.border-red-500]="!isOnline(device)"
+          (click)="openDeviceModal(device)">
+          <div class="flex justify-between items-start mb-2">
+            <div class="font-semibold text-sm">{{ device.Name || 'Unnamed Device' }}</div>
+            <p-tag [severity]="isOnline(device) ? 'success' : 'danger'"
+                   [value]="isOnline(device) ? 'Online' : 'Offline'"
+                   styleClass="text-xs" />
+          </div>
+          <div class="text-xs text-muted-color mb-3">Last seen: {{ formatLastSeen(device) }}</div>
+          <div class="flex gap-4 text-xs text-muted-color">
+            <span>
+              <span class="font-semibold text-color">{{ device.HealthReport?.System?.Gpu?.UtilizationPct ?? '—' }}</span>% GPU
+            </span>
+            <span>
+              <span class="font-semibold text-color">{{ device.HealthReport?.System?.Memory?.UsedMb ?? '—' }}</span> MB RAM
+            </span>
+            <span>
+              <span class="font-semibold text-color">{{ camerasForDevice(device) }}</span> cam{{ camerasForDevice(device) !== 1 ? 's' : '' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </p-panel>
+  </div>
+
+  <!-- Board Library + Map row -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+
+    <!-- Board Library -->
+    <p-panel header="Board Library" [toggleable]="true">
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="text-sm text-muted-color">Saved boards are user-scoped and reusable across projects.</div>
+          <p-button
+            label="Generate New Board"
+            icon="pi pi-plus"
+            severity="secondary"
+            (onClick)="openBoardGenerateModal()"
+            pTooltip="Generate a ChArUco or ArUco board for printing"
+            tooltipPosition="top" />
+        </div>
+
+        <div *ngIf="boardLibraryLoading" class="text-muted-color text-sm py-3 text-center">Loading board library...</div>
+
+        <p-message
+          *ngIf="boardLibraryError"
+          severity="error"
+          text="Failed to load board library."
+          styleClass="w-full" />
+
+        <div *ngIf="!boardLibraryLoading && !boardLibraryError && boardLibrary.length === 0" class="text-muted-color text-sm py-4 text-center">
+          No saved boards yet. Generate one and click Save to Library.
+        </div>
+
+        <div *ngIf="!boardLibraryLoading && boardLibrary.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div
+            *ngFor="let board of boardLibrary"
+            class="border rounded-lg p-3 cursor-pointer hover:opacity-90 transition-opacity bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700"
+            (click)="openBoardDetailModal(board)">
+
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="font-semibold text-sm truncate">{{ board.Nickname || 'Untitled Board' }}</div>
+              <p-tag [severity]="board.Type === 'charuco' ? 'info' : 'contrast'" [value]="board.Type | uppercase" styleClass="text-xs" />
+            </div>
+
+            <div class="text-xs text-muted-color mb-2">{{ board.Dictionary }}</div>
+
+            <div class="text-xs text-muted-color mb-2" *ngIf="board.Type === 'charuco'">
+              {{ board.Cols }} x {{ board.Rows }} grid • {{ board.SquareSize }} {{ board.Units }} square
+            </div>
+
+            <div class="text-xs text-muted-color mb-2" *ngIf="board.Type === 'aruco'">
+              Marker #{{ board.MarkerId ?? 0 }} • {{ board.MarkerSize }} {{ board.Units }}
+            </div>
+
+            <div class="rounded border border-surface-200 dark:border-surface-700 bg-white p-2 overflow-hidden h-28 flex items-center justify-center">
+              <img [src]="boardPreviewUrl(board.PreviewSvg)" alt="Board preview"
+                   class="max-h-full max-w-full h-auto w-auto object-contain" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </p-panel>
+
+    <!-- Top-Down Map -->
+    <p-panel header="Top-Down Map View" [toggleable]="true">
+      <div class="border-2 border-dashed rounded-lg p-10 text-center text-muted-color">
+        <i class="pi pi-map text-4xl opacity-30 block mb-3"></i>
+        <div class="font-semibold opacity-50">Coming Soon</div>
+        <div class="text-xs opacity-30 mt-1">Puzzle-piece camera layout system in development</div>
+      </div>
+    </p-panel>
+  </div>
+
+</div>

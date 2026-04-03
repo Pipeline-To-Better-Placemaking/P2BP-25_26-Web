@@ -82,3 +82,41 @@ body {
 	background-size: 40px 40px, 40px 40px;
 	opacity: 0.6;
 }
+
+/* Compact PrimeNG number stepper for short integer values (e.g., 2-3 digits). */
+.bp-compact-stepper.p-inputnumber {
+	display: inline-flex;
+	width: fit-content;
+	max-width: 100%;
+}
+
+.bp-compact-stepper.p-inputnumber .p-inputnumber-input {
+	width: 3.25rem;
+	min-width: 3.25rem;
+	text-align: center;
+	padding-inline: 0.35rem;
+}
+
+.bp-compact-stepper.p-inputnumber .p-inputnumber-button {
+	width: 1.9rem;
+	min-width: 1.9rem;
+}
+
+/* Slightly wider variant for short numeric steppers that felt too cramped. */
+.bp-stepper-medium.p-inputnumber {
+	display: inline-flex;
+	width: fit-content;
+	max-width: 100%;
+}
+
+.bp-stepper-medium.p-inputnumber .p-inputnumber-input {
+	width: 3.75rem;
+	min-width: 3.75rem;
+	text-align: center;
+	padding-inline: 0.4rem;
+}
+
+.bp-stepper-medium.p-inputnumber .p-inputnumber-button {
+	width: 2rem;
+	min-width: 2rem;
+}

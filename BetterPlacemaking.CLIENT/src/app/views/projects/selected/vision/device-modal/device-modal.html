@@ -1,0 +1,133 @@
+<div class="flex flex-col gap-4 p-1">
+
+  <!-- System Health (always visible) -->
+  <div>
+    <div class="text-sm font-semibold mb-3">System Health</div>
+    <div class="grid grid-cols-3 gap-3">
+      <div class="rounded-lg p-3 text-center bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color mb-1">GPU</div>
+        <div class="text-xl font-bold"
+             [class.text-green-500]="gpuPct != null && gpuPct < 70"
+             [class.text-yellow-500]="gpuPct != null && gpuPct >= 70 && gpuPct < 90"
+             [class.text-red-500]="gpuPct != null && gpuPct >= 90">
+          {{ gpuPct != null ? gpuPct + '%' : '—' }}
+        </div>
+        <div class="text-xs text-muted-color">utilization</div>
+      </div>
+
+      <div class="rounded-lg p-3 text-center bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color mb-1">RAM</div>
+        <div class="text-xl font-bold">{{ memUsedMb != null ? memUsedMb : '—' }}</div>
+        <div class="text-xs text-muted-color">
+          / {{ memTotalMb != null ? memTotalMb : '—' }} MB
+        </div>
+      </div>
+
+      <div class="rounded-lg p-3 text-center bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color mb-1">Cameras</div>
+        <div class="text-xl font-bold">{{ enabledCameraCount }}</div>
+        <div class="text-xs text-muted-color">/ {{ cameraCount }} enabled</div>
+      </div>
+    </div>
+
+    <!-- ArUco lock -->
+    <div class="mt-3 flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-muted-color">ArUco Lock:</span>
+        <p-tag [severity]="arucoSeverity" [value]="arucoStatus" />
+      </div>
+      <p-select [(ngModel)]="selectedArucoBoard"
+                [options]="arucoBoards"
+                optionLabel="Nickname"
+                placeholder="Select ArUco board..."
+                styleClass="w-full"
+                [showClear]="true" />
+      <div class="flex items-center gap-2">
+        <p-button label="Scan" icon="pi pi-crosshairs" severity="secondary"
+                  [loading]="arucoScanLoading"
+                  [disabled]="!canScanAruco || arucoScanTriggered"
+                  (onClick)="triggerArucoScan()"
+                  pTooltip="Triggers ArucoLock.BeginScanning on all project devices"
+                  tooltipPosition="right" />
+        <p-message *ngIf="arucoScanTriggered" severity="success"
+                   text="ArUco scan triggered on all devices." styleClass="flex-1" />
+        <p-message *ngIf="arucoScanError" severity="error"
+                   text="Scan failed on one or more devices." styleClass="flex-1" />
+      </div>
+      <div class="text-xs text-muted-color">Place the ArUco marker in view of all cameras before scanning.</div>
+    </div>
+  </div>
+
+  <!-- Quick Settings (collapsible) -->
+  <p-panel header="Quick Settings" [toggleable]="true">
+    <div class="flex flex-col gap-4">
+
+      <div class="grid grid-cols-12 items-center gap-3">
+        <div class="col-span-8 min-w-0">
+          <div class="text-sm font-medium">Tracking</div>
+          <div class="text-xs text-muted-color">Enable or disable person detection</div>
+        </div>
+        <div class="col-span-4 flex justify-end">
+          <p-togglebutton
+            [(ngModel)]="trackingEnabled"
+            onLabel="Enabled"
+            offLabel="Disabled"
+            onIcon="pi pi-check"
+            offIcon="pi pi-times" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-12 items-center gap-3">
+        <div class="col-span-8 min-w-0">
+          <div class="text-sm font-medium">Heartbeat Interval</div>
+          <div class="text-xs text-muted-color">How often the device reports health (seconds)</div>
+        </div>
+        <div class="col-span-4 flex justify-end">
+          <p-inputnumber
+            [(ngModel)]="heartbeatInterval"
+            [min]="5"
+            [max]="300"
+            [step]="5"
+            [useGrouping]="false"
+            [showButtons]="true"
+            buttonLayout="horizontal"
+            decrementButtonIcon="pi pi-minus"
+            incrementButtonIcon="pi pi-plus"
+            styleClass="bp-compact-stepper" />
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <p-button
+          label="Save Changes"
+          icon="pi pi-save"
+          [loading]="settingsLoading"
+          (onClick)="saveSettings()" />
+        <p-message *ngIf="settingsSaved" severity="success" text="Saved." styleClass="flex-1" />
+        <p-message *ngIf="settingsError" severity="error" text="Save failed." styleClass="flex-1" />
+      </div>
+    </div>
+  </p-panel>
+
+  <!-- Services (collapsible) -->
+  <p-panel [toggleable]="true">
+    <ng-template #header>
+      <span class="font-bold">Services</span>
+      <p-tag *ngIf="hasDegradedService" severity="warn"
+             [value]="degradedServiceCount + ' degraded'" styleClass="ml-2" />
+    </ng-template>
+
+    <div *ngIf="serviceRows.length === 0" class="text-sm text-muted-color">No services reported.</div>
+
+    <div *ngIf="serviceRows.length > 0" class="flex flex-col gap-2">
+      <div *ngFor="let svc of serviceRows" class="flex items-center justify-between py-1.5 border-b border-surface-200 last:border-b-0">
+        <span class="text-sm font-mono">{{ svc.name }}</span>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted-color">{{ svc.sub }}</span>
+          <p-tag [severity]="serviceSeverity(svc)" [value]="svc.active" styleClass="text-xs" />
+        </div>
+      </div>
+    </div>
+  </p-panel>
+
+</div>

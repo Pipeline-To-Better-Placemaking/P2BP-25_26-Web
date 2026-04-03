@@ -41,6 +41,33 @@
     </div>
   </p-panel>
 
+  <p-panel header="Disk" *ngIf="diskRows.length > 0">
+    <p-table [value]="diskRows" class="rounded-lg overflow-hidden">
+      <ng-template #header>
+        <tr>
+          <th>Path</th>
+          <th>Used (MB)</th>
+          <th>Free (MB)</th>
+          <th>Total (MB)</th>
+          <th>Use %</th>
+          <th>Status</th>
+          <th>Deleted Files</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-row>
+        <tr>
+          <td><code>{{ row.Path }}</code></td>
+          <td>{{ row.UsedMb }}</td>
+          <td>{{ row.FreeMb }}</td>
+          <td>{{ row.TotalMb }}</td>
+          <td>{{ row.UsePct }}%</td>
+          <td><p-tag [value]="row.Status" [severity]="diskSeverity(row.Status)"></p-tag></td>
+          <td>{{ row.DeletedFiles }}</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-panel>
+
   <p-panel header="Services" *ngIf="healthReport">
     <p class="text-sm text-muted-color" *ngIf="serviceRows.length === 0">No services reported.</p>
     <p-table
@@ -84,6 +111,33 @@
           <td>{{ row.Ip || '—' }}</td>
           <td>{{ row.Resolution || '—' }}</td>
           <td>{{ row.Enabled ? 'Yes' : 'No' }}</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-panel>
+
+  <p-panel header="Intrinsics Calibration" *ngIf="intrinsicsRows.length > 0">
+    <p-table [value]="intrinsicsRows" class="rounded-lg overflow-hidden">
+      <ng-template #header>
+        <tr>
+          <th>Camera MAC</th>
+          <th>Status</th>
+          <th>Sightings</th>
+          <th>Coverage</th>
+          <th>RMSE</th>
+          <th>Suggested Region</th>
+          <th>Suggested Tilt</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-row>
+        <tr>
+          <td>{{ row.Mac }}</td>
+          <td><p-tag [value]="row.Status" [severity]="intrinsicsSeverity(row.Status)"></p-tag></td>
+          <td>{{ row.SightingsCollected }}</td>
+          <td>{{ row.CoverageFilled }}/{{ row.CoverageTotal }}</td>
+          <td>{{ row.CurrentRmse | number:'1.3-3' }}</td>
+          <td>{{ row.SuggestedRegion }}</td>
+          <td>{{ row.SuggestedTilt }}</td>
         </tr>
       </ng-template>
     </p-table>

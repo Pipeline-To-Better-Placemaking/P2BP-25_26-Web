@@ -1,0 +1,121 @@
+<div class="flex flex-col gap-4 p-1">
+
+  <p class="text-sm text-muted-color">{{ modalDescriptorText }}</p>
+
+  <!-- Two-column layout: form left, preview right -->
+  <div class="flex gap-6 items-start">
+
+    <!-- Left: form fields -->
+    <div class="flex flex-col gap-3 flex-1 min-w-0">
+
+      <!-- Board type -->
+      <div>
+        <div class="text-sm font-semibold mb-2">Board Type</div>
+        <div class="flex gap-2">
+          <p-button label="ChArUco" [severity]="boardType === 'charuco' ? 'primary' : 'secondary'"
+                    (onClick)="setBoardType('charuco')" />
+          <p-button label="ArUco" [severity]="boardType === 'aruco' ? 'primary' : 'secondary'"
+                    (onClick)="setBoardType('aruco')" />
+        </div>
+      </div>
+
+      <!-- Dictionary -->
+      <div>
+        <label class="text-sm font-medium block mb-1">Dictionary</label>
+        <p-select [(ngModel)]="dictionary" [options]="dictionaries"
+                  optionLabel="label" optionValue="value"
+                  (onChange)="onDictionaryChange()"
+                  styleClass="w-full" />
+      </div>
+
+      <!-- ChArUco: Columns × Rows -->
+      <div *ngIf="isCharuco" class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-sm font-medium block mb-1">Columns</label>
+          <p-inputnumber [(ngModel)]="cols" [min]="2" [max]="20"
+                         [useGrouping]="false"
+                         [minFractionDigits]="0" [maxFractionDigits]="0"
+                         [showButtons]="true" buttonLayout="horizontal"
+                         decrementButtonIcon="pi pi-minus" incrementButtonIcon="pi pi-plus"
+                         styleClass="bp-stepper-medium" />
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Rows</label>
+          <p-inputnumber [(ngModel)]="rows" [min]="2" [max]="20"
+                         [useGrouping]="false"
+                         [minFractionDigits]="0" [maxFractionDigits]="0"
+                         [showButtons]="true" buttonLayout="horizontal"
+                         decrementButtonIcon="pi pi-minus" incrementButtonIcon="pi pi-plus"
+                         styleClass="bp-stepper-medium" />
+        </div>
+      </div>
+
+      <!-- ArUco: marker id -->
+      <div *ngIf="isAruco" class="flex flex-col gap-1">
+        <label class="text-sm font-medium">Marker ID</label>
+        <p-inputnumber [(ngModel)]="markerId" [min]="0" [max]="markerIdMax" [useGrouping]="false"
+                       [minFractionDigits]="0" [maxFractionDigits]="0"
+                       [showButtons]="true" buttonLayout="horizontal"
+                       decrementButtonIcon="pi pi-minus" incrementButtonIcon="pi pi-plus"
+                       styleClass="bp-stepper-medium" />
+        <small class="text-xs text-muted-color">Valid range: 0 to {{ markerIdMax }}</small>
+      </div>
+
+      <!-- Units -->
+      <div>
+        <label class="text-sm font-medium block mb-1">Units <span class="text-red-500">*</span></label>
+        <p-select [(ngModel)]="units" [options]="unitOptions"
+                  optionLabel="label" optionValue="value"
+                  placeholder="Select units..." styleClass="w-full" />
+      </div>
+
+      <!-- Measurements -->
+      <div class="grid grid-cols-2 gap-3">
+        <div *ngIf="isCharuco">
+          <label class="text-sm font-medium block mb-1">Square size</label>
+          <p-inputnumber [(ngModel)]="squareSize" [min]="1" [maxFractionDigits]="2"
+                         placeholder="e.g. 25" styleClass="w-full" />
+        </div>
+        <div [class.col-span-2]="isAruco">
+          <label class="text-sm font-medium block mb-1">Marker size</label>
+          <p-inputnumber [(ngModel)]="markerSize" [min]="1" [maxFractionDigits]="2"
+                         placeholder="e.g. 18" styleClass="w-full" />
+        </div>
+      </div>
+
+      <!-- Nickname -->
+      <div>
+        <label class="text-sm font-medium block mb-1">Nickname</label>
+        <input pInputText [(ngModel)]="nickname" placeholder="e.g. Main board 5x7" class="w-full" />
+      </div>
+
+    </div>
+
+    <!-- Right: live preview -->
+    <div class="w-56 flex-shrink-0 flex flex-col gap-2">
+      <div class="text-sm font-semibold">Preview</div>
+      <div class="text-xs text-muted-color" *ngIf="isCharuco">{{ cols }} × {{ rows }} — ChArUco</div>
+      <div class="text-xs text-muted-color" *ngIf="isAruco">Marker #{{ markerId ?? 0 }} — ArUco</div>
+      <div class="rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-100 dark:bg-surface-800 p-3 flex items-center justify-center overflow-auto"
+           style="min-height: 160px; max-height: 320px">
+        <img [src]="svgPreviewDataUrl" alt="Board preview" class="max-w-full h-auto object-contain" />
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Action buttons -->
+  <div class="flex gap-2 border-t border-surface-200 dark:border-surface-700 pt-4">
+    <p-button [label]="isEditing ? 'Save Changes' : 'Save to Library'" icon="pi pi-save" severity="primary"
+              [disabled]="!canSaveToLibrary"
+              [loading]="savingLibrary"
+              (onClick)="saveToLibrary()"
+              pTooltip="Requires valid real-world size values" tooltipPosition="top" />
+    <p-button label="Generate & Download PDF" icon="pi pi-download" severity="secondary"
+              [disabled]="!canGeneratePdf"
+              [loading]="generatingPdf"
+              (onClick)="generateAndDownloadPdf()"
+              pTooltip="Creates a print-ready PDF; size fields are optional for generation" tooltipPosition="top" />
+  </div>
+
+</div>

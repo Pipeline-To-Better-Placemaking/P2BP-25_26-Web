@@ -57,3 +57,9 @@ body {
 	@apply mb-4;
 	font-size: unset;
 }
+
+/* Vision page — inputnumber stepper width constraints */
+.bp-compact-stepper .p-inputnumber { width: 7rem; }
+.bp-compact-stepper .p-inputnumber-input { width: 3rem; text-align: center; padding-inline: 0.25rem; }
+.bp-stepper-medium .p-inputnumber { width: 9rem; }
+.bp-stepper-medium .p-inputnumber-input { width: 4rem; text-align: center; }

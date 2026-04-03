@@ -2,6 +2,8 @@ export interface Config {
 	Tracking?: TrackingConfig | null;
 	Camera?: CameraConfig | null;
 	CharucoBoard?: CharucoBoardConfig | null;
+	ArucoLock?: ArucoLockConfig | null;
+	Intrinsics?: IntrinsicsConfig | null;
 	TrackingCameras?: TrackingCamerasConfig | null;
 	HeartbeatInterval: number;
 	Version?: string | null;
@@ -42,6 +44,23 @@ export interface CharucoBoardDetails {
 	SquareSize: number;
 	ArucoSize: number;
 	Dictionary?: string | null;
+}
+
+export interface ArucoLockConfig {
+	BeginScanning: boolean;
+	ArucoDict?: string | null;
+	MinFrames?: number | null;
+	MaxSecondsPerCam?: number | null;
+	Status?: string | null;
+	LastRunUnix?: number | null;
+}
+
+export interface IntrinsicsConfig {
+	BeginCalibration: boolean;
+	ModelId?: string | null;
+	PerUnitOverrideMacs?: string[] | null;
+	MinSightings?: number | null;
+	GridCells?: number | null;
 }
 
 export interface TrackingCamerasConfig {

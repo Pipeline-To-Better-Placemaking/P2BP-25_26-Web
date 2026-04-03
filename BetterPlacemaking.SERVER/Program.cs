@@ -54,6 +54,7 @@ builder.Services.Configure<CloudStorageService.GcsOptions>(builder.Configuration
 builder.Services.AddSingleton<CloudStorageService>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<BoardLibraryService>();
 builder.Services.AddScoped<LidarService>();
 builder.Services.AddScoped<ScanScheduleService>();
 
@@ -247,6 +248,9 @@ if (!string.IsNullOrEmpty(allowedOrigins))
 
 var app = builder.Build();
 
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation("Firestore target configured: ProjectId={ProjectId}, DatabaseId={DatabaseId}", projectId, dbId);
+
 using (var seedScope = app.Services.CreateScope())
 {
     var roleSeeder = seedScope.ServiceProvider.GetRequiredService<AuthorizationRoleSeeder>();
@@ -256,10 +260,13 @@ using (var seedScope = app.Services.CreateScope())
 // Middleware
 
 // Needed for Cloud Run / reverse proxies so scheme/remote IP are correct.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 if (app.Environment.IsDevelopment())
 {

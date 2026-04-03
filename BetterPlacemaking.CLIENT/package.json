@@ -33,6 +33,7 @@
     "@primeng/themes": "^20.3.0",
     "@primeuix/themes": "^2.0.3",
     "@tailwindcss/postcss": "^4.1.17",
+    "js-aruco2": "^2.0.0",
     "jspdf": "^4.2.1",
     "primeicons": "^7.0.0",
     "primeng": "^20.4.0",

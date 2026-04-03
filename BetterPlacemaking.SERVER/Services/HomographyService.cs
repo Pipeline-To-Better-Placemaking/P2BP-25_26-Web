@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Models.Homography;
 using Google.Cloud.Firestore;
@@ -89,6 +92,7 @@ namespace BetterPlacemaking.Services
                     MarkerId = m.MarkerId,
                     CornersPx = m.CornersPx,
                 }).ToList(),
+                LocalHomographyHash = dto.LocalHomographyHash,
             };
 
             sightingRef.SetAsync(sighting).Wait();
@@ -196,15 +200,59 @@ namespace BetterPlacemaking.Services
             var cameraMarkersPx = new Dictionary<string, Dictionary<string, List<List<double>>>>(StringComparer.OrdinalIgnoreCase);
             var cameraDevice = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+            // First pass: collect device IDs and sighting hashes from all docs.
+            var sightingsByCam = new Dictionary<string, ArUcoSighting>(StringComparer.OrdinalIgnoreCase);
             foreach (var doc in sightingDocs)
             {
                 var s = doc.ConvertTo<ArUcoSighting>();
                 if (s.CameraMac == null || s.SessionId == null) continue;
                 var mac = s.CameraMac;
-                if (!cameraMarkersPx.ContainsKey(mac))
-                    cameraMarkersPx[mac] = [];
                 if (s.DeviceId != null)
                     cameraDevice[mac] = s.DeviceId;
+                // Keep the most recent sighting per camera (last write wins, same as Firestore upsert).
+                sightingsByCam[mac] = s;
+            }
+
+            // Load current local homographies once per camera and compute their hashes.
+            // This cache is also reused by StoreLocked to avoid a second Firestore read.
+            var localHomographyCache = new Dictionary<string, LocalHomography?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (mac, s) in sightingsByCam)
+            {
+                if (!cameraDevice.TryGetValue(mac, out var deviceId)) continue;
+                var localSnap = _db.Collection(ColLocalHomographies)
+                    .Document($"{deviceId}_{mac}").GetSnapshotAsync().Result;
+                localHomographyCache[mac] = localSnap.Exists ? localSnap.ConvertTo<LocalHomography>() : null;
+            }
+
+            // Filter: discard sightings whose attached homography hash doesn't match the
+            // camera's current local homography. This protects compute-lock from stale
+            // sightings captured before the camera was moved and re-calibrated.
+            foreach (var (mac, s) in sightingsByCam)
+            {
+                var currentHash = localHomographyCache.TryGetValue(mac, out var lh) && lh?.Matrix != null
+                    ? ComputeHomographyHash(lh.Matrix)
+                    : null;
+
+                if (s.LocalHomographyHash == null || currentHash == null)
+                {
+                    _logger.LogWarning(
+                        "Skipping sightings for camera {Mac}: missing homography hash (sighting={SightingHash}, current={CurrentHash}). " +
+                        "Re-run an ArUco scan after completing ChArUco calibration.",
+                        mac, s.LocalHomographyHash ?? "null", currentHash ?? "null");
+                    continue;
+                }
+
+                if (!string.Equals(s.LocalHomographyHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Skipping stale sightings for camera {Mac}: hash mismatch (sighting={SightingHash}, current={CurrentHash}). " +
+                        "Camera was likely moved and re-calibrated since the last ArUco scan.",
+                        mac, s.LocalHomographyHash, currentHash);
+                    continue;
+                }
+
+                if (!cameraMarkersPx.ContainsKey(mac))
+                    cameraMarkersPx[mac] = [];
                 foreach (var m in s.Markers ?? [])
                 {
                     var key = $"{s.SessionId}_{m.MarkerId}";
@@ -213,19 +261,14 @@ namespace BetterPlacemaking.Services
             }
 
             if (cameraMarkersPx.Count == 0)
-                throw new InvalidOperationException("No sightings found.");
+                throw new InvalidOperationException("No sightings found with a valid homography hash. Run a fresh ArUco scan.");
 
             // Apply each camera's local homography server-side to convert pixel corners
             // to local world coords. The Jetsons only store raw pixel observations.
             var cameraMarkersLocal = new Dictionary<string, Dictionary<string, List<List<double>>>>(StringComparer.OrdinalIgnoreCase);
             foreach (var (mac, markerPxMap) in cameraMarkersPx)
             {
-                if (!cameraDevice.TryGetValue(mac, out var deviceId)) continue;
-                var localSnap = _db.Collection(ColLocalHomographies)
-                    .Document($"{deviceId}_{mac}").GetSnapshotAsync().Result;
-                if (!localSnap.Exists) continue;
-                var localH = localSnap.ConvertTo<LocalHomography>();
-                if (localH.Matrix == null) continue;
+                if (!localHomographyCache.TryGetValue(mac, out var localH) || localH?.Matrix == null) continue;
                 var H = ToMatrix3x3(localH.Matrix);
                 var localMap = new Dictionary<string, List<List<double>>>();
                 foreach (var (key, pxCorners) in markerPxMap)
@@ -243,7 +286,7 @@ namespace BetterPlacemaking.Services
                 throw new InvalidOperationException("No cameras have both sightings and a valid local homography.");
 
             if (cameras.Count == 1)
-                return (StoreLocked(cameras[0], cameraDevice, Identity3x3()), cameraDevice);
+                return (StoreLocked(cameras[0], cameraDevice, Identity3x3(), localHomographyCache), cameraDevice);
 
             // Build similarity transform edges between all camera pairs that share markers.
             var edges = new Dictionary<(string, string), double[,]>();
@@ -316,11 +359,12 @@ namespace BetterPlacemaking.Services
 
             int count = 0;
             foreach (var (mac, t) in tToGlobal)
-                count += StoreLocked(mac, cameraDevice, t);
+                count += StoreLocked(mac, cameraDevice, t, localHomographyCache);
             return (count, cameraDevice);
         }
 
-        private int StoreLocked(string mac, Dictionary<string, string> cameraDevice, double[,] tToGlobal)
+        private int StoreLocked(string mac, Dictionary<string, string> cameraDevice, double[,] tToGlobal,
+            Dictionary<string, LocalHomography?> localHomographyCache)
         {
             if (!cameraDevice.TryGetValue(mac, out var deviceId))
             {
@@ -328,15 +372,12 @@ namespace BetterPlacemaking.Services
                 return 0;
             }
 
-            var localSnap = _db.Collection(ColLocalHomographies)
-                .Document($"{deviceId}_{mac}").GetSnapshotAsync().Result;
-            if (!localSnap.Exists)
+            if (!localHomographyCache.TryGetValue(mac, out var localH) || localH == null)
             {
                 _logger.LogWarning("No local homography for device={DeviceId} camera={Mac}; skipping.", deviceId, mac);
                 return 0;
             }
 
-            var localH = localSnap.ConvertTo<LocalHomography>();
             if (localH.Matrix == null) return 0;
 
             var hLocked = MatMul3x3(tToGlobal, ToMatrix3x3(localH.Matrix));
@@ -442,5 +483,19 @@ namespace BetterPlacemaking.Services
 
         private static string NormalizeMac(string? mac) =>
             (mac ?? string.Empty).Trim().ToLowerInvariant();
+
+        /// <summary>
+        /// Computes a short stable hash of a 3×3 homography matrix for staleness detection.
+        /// Matches the algorithm in aruco_scanner.py: flatten row-major, round to 4 decimal
+        /// places, join with commas, SHA256, take first 16 hex chars lowercase.
+        /// </summary>
+        private static string ComputeHomographyHash(List<List<double>> matrix)
+        {
+            var values = matrix.SelectMany(row => row)
+                .Select(v => Math.Round(v, 4).ToString("F4", CultureInfo.InvariantCulture));
+            var input = string.Join(",", values);
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+            return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        }
     }
 }

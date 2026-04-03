@@ -34,7 +34,8 @@ namespace BetterPlacemaking.Models.Dtos
         string ArucoDict,
         string CapturedAt,
         List<ArucoMarkerSightingDto> Markers,
-        string? SessionId = null
+        string? SessionId = null,
+        string? LocalHomographyHash = null
     );
 
     public sealed record ArucoSightingsResponseDto(

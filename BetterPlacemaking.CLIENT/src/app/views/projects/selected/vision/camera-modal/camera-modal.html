@@ -1,0 +1,175 @@
+<div class="flex flex-col gap-4 p-1">
+
+  <!-- Camera identity -->
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <span class="font-semibold text-lg">{{ nickname || ('Camera ' + mac.slice(-5)) }}</span>
+        <p-tag [severity]="camInfo?.Enabled ? 'success' : 'secondary'"
+               [value]="camInfo?.Enabled ? 'Enabled' : 'Disabled'" />
+      </div>
+      <div class="text-xs text-muted-color font-mono mb-1">{{ mac }}</div>
+      <div class="text-xs text-muted-color">{{ camInfo?.Ip }} &nbsp;·&nbsp; {{ resolution }}</div>
+    </div>
+    <div class="flex-shrink-0">
+      <p-button *ngIf="!editingNickname" icon="pi pi-pencil" severity="secondary"
+                pTooltip="Edit nickname" tooltipPosition="left"
+                [text]="true" (onClick)="startEditNickname()" />
+    </div>
+  </div>
+
+  <!-- Nickname edit -->
+  <div *ngIf="editingNickname" class="flex items-center gap-2">
+    <input pInputText [(ngModel)]="nicknameInput" placeholder="Enter nickname..."
+           class="flex-1" (keydown.enter)="saveNickname()" (keydown.escape)="cancelEditNickname()" />
+    <p-button icon="pi pi-check" severity="success" [text]="true"
+              pTooltip="Save" (onClick)="saveNickname()" />
+    <p-button icon="pi pi-times" severity="secondary" [text]="true"
+              pTooltip="Cancel" (onClick)="cancelEditNickname()" />
+  </div>
+
+  <!-- Calibration stat grid -->
+  <div class="grid grid-cols-3 gap-3">
+    <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+      <div class="text-xs text-muted-color mb-1">Intrinsics</div>
+      <p-tag [severity]="intrinsicsSeverity"
+             [value]="intrinsicsStatus === 'none' ? 'Not started' : intrinsicsStatus"
+             styleClass="mb-2" />
+      <div class="text-xs text-muted-color mt-1">
+        {{ intrinsics?.SightingsCollected ?? 0 }} sightings
+      </div>
+      <div class="text-xs text-muted-color">
+        RMSE: {{ (intrinsics?.CurrentRmse != null) ? (intrinsics!.CurrentRmse | number:'1.3-3') : '—' }}
+      </div>
+    </div>
+
+    <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+      <div class="text-xs text-muted-color mb-1">Homography</div>
+      <p-tag severity="secondary" value="N/A" styleClass="mb-2" />
+      <div class="text-xs text-muted-color mt-1">Not in health report</div>
+    </div>
+
+    <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+      <div class="text-xs text-muted-color mb-1">ArUco Lock</div>
+      <p-tag severity="secondary" value="Device-level" styleClass="mb-2" />
+      <div class="text-xs text-muted-color mt-1">See device card</div>
+    </div>
+  </div>
+
+  <!-- Coverage grid -->
+  <div *ngIf="coverageGrid.length > 0">
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm font-semibold">
+        Intrinsics Coverage
+        <span class="text-muted-color font-normal text-xs ml-1">
+          {{ coverageFilled }} / {{ coverageGrid.length }} cells filled
+        </span>
+      </div>
+      <div class="text-xs text-muted-color" *ngIf="lastUpdatedLabel">
+        Updated {{ lastUpdatedLabel }}
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- Left label: Camera left = your right -->
+      <div class="flex-shrink-0 text-center" style="writing-mode: vertical-rl; transform: rotate(180deg)">
+        <span class="text-xs text-muted-color leading-tight">Camera left</span>
+        <span class="block text-xs text-muted-color leading-tight opacity-60">Your right</span>
+      </div>
+
+      <!-- Grid -->
+      <div class="inline-grid gap-0.5"
+           [style.grid-template-columns]="'repeat(' + coverageGridCols + ', 1.25rem)'">
+        <div *ngFor="let cell of coverageGrid"
+             class="w-5 h-5 rounded-sm"
+             [class.bg-green-500]="!!cell"
+             [class.bg-surface-300]="!cell">
+        </div>
+      </div>
+
+      <!-- Right label: Camera right = your left -->
+      <div class="flex-shrink-0 text-center" style="writing-mode: vertical-rl">
+        <span class="text-xs text-muted-color leading-tight">Camera right</span>
+        <span class="block text-xs text-muted-color leading-tight opacity-60">Your left</span>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="coverageGrid.length === 0" class="text-xs text-muted-color">
+    No coverage data yet. Run intrinsics calibration to populate.
+    <span *ngIf="lastUpdatedLabel" class="ml-1 opacity-60">(Updated {{ lastUpdatedLabel }})</span>
+  </div>
+
+  <!-- Suggestion -->
+  <p-message *ngIf="hasSuggestion" severity="info" [text]="suggestionText" styleClass="w-full" />
+
+  <!-- Calibration board selector -->
+  <div class="border-t border-surface-200 dark:border-surface-700 pt-4">
+    <label class="text-sm font-semibold block mb-1">Calibration Board</label>
+    <p-select [(ngModel)]="selectedBoard"
+              [options]="charucoBoards"
+              optionLabel="Nickname"
+              placeholder="Select a ChArUco board..."
+              styleClass="w-full"
+              [showClear]="true" />
+    <div class="text-xs text-muted-color mt-1">Board parameters are shared by intrinsics and homography calibration.</div>
+  </div>
+
+  <!-- Actions -->
+  <div class="border-t border-surface-200 dark:border-surface-700 pt-4">
+    <div class="text-sm font-semibold mb-3">Actions</div>
+
+    <!-- Intrinsics -->
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="text-sm font-medium">Intrinsics Calibration</div>
+        <div class="text-xs text-muted-color">Requires ChArUco board in camera view</div>
+      </div>
+      <p-button
+        [label]="intrinsicsButtonLabel"
+        [icon]="intrinsicsButtonIcon"
+        [severity]="intrinsicsButtonSeverity"
+        [loading]="triggerLoading"
+        (onClick)="toggleIntrinsics()"
+        pTooltip="Toggles BeginCalibration. Select a board above to also update CharucoBoard config when enabling."
+        tooltipPosition="left" />
+    </div>
+
+    <p-message *ngIf="intrinsicsActionMessage" severity="success"
+               [text]="intrinsicsActionMessage" styleClass="w-full mb-3" />
+    <p-message *ngIf="intrinsicsError" severity="error"
+               text="Failed to update calibration toggle. Check device connectivity." styleClass="w-full mb-3" />
+
+    <!-- Homography -->
+    <div class="flex items-center justify-between mb-3" [class.opacity-50]="!canRunHomography && !homographyTriggered">
+      <div>
+        <div class="text-sm font-medium">Homography</div>
+        <div class="text-xs text-muted-color">Triggers scan on all project devices simultaneously</div>
+      </div>
+      <p-button label="Run" icon="pi pi-play" severity="secondary"
+                [loading]="homographyLoading"
+                [disabled]="!canRunHomography || homographyTriggered"
+                (onClick)="triggerHomography()"
+                [pTooltip]="intrinsicsStatus !== 'done' ? 'Requires intrinsics to be complete first' : (!selectedBoard ? 'Select a board above' : 'Sets CharucoBoard.BeginScanning on all project devices')"
+                tooltipPosition="left" />
+    </div>
+
+    <p-message *ngIf="homographyTriggered" severity="success"
+               text="Homography scan triggered on all devices. Ensure board is visible to all cameras." styleClass="w-full mb-3" />
+    <p-message *ngIf="homographyError" severity="error"
+               text="Failed to trigger homography on one or more devices." styleClass="w-full mb-3" />
+
+    <!-- ArUco Lock -->
+    <div class="flex items-center justify-between opacity-50">
+      <div>
+        <div class="text-sm font-medium">ArUco Lock</div>
+        <div class="text-xs text-muted-color">Device-level — run from device card</div>
+      </div>
+      <p-button label="Lock" icon="pi pi-lock" severity="secondary"
+                [disabled]="true"
+                pTooltip="Run from the device card"
+                tooltipPosition="left" />
+    </div>
+  </div>
+
+</div>

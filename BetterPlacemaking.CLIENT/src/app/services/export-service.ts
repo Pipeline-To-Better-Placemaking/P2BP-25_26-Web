@@ -9,6 +9,10 @@ import { ProjectDto } from '../models/ProjectDto';
 import { DeviceDto } from '../models/DeviceDto';
 import { ScanScheduleDto } from './scan-service';
 
+const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
+const HEARTBEAT_GRACE_MULTIPLIER = 6;
+const MIN_ONLINE_WINDOW_MS = 2 * 60 * 1000;
+
 @Injectable({ providedIn: 'root' })
 export class ExportService {
   constructor(
@@ -222,11 +226,38 @@ export class ExportService {
   }
 
   private getDeviceStatus(device: DeviceDto): string {
-    if (!device.HealthReport?.Services) return 'offline';
-    const services = Object.values(device.HealthReport.Services);
-    const hasInactive = services.some((s: any) => s?.Active !== 'active');
-    if (hasInactive) return 'warning';
-    return 'online';
+    if (!this.isHeartbeatFresh(device)) return 'offline';
+
+    const services = Object.values(device.HealthReport?.Services ?? {});
+    if (services.length === 0) return 'warning';
+
+    const hasDegradedState = services.some((s: any) => {
+      const state = (s?.Active ?? '').toLowerCase();
+      return state !== 'active' && state !== 'activating';
+    });
+
+    return hasDegradedState ? 'warning' : 'online';
+  }
+
+  private isHeartbeatFresh(device: DeviceDto): boolean {
+    const ts = device.HealthReport?.Timestamp;
+    if (!ts) return false;
+
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return false;
+
+    const configuredInterval = Number(device.Config?.HeartbeatInterval);
+    const heartbeatIntervalSeconds = Number.isFinite(configuredInterval) && configuredInterval > 0
+      ? configuredInterval
+      : DEFAULT_HEARTBEAT_INTERVAL_SECONDS;
+
+    const maxAgeMs = Math.max(
+      MIN_ONLINE_WINDOW_MS,
+      heartbeatIntervalSeconds * 1000 * HEARTBEAT_GRACE_MULTIPLIER,
+    );
+
+    return Date.now() - date.getTime() <= maxAgeMs;
   }
 
   private statusColor(status: string): [number, number, number] {

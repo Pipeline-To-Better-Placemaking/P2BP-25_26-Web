@@ -19,6 +19,10 @@ import { ProjectChecklistWidget } from './components/projectchecklistwidget';
 
 import { DialogModule } from 'primeng/dialog';
 
+const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
+const HEARTBEAT_GRACE_MULTIPLIER = 6;
+const MIN_ONLINE_WINDOW_MS = 2 * 60 * 1000;
+
 
 export interface ProjectViewModel {
   title: string;
@@ -310,30 +314,27 @@ export class Dashboard implements OnInit {
   }
 
   public getDeviceStatus(device: DeviceDto): 'online' | 'offline' | 'warning' {
-    if (!device.HealthReport?.Services) {
+    if (!this.isHeartbeatFresh(device)) {
       return 'offline';
     }
 
-    const serviceStates = Object.values(device.HealthReport.Services)
+    const services = device.HealthReport?.Services;
+    if (!services) {
+      return 'warning';
+    }
+
+    const serviceStates = Object.values(services)
       .map((s: ServiceStatus) => (s.Active ?? '').toLowerCase());
 
-    const hasOfflineState = serviceStates.some(state =>
-      state === 'inactive' || state === 'failed' || state === 'dead'
-    );
-
-    if (hasOfflineState) {
-      return 'offline';
+    if (serviceStates.length === 0) {
+      return 'warning';
     }
 
-    const allHealthy = serviceStates.every(state =>
-      state === 'active' || state === 'activating'
+    const hasDegradedState = serviceStates.some(
+      state => state !== 'active' && state !== 'activating',
     );
 
-    if (allHealthy) {
-      return 'online';
-    }
-
-    return 'warning';
+    return hasDegradedState ? 'warning' : 'online';
   }
 
   private buildAlerts(): void {
@@ -346,6 +347,8 @@ export class Dashboard implements OnInit {
       const deviceName = device.Name || 'Unnamed device';
 
       if (status === 'offline') {
+        const lastSeen = this.getDeviceLastSeen(device);
+
         if (!device.HealthReport) {
           alerts.push({
             id: `device-offline-no-report-${device.Id ?? index}`,
@@ -357,23 +360,10 @@ export class Dashboard implements OnInit {
           return;
         }
 
-        const failedServices = Object.entries(device.HealthReport.Services ?? {})
-          .filter(([, service]) => {
-            const typedService = service as ServiceStatus;
-            const state = (typedService.Active ?? '').toLowerCase();
-            return state === 'inactive' || state === 'failed' || state === 'dead';
-          })
-          .map(([serviceName, service]) => {
-            const typedService = service as ServiceStatus;
-            return `${serviceName} (${typedService.Active ?? 'unknown'})`;
-          });
-
         alerts.push({
           id: `device-offline-${device.Id ?? index}`,
           severity: 'critical',
-          message: failedServices.length > 0
-            ? `${deviceName} has offline services: ${failedServices.join(', ')}.`
-            : `${deviceName} is offline.`,
+          message: `${deviceName} has not reported recently (last seen ${lastSeen}).`,
           timestamp,
           resolved: false
         });
@@ -386,11 +376,7 @@ export class Dashboard implements OnInit {
           .filter(([, service]) => {
             const typedService = service as ServiceStatus;
             const state = (typedService.Active ?? '').toLowerCase();
-            return state !== 'active' &&
-                   state !== 'activating' &&
-                   state !== 'inactive' &&
-                   state !== 'failed' &&
-                   state !== 'dead';
+            return state !== 'active' && state !== 'activating';
           })
           .map(([serviceName, service]) => {
             const typedService = service as ServiceStatus;
@@ -401,8 +387,8 @@ export class Dashboard implements OnInit {
           id: `device-warning-${device.Id ?? index}`,
           severity: 'high',
           message: warningServices.length > 0
-            ? `${deviceName} has unexpected service states: ${warningServices.join(', ')}.`
-            : `${deviceName} has one or more services requiring attention.`,
+            ? `${deviceName} has degraded services: ${warningServices.join(', ')}.`
+            : `${deviceName} is reporting but service health is incomplete.`,
           timestamp,
           resolved: false
         });
@@ -431,6 +417,25 @@ export class Dashboard implements OnInit {
     const date = new Date(ms);
 
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private isHeartbeatFresh(device: DeviceDto): boolean {
+    const lastReportDate = this.getHealthReportDate(device);
+    if (!lastReportDate) {
+      return false;
+    }
+
+    const configuredInterval = Number(device.Config?.HeartbeatInterval);
+    const heartbeatIntervalSeconds = Number.isFinite(configuredInterval) && configuredInterval > 0
+      ? configuredInterval
+      : DEFAULT_HEARTBEAT_INTERVAL_SECONDS;
+
+    const maxAgeMs = Math.max(
+      MIN_ONLINE_WINDOW_MS,
+      heartbeatIntervalSeconds * 1000 * HEARTBEAT_GRACE_MULTIPLIER,
+    );
+
+    return Date.now() - lastReportDate.getTime() <= maxAgeMs;
   }
 
   public getDeviceLastSeen(device: DeviceDto): string {

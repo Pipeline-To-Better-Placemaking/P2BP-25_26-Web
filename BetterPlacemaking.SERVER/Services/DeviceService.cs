@@ -138,11 +138,18 @@ namespace BetterPlacemaking.Services
 
             var hashBase64 = ComputeApiKeyHashBase64(apiKey);
             if (!TryGetCacheSuffixFromHashBase64(hashBase64, out var suffix))
-                return GetDeviceByApiKeyFromDb(hashBase64);
+                return GetDeviceByApiKeyFromDb(apiKey, hashBase64);
 
             var badMarker = _cache.GetString(BadCacheKey(suffix));
             if (!string.IsNullOrWhiteSpace(badMarker))
+            {
+                _logger.LogWarning(
+                    "Device API key rejected by negative cache for hash suffix {HashSuffix}. Firestore target: ProjectId={ProjectId}, DatabaseId={DatabaseId}.",
+                    suffix[..Math.Min(12, suffix.Length)],
+                    _db.ProjectId,
+                    _db.DatabaseId);
                 return null;
+            }
 
             var cached = _cache.GetString(GoodCacheKey(suffix));
             if (!string.IsNullOrWhiteSpace(cached))
@@ -160,9 +167,15 @@ namespace BetterPlacemaking.Services
                 }
             }
 
-            var fromDb = GetDeviceByApiKeyFromDb(hashBase64);
+            var fromDb = GetDeviceByApiKeyFromDb(apiKey, hashBase64);
             if (fromDb == null)
             {
+                _logger.LogWarning(
+                    "Device API key lookup miss for hash suffix {HashSuffix}. Firestore target: ProjectId={ProjectId}, DatabaseId={DatabaseId}. If this happens for all devices, verify Cloud Run Firestore project/database config.",
+                    suffix[..Math.Min(12, suffix.Length)],
+                    _db.ProjectId,
+                    _db.DatabaseId);
+
                 _cache.SetString(
                     BadCacheKey(suffix),
                     "1",
@@ -181,15 +194,78 @@ namespace BetterPlacemaking.Services
             return fromDb;
         }
 
-        private Device? GetDeviceByApiKeyFromDb(string apiKeyHashBase64)
+        private Device? GetDeviceByApiKeyFromDb(string rawApiKey, string apiKeyHashBase64)
         {
-            var query = _db.Collection(collectionName)
+            var collection = _db.Collection(collectionName);
+
+            var query = collection
                 .WhereEqualTo(nameof(Device.ApiKeyHash), apiKeyHashBase64)
                 .Limit(1);
 
             var snapshot = query.GetSnapshotAsync().Result;
             var doc = snapshot.Documents.FirstOrDefault();
-            return doc?.ConvertTo<Device>();
+            if (doc != null)
+                return doc.ConvertTo<Device>();
+
+            // Backwards compatibility: older deployments may have stored the raw key
+            // either under ApiKeyHash or in a legacy ApiKey field.
+            var legacyInHashField = collection
+                .WhereEqualTo(nameof(Device.ApiKeyHash), rawApiKey)
+                .Limit(1)
+                .GetSnapshotAsync().Result
+                .Documents
+                .FirstOrDefault();
+
+            if (legacyInHashField != null)
+                return MigrateLegacyApiKeyDocument(legacyInHashField, apiKeyHashBase64, nameof(Device.ApiKeyHash));
+
+            var legacyApiKeyField = collection
+                .WhereEqualTo("ApiKey", rawApiKey)
+                .Limit(1)
+                .GetSnapshotAsync().Result
+                .Documents
+                .FirstOrDefault();
+
+            if (legacyApiKeyField != null)
+                return MigrateLegacyApiKeyDocument(legacyApiKeyField, apiKeyHashBase64, "ApiKey");
+
+            return null;
+        }
+
+        private Device? MigrateLegacyApiKeyDocument(
+            DocumentSnapshot doc,
+            string hashedApiKey,
+            string matchedField)
+        {
+            var device = doc.ConvertTo<Device>();
+            if (device == null)
+                return null;
+
+            device.ApiKeyHash = hashedApiKey;
+
+            try
+            {
+                var updates = new Dictionary<string, object>
+                {
+                    [nameof(Device.ApiKeyHash)] = hashedApiKey,
+                    ["ApiKey"] = FieldValue.Delete,
+                };
+
+                doc.Reference.UpdateAsync(updates).Wait();
+                _logger.LogWarning(
+                    "Migrated legacy device API key storage for device {DeviceId} from field {Field}.",
+                    device.Id,
+                    matchedField);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to persist API key migration for device {DeviceId}; using migrated value in-memory.",
+                    device.Id);
+            }
+
+            return device;
         }
 
         public string? GenerateAndUpdateApiKey(string id)
@@ -243,10 +319,30 @@ namespace BetterPlacemaking.Services
 
         private static string ComputeStableHealthHash(HealthReport report)
         {
-            var stable = new { report.Services, report.Cameras };
+            var stable = new { report.Services, report.Cameras, report.IntrinsicsCalibration };
             var json = JsonSerializer.Serialize(stable);
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
             return Convert.ToHexString(bytes)[..16];
+        }
+
+        private static bool ShouldClearIntrinsicsBeginCalibration(HealthReport report)
+        {
+            if (report.IntrinsicsCalibration == null || report.IntrinsicsCalibration.Count == 0)
+                return false;
+
+            var statuses = report.IntrinsicsCalibration.Values
+                .Select(state => (state?.Status ?? string.Empty).Trim().ToLowerInvariant())
+                .Where(status => !string.IsNullOrWhiteSpace(status))
+                .ToList();
+
+            if (statuses.Count == 0)
+                return false;
+
+            var hasInProgress = statuses.Any(status => status is "collecting" or "computing" or "running" or "in_progress" or "in-progress");
+            if (hasInProgress)
+                return false;
+
+            return statuses.Any(status => status is "done" or "failed" or "error");
         }
 
         public Config? UpdateDeviceHealthReport(Device device, HealthReport healthReport)
@@ -330,15 +426,18 @@ namespace BetterPlacemaking.Services
             }
 
             // Clear one-shot trigger flags on first delivery.
-            // Snapshot which flags are true before clearing so this response delivers them as true.
+            // Intrinsics is different: keep BeginCalibration=true while calibration is in progress,
+            // and only clear when the heartbeat reports a terminal status.
             bool charucoBeginScanning = device.Config.CharucoBoard?.BeginScanning == true;
             bool arucoBeginScanning = device.Config.ArucoLock?.BeginScanning == true;
             bool intrinsicsBeginCalibration = device.Config.Intrinsics?.BeginCalibration == true;
+            bool clearIntrinsicsBeginCalibration =
+                intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
 
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (intrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
+            if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
             {
@@ -347,7 +446,8 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
-                if (device.Config.Intrinsics != null) device.Config.Intrinsics.BeginCalibration = false;
+                if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
+                    device.Config.Intrinsics.BeginCalibration = false;
 
                 if (TryGetCacheSuffixFromHashBase64(device.ApiKeyHash ?? "", out var flagSuffix))
                 {
@@ -363,8 +463,6 @@ namespace BetterPlacemaking.Services
                     device.Config.CharucoBoard.BeginScanning = true;
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
-                if (intrinsicsBeginCalibration && device.Config.Intrinsics != null)
-                    device.Config.Intrinsics.BeginCalibration = true;
             }
 
             return device.Config;

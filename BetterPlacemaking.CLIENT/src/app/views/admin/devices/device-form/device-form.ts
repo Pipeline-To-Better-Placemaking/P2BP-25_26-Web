@@ -11,12 +11,14 @@ import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ProjectService } from '../../../../services/project-service';
 import {
+  ArucoLockConfig,
   CameraConfig,
   CharucoBoardConfig,
   CharucoBoardDetails,
   CharucoPoint,
   CharucoReferencePoints,
   Config,
+  IntrinsicsConfig,
   TrackingCamerasConfig,
   TrackingConfig,
 } from '../../../../models/jetson-dtos/Config';
@@ -50,6 +52,20 @@ type CharucoBoardValue = {
   Board: CharucoBoardDetailsValue;
 };
 
+type ArucoLockValue = {
+  BeginScanning: boolean | null;
+  ArucoDict: string | null;
+  MinFrames: number | null;
+  MaxSecondsPerCam: number | null;
+};
+
+type IntrinsicsValue = {
+  BeginCalibration: boolean | null;
+  ModelId: string | null;
+  MinSightings: number | null;
+  GridCells: number | null;
+};
+
 type ConfigValue = {
   HeartbeatInterval: number;
   Version: string | null;
@@ -57,6 +73,8 @@ type ConfigValue = {
   Camera: CameraConfig;
   TrackingCameras: TrackingCameraRowValue[];
   CharucoBoard: CharucoBoardValue;
+  ArucoLock: ArucoLockValue;
+  Intrinsics: IntrinsicsValue;
 };
 
 type DeviceFormValue = {
@@ -150,6 +168,8 @@ export class DeviceForm implements OnInit {
       }),
       TrackingCameras: this.createTrackingCamerasArray(config?.TrackingCameras ?? null),
       CharucoBoard: this.createCharucoBoardGroup(config?.CharucoBoard ?? null),
+      ArucoLock: this.createArucoLockGroup(config?.ArucoLock ?? null),
+      Intrinsics: this.createIntrinsicsGroup(config?.Intrinsics ?? null),
     });
   }
 
@@ -189,19 +209,42 @@ export class DeviceForm implements OnInit {
     });
   }
 
+  private createArucoLockGroup(arucoLock: ArucoLockConfig | null): FormGroup {
+    return this.fb.group({
+      BeginScanning: [arucoLock?.BeginScanning ?? false],
+      ArucoDict: [arucoLock?.ArucoDict ?? 'DICT_4X4_50'],
+      MinFrames: [arucoLock?.MinFrames ?? 10, [Validators.min(1)]],
+      MaxSecondsPerCam: [arucoLock?.MaxSecondsPerCam ?? 10, [Validators.min(1)]],
+    });
+  }
+
+  private createIntrinsicsGroup(intrinsics: IntrinsicsConfig | null): FormGroup {
+    return this.fb.group({
+      BeginCalibration: [intrinsics?.BeginCalibration ?? false],
+      ModelId: [intrinsics?.ModelId ?? ''],
+      MinSightings: [intrinsics?.MinSightings ?? 40, [Validators.min(1)]],
+      GridCells: [intrinsics?.GridCells ?? 9, [Validators.min(1)]],
+    });
+  }
+
   private buildConfigValue(value: ConfigValue): Config {
     const tracking = value.Tracking;
     const camera = value.Camera;
     const trackingCameras = this.buildTrackingCamerasValue(value.TrackingCameras);
     const charucoBoard = this.buildCharucoBoardValue(value.CharucoBoard);
+    const arucoLock = this.buildArucoLockValue(value.ArucoLock);
+    const intrinsics = this.buildIntrinsicsValue(value.Intrinsics);
 
     const shouldIncludeTrackingCameras =
       trackingCameras != null || (this.originalDevice?.Config?.TrackingCameras ?? null) != null;
     const shouldIncludeCharucoBoard =
       charucoBoard != null || (this.originalDevice?.Config?.CharucoBoard ?? null) != null;
+    const shouldIncludeArucoLock =
+      arucoLock != null || (this.originalDevice?.Config?.ArucoLock ?? null) != null;
+    const shouldIncludeIntrinsics =
+      intrinsics != null || (this.originalDevice?.Config?.Intrinsics ?? null) != null;
 
     return {
-      // DeviceId is managed by the backend; preserve existing value if present.
       HeartbeatInterval: value.HeartbeatInterval ?? 0,
       Version: this.cleanString(value.Version ?? null),
       Tracking: {
@@ -217,6 +260,8 @@ export class DeviceForm implements OnInit {
       },
       TrackingCameras: shouldIncludeTrackingCameras ? trackingCameras : null,
       CharucoBoard: shouldIncludeCharucoBoard ? charucoBoard : null,
+      ArucoLock: shouldIncludeArucoLock ? arucoLock : null,
+      Intrinsics: shouldIncludeIntrinsics ? intrinsics : null,
     };
   }
 
@@ -248,7 +293,6 @@ export class DeviceForm implements OnInit {
     const board = value.Board;
 
     const referencePoints = this.buildReferencePoints(p1, p2);
-
     const boardDetails = this.buildBoardDetails(board);
 
     if (!beginScanning && referencePoints == null && boardDetails == null) {
@@ -259,6 +303,26 @@ export class DeviceForm implements OnInit {
       BeginScanning: beginScanning,
       ReferencePoints: referencePoints,
       Board: boardDetails,
+    };
+  }
+
+  private buildArucoLockValue(value: ArucoLockValue): ArucoLockConfig | null {
+    if (!value) return null;
+    return {
+      BeginScanning: !!value.BeginScanning,
+      ArucoDict: this.cleanString(value.ArucoDict) ?? 'DICT_4X4_50',
+      MinFrames: value.MinFrames ?? 10,
+      MaxSecondsPerCam: value.MaxSecondsPerCam ?? 10,
+    };
+  }
+
+  private buildIntrinsicsValue(value: IntrinsicsValue): IntrinsicsConfig | null {
+    if (!value) return null;
+    return {
+      BeginCalibration: !!value.BeginCalibration,
+      ModelId: this.cleanString(value.ModelId),
+      MinSightings: value.MinSightings ?? 40,
+      GridCells: value.GridCells ?? 9,
     };
   }
 

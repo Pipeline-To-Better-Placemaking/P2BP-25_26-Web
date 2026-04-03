@@ -2,9 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { PanelModule } from 'primeng/panel';
 import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { DeviceDto } from '../../../../models/DeviceDto';
-import { HealthReport } from '../../../../models/jetson-dtos/HealthReport';
+import { HealthReport, IntrinsicsCalibrationState } from '../../../../models/jetson-dtos/HealthReport';
 
 type ServiceRow = {
   Name: string;
@@ -20,9 +21,30 @@ type CameraRow = {
   Enabled: boolean;
 };
 
+type DiskRow = {
+  Path: string;
+  UsedMb: number;
+  TotalMb: number;
+  FreeMb: number;
+  UsePct: number;
+  Status: string;
+  DeletedFiles: number;
+};
+
+type IntrinsicsRow = {
+  Mac: string;
+  Status: string;
+  SightingsCollected: number;
+  CoverageFilled: number;
+  CoverageTotal: number;
+  CurrentRmse: number;
+  SuggestedRegion: string;
+  SuggestedTilt: string;
+};
+
 @Component({
   selector: 'app-device-health-report',
-  imports: [CommonModule, PanelModule, TableModule],
+  imports: [CommonModule, PanelModule, TableModule, TagModule],
   templateUrl: './device-health-report.html',
   styleUrl: './device-health-report.scss',
 })
@@ -32,6 +54,8 @@ export class DeviceHealthReport implements OnInit {
 
   serviceRows: ServiceRow[] = [];
   cameraRows: CameraRow[] = [];
+  diskRows: DiskRow[] = [];
+  intrinsicsRows: IntrinsicsRow[] = [];
 
   constructor(
     private readonly ref: DynamicDialogRef,
@@ -64,10 +88,46 @@ export class DeviceHealthReport implements OnInit {
           Enabled: !!cam?.Enabled,
         };
       });
+
+    this.diskRows = (this.healthReport?.System?.Disk ?? []).map(d => ({
+      Path: d.Path,
+      UsedMb: d.UsedMb,
+      TotalMb: d.TotalMb,
+      FreeMb: d.FreeMb,
+      UsePct: d.UsePct,
+      Status: d.Status,
+      DeletedFiles: d.DeletedFiles,
+    }));
+
+    this.intrinsicsRows = Object.entries(this.healthReport?.IntrinsicsCalibration ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mac, state]: [string, IntrinsicsCalibrationState]) => ({
+        Mac: mac,
+        Status: state.Status,
+        SightingsCollected: state.SightingsCollected,
+        CoverageFilled: (state.CoverageGrid ?? []).filter(v => !!v).length,
+        CoverageTotal: (state.CoverageGrid ?? []).length,
+        CurrentRmse: state.CurrentRmse,
+        SuggestedRegion: state.SuggestedRegion ?? '—',
+        SuggestedTilt: state.SuggestedTilt ?? '—',
+      }));
   }
 
   close(): void {
     this.ref.close();
+  }
+
+  diskSeverity(status: string): 'success' | 'warn' | 'danger' | 'secondary' {
+    if (status === 'ok') return 'success';
+    if (status === 'warning') return 'warn';
+    if (status === 'critical') return 'danger';
+    return 'secondary';
+  }
+
+  intrinsicsSeverity(status: string): 'success' | 'info' | 'secondary' {
+    if (status === 'done') return 'success';
+    if (status === 'collecting') return 'info';
+    return 'secondary';
   }
 
   get timestampText(): string {

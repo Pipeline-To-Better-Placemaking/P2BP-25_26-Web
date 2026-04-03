@@ -192,6 +192,58 @@
 				</div>
 			</div>
 		</p-panel>
+
+		<p-panel header="ArUco Lock">
+			<div formGroupName="ArucoLock" class="space-y-4">
+				<div class="flex items-center justify-between gap-4">
+					<p class="text-sm text-muted-color">Inter-camera homography locking via ArUco markers.</p>
+					<div class="flex items-center gap-2">
+						<p-checkbox inputId="aruco-begin-scanning" formControlName="BeginScanning" binary></p-checkbox>
+						<label for="aruco-begin-scanning" class="font-semibold">Begin Scanning</label>
+					</div>
+				</div>
+				<div class="grid gap-4 md:grid-cols-3">
+					<div class="flex flex-col gap-1">
+						<label for="aruco-dict" class="font-semibold">ArUco Dictionary</label>
+						<input id="aruco-dict" pInputText formControlName="ArucoDict" placeholder="DICT_4X4_50" />
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="aruco-min-frames" class="font-semibold">Min Frames</label>
+						<p-inputNumber inputId="aruco-min-frames" formControlName="MinFrames" [min]="1" showButtons></p-inputNumber>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="aruco-max-seconds" class="font-semibold">Max Seconds / Camera</label>
+						<p-inputNumber inputId="aruco-max-seconds" formControlName="MaxSecondsPerCam" [min]="1" showButtons suffix=" s"></p-inputNumber>
+					</div>
+				</div>
+			</div>
+		</p-panel>
+
+		<p-panel header="Intrinsics Calibration">
+			<div formGroupName="Intrinsics" class="space-y-4">
+				<div class="flex items-center justify-between gap-4">
+					<p class="text-sm text-muted-color">Per-camera lens intrinsics calibration settings.</p>
+					<div class="flex items-center gap-2">
+						<p-checkbox inputId="intrinsics-begin-calibration" formControlName="BeginCalibration" binary></p-checkbox>
+						<label for="intrinsics-begin-calibration" class="font-semibold">Begin Calibration</label>
+					</div>
+				</div>
+				<div class="grid gap-4 md:grid-cols-3">
+					<div class="flex flex-col gap-1">
+						<label for="intrinsics-model-id" class="font-semibold">Model ID</label>
+						<input id="intrinsics-model-id" pInputText formControlName="ModelId" placeholder="annke-v1" />
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="intrinsics-min-sightings" class="font-semibold">Min Sightings</label>
+						<p-inputNumber inputId="intrinsics-min-sightings" formControlName="MinSightings" [min]="1" showButtons></p-inputNumber>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="intrinsics-grid-cells" class="font-semibold">Grid Cells</label>
+						<p-inputNumber inputId="intrinsics-grid-cells" formControlName="GridCells" [min]="1" showButtons></p-inputNumber>
+					</div>
+				</div>
+			</div>
+		</p-panel>
 	</div>
 
 	<div class="flex justify-end gap-2">

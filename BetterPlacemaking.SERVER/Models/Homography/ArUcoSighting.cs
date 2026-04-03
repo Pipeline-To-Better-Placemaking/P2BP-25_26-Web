@@ -25,6 +25,9 @@ namespace BetterPlacemaking.Models.Homography
 
         [FirestoreProperty]
         public List<ArUcoMarkerRecord>? Markers { get; set; }
+
+        [FirestoreProperty]
+        public string? LocalHomographyHash { get; set; }
     }
 
     [FirestoreData]

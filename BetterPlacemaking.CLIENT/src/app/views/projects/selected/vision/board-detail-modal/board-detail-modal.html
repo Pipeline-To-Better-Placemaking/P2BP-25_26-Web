@@ -1,0 +1,68 @@
+<div class="flex flex-col gap-4 p-1">
+
+  <p class="text-sm text-muted-color">Download this board as a PDF, edit it, or remove it from your library.</p>
+
+  <div *ngIf="board">
+    <!-- Board specs -->
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color">Nickname</div>
+        <div class="font-semibold">{{ board.Nickname }}</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color">Type</div>
+        <div class="font-semibold uppercase">{{ board.Type }}</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color">Dictionary</div>
+        <div class="font-semibold">{{ board.Dictionary }}</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700" *ngIf="board.Type === 'charuco'">
+        <div class="text-xs text-muted-color">Grid</div>
+        <div class="font-semibold">{{ board.Cols }} x {{ board.Rows }}</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700" *ngIf="board.Type === 'aruco'">
+        <div class="text-xs text-muted-color">Marker ID</div>
+        <div class="font-semibold">{{ board.MarkerId ?? 0 }}</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700" *ngIf="board.Type === 'charuco'">
+        <div class="text-xs text-muted-color">Square size</div>
+        <div class="font-semibold">{{ board.SquareSizeMm }} mm</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color">Marker size</div>
+        <div class="font-semibold">{{ board.MarkerSizeMm }} mm</div>
+      </div>
+      <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
+        <div class="text-xs text-muted-color">Created</div>
+        <div class="font-semibold">{{ board.CreatedAtUtc | date:'medium' }}</div>
+      </div>
+    </div>
+
+    <!-- SVG preview -->
+    <div class="rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700 bg-surface-100 dark:bg-surface-800 mb-4 flex items-center justify-center p-4">
+      <img [src]="svgPreviewDataUrl" alt="Board preview" class="max-w-full h-auto object-contain" />
+    </div>
+  </div>
+
+  <div *ngIf="!board" class="text-muted-color text-sm text-center py-6">
+    No board data available.
+  </div>
+
+  <!-- Action buttons -->
+  <div class="flex gap-2 border-t border-surface-200 dark:border-surface-700 pt-4">
+    <p-button label="Download PDF" icon="pi pi-download" severity="primary"
+              [loading]="downloading"
+              [disabled]="!board || deleting || editing"
+              (onClick)="downloadPdf()" />
+    <p-button label="Edit" icon="pi pi-pencil" severity="secondary"
+              [loading]="editing"
+              [disabled]="!board || deleting || downloading"
+              (onClick)="editBoard()" />
+    <p-button label="Delete" icon="pi pi-trash" severity="danger"
+              [loading]="deleting"
+              [disabled]="!board || editing || downloading"
+              (onClick)="deleteBoard()" />
+  </div>
+
+</div>
