@@ -185,6 +185,46 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+		[HttpGet("project-roles/project/{projectId}")]
+		public IActionResult GetProjectRolesForProject([FromRoute] string projectId)
+		{
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest("ProjectId is required.");
+
+			try
+			{
+				var response = _userService.GetProjectMemberRoles(projectId);
+				return Ok(response);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving project role assignments.");
+			}
+		}
+
+		[HttpPut("project-roles/project/{projectId}")]
+		public IActionResult SetProjectRoleForProject([FromRoute] string projectId, [FromBody] ProjectMemberRoleUpdateDto request)
+		{
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest("ProjectId is required.");
+
+			if (request == null || string.IsNullOrWhiteSpace(request.UserId))
+				return BadRequest("UserId is required.");
+
+			try
+			{
+				var success = _userService.SetProjectMemberRole(projectId, request);
+				if (!success)
+					return NotFound("User not found.");
+
+				return NoContent();
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while updating project role assignments.");
+			}
+		}
+
 		private string? ResolveCurrentUserId()
 		{
 			return
