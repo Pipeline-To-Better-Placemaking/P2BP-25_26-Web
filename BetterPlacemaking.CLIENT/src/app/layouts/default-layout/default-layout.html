@@ -60,7 +60,8 @@
         <p-menu [model]="footerItems">
           <ng-template #item let-item>
             <button type="button" class="p-menu-item-link">
-              <fa-icon [icon]="item.faIcon"></fa-icon>
+              <fa-icon *ngIf="item.faIcon" [icon]="item.faIcon"></fa-icon>
+              <i *ngIf="item.piIcon" [class]="item.piIcon"></i>
               <span>{{ item.label }}</span>
             </button>
           </ng-template>

@@ -8,6 +8,7 @@ import {
   faFolder,
   faChartLine,
   faMoon,
+  faSun,
   faUser,
   faCube,
   faEye,
@@ -63,10 +64,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
   @ViewChild('userMenu') private userMenu?: Menu;
 
   ngOnInit(): void {
-    this.footerItems = [
-      { label: 'Toggle appearance', faIcon: faMoon, command: () => this.toggleDarkMode() },
-      { label: 'User', faIcon: faUser, command: (event) => this.openUserMenu(event) },
-    ];
+    this.buildFooterItems();
 
     this.userMenuItems = [
       { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings(), routerLink: '/user-settings' },
@@ -167,6 +165,14 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   toggleDarkMode(): void {
     this.themeService.toggleDarkMode();
+    this.buildFooterItems();
+  }
+
+  private buildFooterItems(): void {
+    this.footerItems = [
+      { label: 'Toggle appearance', piIcon: this.themeService.isDark ? 'pi pi-sun' : 'pi pi-moon', command: () => this.toggleDarkMode() },
+      { label: 'User', faIcon: faUser, command: (event) => this.openUserMenu(event) },
+    ];
   }
 
   private openSettings(): void {
