@@ -1,13 +1,16 @@
 import { Injectable } from '@angular/core';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { jsPDF } from 'jspdf';
 
 import { ProjectService } from './project-service';
 import { DeviceService } from './device-service';
 import { ScanService } from './scan-service';
+import { BoardService } from './board-service';
 import { ProjectDto } from '../models/ProjectDto';
 import { DeviceDto } from '../models/DeviceDto';
 import { ScanScheduleDto } from './scan-service';
+import { BoardLibraryItem } from '../models/BoardLibrary';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
@@ -18,7 +21,8 @@ export class ExportService {
   constructor(
     private projectService: ProjectService,
     private deviceService: DeviceService,
-    private scanService: ScanService
+    private scanService: ScanService,
+    private boardService: BoardService
   ) {}
 
   exportProjectPdf(projectId: string): void {
@@ -26,19 +30,19 @@ export class ExportService {
       project: this.projectService.getProject(projectId),
       devices: this.deviceService.getDevices(),
       schedules: this.scanService.getSchedules(projectId),
+      boards: this.boardService.getLibrary().pipe(catchError(() => of([] as BoardLibraryItem[]))),
     }).subscribe({
-      next: ({ project, devices, schedules }) => {
+      next: ({ project, devices, schedules, boards }) => {
         const projectDevices = devices.filter(d => d.ProjectId === projectId);
-        this.generatePdf(project, projectDevices, schedules);
+        this.generatePdf(project, projectDevices, schedules, boards);
       },
       error: () => {
-        // Generate with whatever we have
-        this.generatePdf({ Id: projectId, Title: 'Unknown', Description: '', Location: '' }, [], []);
+        this.generatePdf({ Id: projectId, Title: 'Unknown', Description: '', Location: '' }, [], [], []);
       },
     });
   }
 
-  private generatePdf(project: ProjectDto, devices: DeviceDto[], schedules: ScanScheduleDto[]): void {
+  private async generatePdf(project: ProjectDto, devices: DeviceDto[], schedules: ScanScheduleDto[], boards: BoardLibraryItem[]): Promise<void> {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -206,6 +210,76 @@ export class ExportService {
       }
     }
 
+    // --- Board Library ---
+    checkPage(30);
+    y += 10;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Board Library', margin, y);
+    y += 4;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text(`${boards.length} board(s) saved`, margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+
+    if (boards.length === 0) {
+      doc.setFontSize(11);
+      doc.text('No boards in library.', margin, y);
+      y += 10;
+    } else {
+      const boardImageWidth = 60;
+      const boardImageMaxHeight = 60;
+
+      for (const board of boards) {
+        const label = board.Nickname || `${board.Type} board`;
+        const dictLabel = board.Dictionary;
+        const sizeLabel = board.Type === 'charuco'
+          ? `${board.Cols}x${board.Rows} squares, marker ${board.MarkerSizeMm}mm`
+          : `Marker #${board.MarkerId}, ${board.MarkerSizeMm}mm`;
+
+        let pngDataUrl: string | null = null;
+        if (board.PreviewSvg) {
+          try {
+            pngDataUrl = await this.renderSvgToPng(board.PreviewSvg, 480, 480);
+          } catch { /* skip image if render fails */ }
+        }
+
+        const blockHeight = pngDataUrl ? Math.max(boardImageMaxHeight + 10, 30) : 24;
+        checkPage(blockHeight);
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, margin, y);
+        y += 6;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${dictLabel}  •  ${sizeLabel}`, margin, y);
+        y += 6;
+
+        if (pngDataUrl) {
+          const aspectRatio = board.Type === 'charuco' && board.Cols && board.Rows
+            ? board.Cols / board.Rows
+            : 1;
+          let imgW = boardImageWidth;
+          let imgH = imgW / aspectRatio;
+          if (imgH > boardImageMaxHeight) {
+            imgH = boardImageMaxHeight;
+            imgW = imgH * aspectRatio;
+          }
+
+          checkPage(imgH + 6);
+          doc.addImage(pngDataUrl, 'PNG', margin, y, imgW, imgH);
+          y += imgH + 6;
+        }
+
+        doc.setDrawColor(230, 230, 230);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 6;
+      }
+    }
+
     // --- Footer ---
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
@@ -271,5 +345,34 @@ export class ExportService {
     if (!ts) return 'Never';
     const ms = ts < 1e12 ? ts * 1000 : ts;
     return new Date(ms).toLocaleString();
+  }
+
+  private renderSvgToPng(svg: string, width: number, height: number): Promise<string> {
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(svgBlob);
+
+    return new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/png'));
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to load SVG'));
+      };
+      img.src = objectUrl;
+    });
   }
 }
