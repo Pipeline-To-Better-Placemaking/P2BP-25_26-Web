@@ -27,3 +27,4 @@ node_modules/
 
 # Visualizer temp uploads
 **/uploads/
+BetterPlacemaking.CLIENT/public/test-puzzle/test-points.jsonl

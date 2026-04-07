@@ -50,7 +50,15 @@ export const routes: Routes = [
           { path: 'admin', children: admin },
           { path: 'model', component: Scanner },
           { path: 'dashboard', component: Dashboard },
-          { path: 'vision', component: Vision },
+          {
+            path: 'vision',
+            loadComponent: () => import('./views/projects/selected/vision/vision').then((m) => m.Vision),
+          },
+          {
+            path: 'calibration/puzzle',
+            loadComponent: () =>
+              import('./views/projects/selected/calibration/puzzle/puzzle.component').then((m) => m.PuzzleComponent),
+          },
         ],
       },
     ],

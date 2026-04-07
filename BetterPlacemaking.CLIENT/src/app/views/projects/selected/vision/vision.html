@@ -16,6 +16,15 @@
         <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
       </div>
       <div class="text-xs text-muted-color mt-1">Fully calibrated</div>
+      <div class="mt-4">
+        <p-button
+          label="Review Cameras"
+          icon="pi pi-eye"
+          size="small"
+          severity="secondary"
+          [disabled]="!firstCamera"
+          (onClick)="openCameraDiscovery()" />
+      </div>
     </p-card>
 
     <p-card styleClass="h-full">
@@ -29,6 +38,14 @@
         <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
       </div>
       <div class="text-xs text-muted-color mt-1">Lens distortion calibrated</div>
+      <div class="mt-4">
+        <p-button
+          label="Run Intrinsics"
+          icon="pi pi-camera"
+          size="small"
+          [disabled]="!firstCameraNeedingIntrinsics"
+          (onClick)="openIntrinsicsCalibration()" />
+      </div>
     </p-card>
 
     <p-card styleClass="h-full">
@@ -38,6 +55,17 @@
         <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
       </div>
       <div class="text-xs text-muted-color mt-1">Pixel → world mapping</div>
+      <div class="mt-4">
+        <p-button
+          [label]="homographyActionLabel"
+          icon="pi pi-compass"
+          size="small"
+          severity="secondary"
+          [disabled]="!firstCameraReadyForHomography"
+          (onClick)="openHomographyCalibration()"
+          [pTooltip]="homographyHelpText"
+          tooltipPosition="top" />
+      </div>
     </p-card>
 
     <p-card styleClass="h-full">
@@ -48,6 +76,15 @@
         </span>
       </div>
       <div class="text-xs text-muted-color mt-1">Origin established</div>
+      <div class="mt-4">
+        <p-button
+          label="Open ArUco Lock"
+          icon="pi pi-lock"
+          size="small"
+          severity="contrast"
+          [disabled]="!firstDevice"
+          (onClick)="openArucoLock()" />
+      </div>
     </p-card>
   </div>
 
@@ -58,6 +95,17 @@
     <p-panel
       [header]="camsNeedingAttention > 0 ? 'Cameras (' + camsNeedingAttention + ' need attention)' : 'Cameras'"
       [toggleable]="true">
+      <div class="vision-panel-action">
+        <div class="text-sm text-muted-color">Discover cameras and jump straight into per-camera calibration.</div>
+        <p-button
+          label="Open Camera"
+          icon="pi pi-video"
+          size="small"
+          severity="secondary"
+          [disabled]="!firstCamera"
+          (onClick)="openCameraDiscovery()" />
+      </div>
+
       <div *ngIf="loading" class="text-muted-color text-sm py-4 text-center">Loading cameras...</div>
 
       <div *ngIf="!loading && allCameras.length === 0" class="text-muted-color text-sm py-4 text-center">
@@ -97,6 +145,17 @@
 
     <!-- Devices panel -->
     <p-panel header="Devices" [toggleable]="true">
+      <div class="vision-panel-action">
+        <div class="text-sm text-muted-color">Check Jetson heartbeat, health, and device-level calibration actions.</div>
+        <p-button
+          label="Open Device"
+          icon="pi pi-desktop"
+          size="small"
+          severity="secondary"
+          [disabled]="!firstDevice"
+          (onClick)="openHardwareSetup()" />
+      </div>
+
       <div *ngIf="loading" class="text-muted-color text-sm py-4 text-center">Loading devices...</div>
 
       <div *ngIf="!loading && devices.length === 0" class="text-muted-color text-sm py-4 text-center">
@@ -194,10 +253,24 @@
 
     <!-- Top-Down Map -->
     <p-panel header="Top-Down Map View" [toggleable]="true">
-      <div class="border-2 border-dashed rounded-lg p-10 text-center text-muted-color">
+      <div class="vision-map-launch">
+        <div class="vision-map-copy">
+          <div class="vision-map-title">Puzzle Assembly Workspace</div>
+          <div class="vision-map-text">
+            Launch the calibration puzzle to align BEV layers on the floorplan and produce global homographies.
+          </div>
+        </div>
+        <p-button
+          label="Open Puzzle"
+          icon="pi pi-map"
+          severity="contrast"
+          (onClick)="openPuzzleWorkspace()" />
+      </div>
+
+      <div class="border-2 border-dashed rounded-lg p-10 text-center text-muted-color mt-4">
         <i class="pi pi-map text-4xl opacity-30 block mb-3"></i>
-        <div class="font-semibold opacity-50">Coming Soon</div>
-        <div class="text-xs opacity-30 mt-1">Puzzle-piece camera layout system in development</div>
+        <div class="font-semibold opacity-70">Ready for Puzzle Assembly</div>
+        <div class="text-xs opacity-50 mt-1">Use the workspace to place camera tiles and save floorplan alignment.</div>
       </div>
     </p-panel>
   </div>

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CardModule } from 'primeng/card';
 import { PanelModule } from 'primeng/panel';
 import { TagModule } from 'primeng/tag';
@@ -63,6 +63,7 @@ export class Vision implements OnInit {
 
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly deviceService: DeviceService,
     private readonly boardService: BoardService,
     private readonly dialogService: DialogService,
@@ -122,6 +123,22 @@ export class Vision implements OnInit {
     return this.allCameras.filter((c) => c.intrinsics?.Status === 'done').length;
   }
 
+  get firstCamera(): CameraEntry | null {
+    return this.allCameras[0] ?? null;
+  }
+
+  get firstDevice(): DeviceDto | null {
+    return this.devices[0] ?? null;
+  }
+
+  get firstCameraNeedingIntrinsics(): CameraEntry | null {
+    return this.allCameras.find((c) => c.intrinsics?.Status !== 'done') ?? this.firstCamera;
+  }
+
+  get firstCameraReadyForHomography(): CameraEntry | null {
+    return this.allCameras.find((c) => c.intrinsics?.Status === 'done') ?? null;
+  }
+
   get statCamerasReady(): number {
     return this.allCameras.filter((c) => c.intrinsics?.Status === 'done').length;
   }
@@ -147,6 +164,22 @@ export class Vision implements OnInit {
       return 'Intrinsics complete. Run ArUco lock calibration on each device to finalize setup.';
     }
     return null;
+  }
+
+  get homographyActionLabel(): string {
+    if (this.firstCameraReadyForHomography) {
+      return 'Open Camera';
+    }
+
+    return 'Needs Intrinsics';
+  }
+
+  get homographyHelpText(): string {
+    if (this.firstCameraReadyForHomography) {
+      return 'Use a camera with intrinsics complete to trigger the ChArUco homography scan.';
+    }
+
+    return 'Finish at least one camera intrinsics calibration before running homography.';
   }
 
   cameraStatusClass(cam: CameraEntry): string {
@@ -210,7 +243,7 @@ export class Vision implements OnInit {
 
   openCameraModal(cam: CameraEntry): void {
     const label = cam.nickname || `Camera ${cam.index}`;
-    this.camRef = this.dialogService.open(CameraModal, {
+    const ref = this.dialogService.open(CameraModal, {
       header: label,
       width: '580px',
       modal: true,
@@ -218,10 +251,12 @@ export class Vision implements OnInit {
       closable: true,
       data: { device: cam.device, mac: cam.mac, camInfo: cam.info, intrinsics: cam.intrinsics, allDevices: this.devices },
     });
+    this.camRef = ref;
+    ref?.onClose.subscribe(() => this.loadDevices());
   }
 
   openDeviceModal(device: DeviceDto): void {
-    this.deviceRef = this.dialogService.open(DeviceModal, {
+    const ref = this.dialogService.open(DeviceModal, {
       header: device.Name || 'Jetson Device',
       width: '560px',
       modal: true,
@@ -229,6 +264,8 @@ export class Vision implements OnInit {
       closable: true,
       data: { device, allDevices: this.devices },
     });
+    this.deviceRef = ref;
+    ref?.onClose.subscribe(() => this.loadDevices());
   }
 
   openBoardGenerateModal(): void {
@@ -249,6 +286,40 @@ export class Vision implements OnInit {
         this.loadBoardLibrary();
       }
     });
+  }
+
+  openHardwareSetup(): void {
+    if (this.firstDevice) {
+      this.openDeviceModal(this.firstDevice);
+    }
+  }
+
+  openCameraDiscovery(): void {
+    if (this.firstCamera) {
+      this.openCameraModal(this.firstCamera);
+    }
+  }
+
+  openIntrinsicsCalibration(): void {
+    if (this.firstCameraNeedingIntrinsics) {
+      this.openCameraModal(this.firstCameraNeedingIntrinsics);
+    }
+  }
+
+  openHomographyCalibration(): void {
+    if (this.firstCameraReadyForHomography) {
+      this.openCameraModal(this.firstCameraReadyForHomography);
+    }
+  }
+
+  openArucoLock(): void {
+    if (this.firstDevice) {
+      this.openDeviceModal(this.firstDevice);
+    }
+  }
+
+  openPuzzleWorkspace(): void {
+    void this.router.navigate([this.projectId, 'calibration', 'puzzle']);
   }
 
   openBoardDetailModal(board: BoardLibraryItem): void {

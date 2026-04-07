@@ -1,0 +1,67 @@
+<div class="puzzle-container" tabindex="0" (keydown)="onKeyDown($event)">
+  <!-- Calibration banner -->
+  <div *ngIf="mode === 'calibrate'" class="calibration-banner">
+    <div class="cal-steps">
+      <div class="cal-step" [class.active]="calPoints.length === 0">
+        <span class="step-number">1</span>
+        <span>Click the first reference point on the floorplan</span>
+      </div>
+      <div class="cal-step" [class.active]="calPoints.length === 1">
+        <span class="step-number">2</span>
+        <span>Click the second reference point</span>
+      </div>
+      <div class="cal-step" [class.active]="calPoints.length === 2">
+        <span class="step-number">3</span>
+        <div class="cal-input">
+          <label>Enter real-world distance between points (mm):</label>
+          <input
+            pInputText
+            type="number"
+            [(ngModel)]="calDistanceMm"
+            (keydown.enter)="finishCalibration()"
+            placeholder="e.g. 7391"
+          />
+          <button type="button" (click)="finishCalibration()">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main canvas for puzzle -->
+  <canvas
+    #puzzleCanvas
+    (mousedown)="onMouseDown($event)"
+    (mousemove)="onMouseMove($event)"
+    (mouseup)="onMouseUp($event)"
+  ></canvas>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span>Layer: {{ selectedIndex + 1 }}/{{ layers.length }} — {{ layers[selectedIndex]?.macTag }}</span>
+    <span>Rot: {{ layers[selectedIndex]?.angleDeg?.toFixed(1) }}°</span>
+    <span>Scale: {{ layers[selectedIndex]?.scale?.toFixed(3) }}</span>
+    <p-button label="Save" (onClick)="save()" />
+  </div>
+
+  <!-- Controls panel -->
+  <div class="controls-panel">
+    <h3>Controls</h3>
+    <div class="control-group">
+      <span class="control-label">Navigation</span>
+      <div class="control-row"><kbd>Tab</kbd> <span>Next layer</span></div>
+      <div class="control-row"><kbd>B</kbd> <span>Previous layer</span></div>
+    </div>
+    <div class="control-group">
+      <span class="control-label">Transform</span>
+      <div class="control-row"><kbd>Drag</kbd> <span>Move layer</span></div>
+      <div class="control-row"><kbd>[</kbd> <kbd>]</kbd> <span>Rotate</span></div>
+      <div class="control-row"><kbd>-</kbd> <kbd>=</kbd> <span>Scale</span></div>
+      <div class="control-row"><kbd>↑↓←→</kbd> <span>Nudge</span></div>
+      <div class="control-row"><kbd>T</kbd> <span>Toggle tracks</span></div>
+    </div>
+    <div class="control-group">
+      <span class="control-label">Actions</span>
+      <div class="control-row"><kbd>Save</kbd> <span>Export placements</span></div>
+    </div>
+  </div>
+</div>
