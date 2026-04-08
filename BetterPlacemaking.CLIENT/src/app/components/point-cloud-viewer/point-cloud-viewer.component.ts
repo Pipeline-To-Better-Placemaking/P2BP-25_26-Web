@@ -1,5 +1,6 @@
 import {
   Component,
+  Input,
   OnInit,
   OnDestroy,
   ElementRef,
@@ -13,22 +14,17 @@ import { ButtonModule } from 'primeng/button';
 import { SelectModule } from 'primeng/select';
 import { MessageModule } from 'primeng/message';
 import { VisualizerService, LidarPoint3D } from '../../services/visualizer-service';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, ParamMap } from '@angular/router';
+import { interval, of, Subscription } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-
-type QualityPreset = 'low' | 'medium' | 'high' | 'ultra' | 'maximum';
 
 interface QualitySettings {
   downsample: number;
   maxPoints: number;
   pointSize: number;
-}
-
-interface QualityOption {
-  label: string;
-  value: QualityPreset;
 }
 
 interface ExportOption {
@@ -41,7 +37,6 @@ interface ExportOption {
   standalone: true,
   imports: [CommonModule, FormsModule, CardModule, ButtonModule, SelectModule, MessageModule],
   templateUrl: './point-cloud-viewer.component.html',
-  styleUrls: ['./point-cloud-viewer.component.scss'],
 })
 export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('rendererCanvas', { static: false })
@@ -49,21 +44,14 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
 
   // ── State ──────────────────────────────────────────────────────────
   lidar3D: LidarPoint3D[] = [];
-  qualityPreset: QualityPreset = 'high';
   currentFps = 0;
   uploadProgress = 0;
   statusMessage: string | null = null;
   statusSeverity: 'success' | 'error' | 'info' = 'info';
   selectedFile?: File;
   isLoading = false;
-
-  qualityOptions: QualityOption[] = [
-    { label: 'Low (25K pts, 6px)', value: 'low' },
-    { label: 'Medium (50K pts, 4px)', value: 'medium' },
-    { label: 'High (200K pts, 3px)', value: 'high' },
-    { label: 'Ultra (500K pts, 2.5px)', value: 'ultra' },
-    { label: 'Maximum (Unlimited)', value: 'maximum' },
-  ];
+  /** Same as gallery-view <code>xyzUnits</code>; RPLidar .xyz is usually meters. */
+  xyzUnits: 'mm' | 'm' = 'm';
 
   exportOptions: ExportOption[] = [
     { label: 'OBJ (Rhino)', value: 'obj' },
@@ -88,8 +76,14 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   private pointCloudCenter = { x: 0, y: 0, z: 0 };
   private frameCount = 0;
   private lastFpsTime = 0;
-  private resizeObserver?: ResizeObserver;
-  private projectId?: string;
+  /** When embedded (e.g. 3D View on Scanner), parent passes route `projectId` for upload query params. */
+  @Input() projectContextId?: string;
+  private routeProjectId?: string;
+
+  /** Polls points-meta when {@link projectContextId} is set (Scanner 3D View) to pick up device scan ingest. */
+  private metaPollSub?: Subscription;
+  private lastRevisionSeen = 0;
+  private metaPollPrimed = false;
 
   constructor(
     private readonly visualizerService: VisualizerService,
@@ -99,14 +93,22 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   // ── Lifecycle ──────────────────────────────────────────────────────
 
   ngOnInit(): void {
-    const saved = localStorage.getItem('pointCloudQuality');
-    if (saved && ['low', 'medium', 'high', 'ultra', 'maximum'].includes(saved)) {
-      this.qualityPreset = saved as QualityPreset;
-    }
+    const applyRouteProjectId = (params: ParamMap) => {
+      const id = params.get('projectId');
+      if (id) {
+        this.routeProjectId = id;
+      }
+    };
+    const parentId = this.route.parent?.snapshot.paramMap.get('projectId');
+    const selfId = this.route.snapshot.paramMap.get('projectId');
+    this.routeProjectId = (parentId || selfId) ?? undefined;
 
-    this.route.paramMap.subscribe((params) => {
-      this.projectId = params.get('projectId') ?? undefined;
-    });
+    this.route.parent?.paramMap.subscribe(applyRouteProjectId);
+    this.route.paramMap.subscribe(applyRouteProjectId);
+  }
+
+  private effectiveProjectId(): string | undefined {
+    return this.projectContextId?.trim() || this.routeProjectId;
   }
 
   ngAfterViewInit(): void {
@@ -114,35 +116,62 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     setTimeout(() => {
       this.initThreeJS();
       this.loadExistingPoints();
+      this.startScanIngestMetaPolling();
     }, 0);
   }
 
   ngOnDestroy(): void {
+    this.metaPollSub?.unsubscribe();
     if (this.animationFrameId != null) {
       cancelAnimationFrame(this.animationFrameId);
     }
-    this.resizeObserver?.disconnect();
     this.renderer?.dispose();
+  }
+
+  private startScanIngestMetaPolling(): void {
+    if (!this.projectContextId?.trim()) {
+      return;
+    }
+
+    this.metaPollSub = interval(2800)
+      .pipe(
+        switchMap(() =>
+          this.visualizerService.getPointsMeta().pipe(
+            catchError(() => of(null)),
+          ),
+        ),
+      )
+      .subscribe((meta) => {
+        if (!meta) {
+          return;
+        }
+        if (!this.metaPollPrimed) {
+          this.metaPollPrimed = true;
+          this.lastRevisionSeen = meta.Revision;
+          return;
+        }
+        if (meta.Revision > this.lastRevisionSeen) {
+          this.lastRevisionSeen = meta.Revision;
+          this.refreshPointCloud();
+        }
+      });
   }
 
   // ── Three.js setup ─────────────────────────────────────────────────
 
+  /** Ported from P2BP-25_26-Visualizer `gallery-view.component.ts` `initThreeJS` (fixed canvas buffer via width/height attrs). */
   private initThreeJS(): void {
     const canvas = this.canvasRef.nativeElement;
-    const container = canvas.parentElement!;
-    const width = container.clientWidth || 800;
-    const height = container.clientHeight || 600;
+    const width = canvas.width;
+    const height = canvas.height;
 
-    // Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1a1a);
 
-    // Camera
     this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 50000);
     this.camera.position.set(500, 500, 500);
     this.camera.lookAt(0, 0, 0);
 
-    // Renderer
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -154,46 +183,28 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = false;
 
-    // Controls
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
 
-    // Lighting
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
-    const d1 = new THREE.DirectionalLight(0xffffff, 1.0);
-    d1.position.set(500, 500, 500);
-    this.scene.add(d1);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight1.position.set(500, 500, 500);
+    this.scene.add(directionalLight1);
 
-    const d2 = new THREE.DirectionalLight(0xffffff, 0.6);
-    d2.position.set(-500, 300, -500);
-    this.scene.add(d2);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight2.position.set(-500, 300, -500);
+    this.scene.add(directionalLight2);
 
-    const d3 = new THREE.DirectionalLight(0xffffff, 0.4);
-    d3.position.set(0, 1000, 0);
-    this.scene.add(d3);
+    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.4);
+    directionalLight3.position.set(0, 1000, 0);
+    this.scene.add(directionalLight3);
 
-    // Helpers
     this.scene.add(new THREE.GridHelper(2000, 20, 0x333333, 0x444444));
     this.scene.add(new THREE.AxesHelper(200));
 
-    // Responsive resize
-    this.resizeObserver = new ResizeObserver(() => this.onResize());
-    this.resizeObserver.observe(container);
-
-    // Animation loop
     this.animate();
-  }
-
-  private onResize(): void {
-    if (!this.renderer || !this.camera) return;
-    const container = this.canvasRef.nativeElement.parentElement!;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
   }
 
   private animate = (): void => {
@@ -250,32 +261,10 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     });
   }
 
-  // ── Quality ────────────────────────────────────────────────────────
-
-  onQualityChange(): void {
-    localStorage.setItem('pointCloudQuality', this.qualityPreset);
-    if (this.lidar3D.length > 0) {
-      this.clearScene();
-      this.renderPointCloud();
-      this.loadAndRenderMesh();
-    }
-  }
+  // ── Quality (fixed: maximum — all points, no downsample cap) ───────
 
   private getQualitySettings(): QualitySettings {
-    switch (this.qualityPreset) {
-      case 'low':
-        return { downsample: 20, maxPoints: 25000, pointSize: 6.0 };
-      case 'medium':
-        return { downsample: 10, maxPoints: 50000, pointSize: 4.0 };
-      case 'high':
-        return { downsample: 5, maxPoints: 200000, pointSize: 3.0 };
-      case 'ultra':
-        return { downsample: 1, maxPoints: 500000, pointSize: 2.5 };
-      case 'maximum':
-        return { downsample: 1, maxPoints: 0, pointSize: 2.0 };
-      default:
-        return { downsample: 1, maxPoints: 500000, pointSize: 2.5 };
-    }
+    return { downsample: 1, maxPoints: 0, pointSize: 2.0 };
   }
 
   // ── File upload ────────────────────────────────────────────────────
@@ -307,7 +296,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadObj(file: File): void {
-    this.visualizerService.uploadObjFile(file, { projectId: this.projectId }).subscribe({
+    this.visualizerService.uploadObjFile(file, { projectId: this.effectiveProjectId() }).subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(
@@ -325,7 +314,9 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadXyz(file: File): void {
-    this.visualizerService.uploadXyzFiles(file, undefined, { projectId: this.projectId }).subscribe({
+    this.visualizerService
+      .uploadXyzFiles(file, undefined, { projectId: this.effectiveProjectId(), xyzUnits: this.xyzUnits })
+      .subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(
@@ -343,7 +334,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private uploadPly(file: File): void {
-    this.visualizerService.uploadPlyFile(file, 0, { projectId: this.projectId }).subscribe({
+    this.visualizerService.uploadPlyFile(file, 0, { projectId: this.effectiveProjectId() }).subscribe({
       next: (res) => {
         this.uploadProgress = 100;
         this.showStatus(
@@ -470,14 +461,16 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     }
   }
 
+  /**
+   * Ported from P2BP-25_26-Visualizer `gallery-view.component.ts` `renderPointCloud`.
+   * API points use PascalCase (`X`,`Y`,`Z`,`Color`,`Intensity`,`Classification`) per .NET JSON defaults.
+   */
   private renderPointCloud(): void {
     if (this.lidar3D.length === 0) return;
 
-    const count = this.lidar3D.length;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
+    const positions = new Float32Array(this.lidar3D.length * 3);
+    const colors = new Float32Array(this.lidar3D.length * 3);
 
-    // Bounding box
     let minX = Infinity,
       maxX = -Infinity;
     let minY = Infinity,
@@ -485,24 +478,22 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     let minZ = Infinity,
       maxZ = -Infinity;
 
-    for (const p of this.lidar3D) {
-      if (p.X < minX) minX = p.X;
-      if (p.X > maxX) maxX = p.X;
-      if (p.Y < minY) minY = p.Y;
-      if (p.Y > maxY) maxY = p.Y;
-      const z = p.Z || 0;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
+    this.lidar3D.forEach((point) => {
+      minX = Math.min(minX, point.X);
+      maxX = Math.max(maxX, point.X);
+      minY = Math.min(minY, point.Y);
+      maxY = Math.max(maxY, point.Y);
+      const z = point.Z || 0;
+      minZ = Math.min(minZ, z);
+      maxZ = Math.max(maxZ, z);
+    });
 
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
     const centerZ = (minZ + maxZ) / 2;
     this.pointCloudCenter = { x: centerX, y: centerY, z: centerZ };
 
-    // Map coordinates and colors
     this.lidar3D.forEach((point, i) => {
-      // Coordinate mapping: X→X, Z(height)→Y(up), Y(depth)→Z(forward)
       positions[i * 3] = point.X - centerX;
       positions[i * 3 + 1] = (point.Z || 0) - centerZ;
       positions[i * 3 + 2] = point.Y - centerY;
@@ -510,23 +501,23 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
       const color = new THREE.Color();
       if (point.Color && typeof point.Color === 'string' && point.Color.startsWith('#')) {
         try {
-          const hex = point.Color.replace('#', '').trim();
-          if (hex.length === 6) {
-            color.setHex(parseInt(hex, 16));
+          const hexValue = point.Color.replace('#', '').trim();
+          if (hexValue.length === 6) {
+            color.setHex(parseInt(hexValue, 16));
           } else {
-            color.setRGB(0.5, 0.5, 0.5);
+            throw new Error('Invalid hex length');
           }
         } catch {
           color.setRGB(0.5, 0.5, 0.5);
         }
       } else {
         const intensity = point.Intensity || 1.0;
-        if (point.Classification === 1) {
-          color.setRGB(0.4, 0.4, 0.4);
-        } else if (point.Classification === 2) {
-          color.setRGB(0.3, 0.3, 0.6);
-        } else {
+        if (point.Classification === 0) {
           color.setRGB(0.5, 0.5, 0.5);
+        } else if (point.Classification === 1) {
+          color.setRGB(0.4, 0.4, 0.4);
+        } else {
+          color.setRGB(0.3, 0.3, 0.6);
         }
         color.multiplyScalar(intensity);
       }
@@ -540,49 +531,53 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
       colors[i * 3 + 2] = color.b;
     });
 
-    // Auto-adjust camera
     const sizeX = maxX - minX;
     const sizeY = maxY - minY;
     const sizeZ = maxZ - minZ;
     const maxSize = Math.max(sizeX, sizeY, sizeZ);
-    const distance = Math.max(maxSize * 2, 1000);
 
-    this.camera.position.set(distance * 0.7, distance * 0.5, distance * 0.7);
-    this.camera.lookAt(0, 0, 0);
-    this.controls.target.set(0, 0, 0);
+    const threeCenterX = 0;
+    const threeCenterY = 0;
+    const threeCenterZ = 0;
+
+    const distance = Math.max(maxSize * 2, 1000);
+    this.camera.position.set(
+      threeCenterX + distance * 0.7,
+      threeCenterY + distance * 0.5,
+      threeCenterZ + distance * 0.7,
+    );
+    this.camera.lookAt(threeCenterX, threeCenterY, threeCenterZ);
+    this.controls.target.set(threeCenterX, threeCenterY, threeCenterZ);
     this.controls.update();
 
-    // Geometry
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    // Adaptive point size
+    const pointCount = this.lidar3D.length;
     const qualitySettings = this.getQualitySettings();
-    const avgSize = (sizeX + sizeY + sizeZ) / 3;
-    const densityFactor = Math.max(0.8, Math.min(2.0, Math.sqrt(100000 / count)));
+    const baseSize = qualitySettings.pointSize;
+    const densityFactor = Math.max(0.8, Math.min(2.0, Math.sqrt(100000 / pointCount)));
     const sizeFactor = Math.max(0.8, Math.min(1.5, maxSize / 800));
-    const cameraDistance = this.camera.position.distanceTo(new THREE.Vector3(0, 0, 0));
-    const lodFactor = Math.max(0.7, Math.min(1.3, 800 / cameraDistance));
-    const pointSize = Math.max(
-      2.0,
-      Math.min(8.0, qualitySettings.pointSize * densityFactor * sizeFactor * lodFactor),
+    const cameraDistance = this.camera.position.distanceTo(
+      new THREE.Vector3(threeCenterX, threeCenterY, threeCenterZ),
     );
+    const lodFactor = Math.max(0.7, Math.min(1.3, 800 / cameraDistance));
+    const pointSize = Math.max(2.0, Math.min(8.0, baseSize * densityFactor * sizeFactor * lodFactor));
 
-    // Circular point texture
-    const texCanvas = document.createElement('canvas');
-    texCanvas.width = 64;
-    texCanvas.height = 64;
-    const ctx = texCanvas.getContext('2d')!;
+    const gradCanvas = document.createElement('canvas');
+    gradCanvas.width = 64;
+    gradCanvas.height = 64;
+    const ctx = gradCanvas.getContext('2d')!;
     const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, 'rgba(255,255,255,1.0)');
-    gradient.addColorStop(0.5, 'rgba(255,255,255,0.9)');
-    gradient.addColorStop(0.8, 'rgba(255,255,255,0.5)');
-    gradient.addColorStop(1, 'rgba(255,255,255,0.0)');
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.5)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 64, 64);
 
-    const pointTexture = new THREE.CanvasTexture(texCanvas);
+    const pointTexture = new THREE.CanvasTexture(gradCanvas);
     pointTexture.needsUpdate = true;
 
     const material = new THREE.PointsMaterial({

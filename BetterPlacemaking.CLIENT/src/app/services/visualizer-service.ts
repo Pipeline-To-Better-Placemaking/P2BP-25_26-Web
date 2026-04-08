@@ -4,6 +4,12 @@ import { environment } from '../../environments/environment';
 import { Observable, catchError } from 'rxjs';
 import { ErrorHandlerService } from './error-handler-service';
 
+/** Matches GET /api/visualizer/points-meta (PascalCase JSON). */
+export interface PointsMeta {
+  PointCount: number;
+  Revision: number;
+}
+
 export interface LidarPoint3D {
   X: number;
   Y: number;
@@ -33,6 +39,8 @@ export interface ObjUploadResponse {
 export interface UploadContext {
   projectId?: string;
   projectName?: string;
+  /** XYZ file coordinate units; matches gallery-view (RPLidar exports are usually meters). */
+  xyzUnits?: 'mm' | 'm';
 }
 
 @Injectable({
@@ -53,6 +61,11 @@ export class VisualizerService {
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load point cloud')));
   }
 
+  /** Session revision for polling after device scan ingest (no point payload). */
+  getPointsMeta(): Observable<PointsMeta> {
+    return this.http.get<PointsMeta>(`${this.baseUrl}/points-meta`);
+  }
+
   /** Upload an OBJ file */
   uploadObjFile(file: File, context?: UploadContext): Observable<ObjUploadResponse> {
     const formData = new FormData();
@@ -63,12 +76,15 @@ export class VisualizerService {
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to upload OBJ file')));
   }
 
-  /** Upload XYZ file(s) */
+  /** Upload XYZ file(s). Sends <code>units</code> form field like P2BP-25_26-Visualizer gallery service. */
   uploadXyzFiles(fileA: File, fileB?: File, context?: UploadContext): Observable<UploadResponse> {
     const formData = new FormData();
     formData.append('fileA', fileA);
     if (fileB) {
       formData.append('fileB', fileB);
+    }
+    if (context?.xyzUnits === 'mm' || context?.xyzUnits === 'm') {
+      formData.append('units', context.xyzUnits);
     }
     const params = this.buildUploadParams(context);
     return this.http

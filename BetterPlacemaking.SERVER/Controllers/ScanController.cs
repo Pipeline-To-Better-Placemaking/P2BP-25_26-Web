@@ -8,9 +8,12 @@ namespace BetterPlacemaking.Controllers
 	[ApiController]
 	[Route("api/[controller]")]
 	[Authorize(Policy = "UserJwt")]
-	public class ScanController(ScanService scanService) : ControllerBase
+	public class ScanController(
+		ScanService scanService,
+		ScanCompleteVisualizerIngestService scanIngest) : ControllerBase
 	{
 		private readonly ScanService _scanService = scanService;
+		private readonly ScanCompleteVisualizerIngestService _scanIngest = scanIngest;
 
 		[HttpPost("{projectId}/{deviceId}")]
 		public IActionResult StartScan(string projectId, string deviceId)
@@ -66,7 +69,12 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpPatch("{projectId}/{deviceId}/{scanId}/status")]
-		public IActionResult UpdateScanStatus(string projectId, string deviceId, string scanId, [FromBody] UpdateScanStatusRequest request)
+		public async Task<IActionResult> UpdateScanStatus(
+			string projectId,
+			string deviceId,
+			string scanId,
+			[FromBody] UpdateScanStatusRequest request,
+			CancellationToken cancellationToken)
 		{
 			if (string.IsNullOrWhiteSpace(projectId) ||
 				string.IsNullOrWhiteSpace(deviceId) ||
@@ -87,6 +95,9 @@ namespace BetterPlacemaking.Controllers
 
 				if (!updated)
 					return NotFound();
+
+				var scan = _scanService.GetScan(projectId, deviceId, scanId);
+				await _scanIngest.TryIngestFromScanDocumentAsync(scan, cancellationToken).ConfigureAwait(false);
 
 				return NoContent();
 			}

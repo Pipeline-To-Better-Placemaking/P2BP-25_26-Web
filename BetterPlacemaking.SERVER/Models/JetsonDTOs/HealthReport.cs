@@ -20,6 +20,50 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public Dictionary<string, IntrinsicsCalibrationState>? IntrinsicsCalibration { get; set; }
+
+        [FirestoreProperty]
+        public Dictionary<string, LidarHealthInfo>? Lidars { get; set; }
+
+        [FirestoreProperty]
+        public PiCompanionHealthInfo? PiCompanion { get; set; }
+    }
+
+    [FirestoreData]
+    public class LidarHealthInfo
+    {
+        [FirestoreProperty]
+        public string? SensorId { get; set; }
+
+        [FirestoreProperty]
+        public bool Connected { get; set; }
+
+        [FirestoreProperty]
+        public string? DevicePath { get; set; }
+
+        [FirestoreProperty]
+        public string? UsbHint { get; set; }
+
+        [FirestoreProperty]
+        public string? LastError { get; set; }
+    }
+
+    [FirestoreData]
+    public class PiCompanionHealthInfo
+    {
+        [FirestoreProperty]
+        public bool Configured { get; set; }
+
+        [FirestoreProperty]
+        public string? Host { get; set; }
+
+        [FirestoreProperty]
+        public bool Reachable { get; set; }
+
+        [FirestoreProperty]
+        public int LatencyMs { get; set; }
+
+        [FirestoreProperty]
+        public string? LastError { get; set; }
     }
 
     [FirestoreData]

@@ -30,6 +30,8 @@ public class VisualizerController : ControllerBase
     private static List<LidarPoint3D> _currentPoints = new();
     private static Models.Visualizer.Mesh? _currentMesh = null;
     private static readonly object _lock = new();
+    /// <summary>Incremented when the session cloud is replaced or cleared (for client polling).</summary>
+    private static long _sessionRevision;
 
     public VisualizerController(
         PointCloudService pointCloudService,
@@ -68,6 +70,20 @@ public class VisualizerController : ControllerBase
             return Ok(_currentPoints);
         }
     }
+
+    /// <summary>
+    /// Lightweight session info for polling after device-side scan ingest (no point payload).
+    /// </summary>
+    [HttpGet("points-meta")]
+    public IActionResult GetPointsMeta()
+    {
+        lock (_lock)
+        {
+            return Ok(new PointsMetaResponse(_currentPoints.Count, _sessionRevision));
+        }
+    }
+
+    public sealed record PointsMetaResponse(int PointCount, long Revision);
 
     /// <summary>
     /// Upload scanner data as JSON points.
@@ -132,6 +148,8 @@ public class VisualizerController : ControllerBase
                         Console.WriteLine($"Warning: Failed to generate mesh: {meshEx.Message}");
                     }
                 }
+
+                _sessionRevision++;
             }
 
             shouldNotify = true;
@@ -207,6 +225,8 @@ public class VisualizerController : ControllerBase
                             Console.WriteLine($"Warning: Failed to generate mesh from OBJ: {meshEx.Message}");
                         }
                     }
+
+                    _sessionRevision++;
                 }
 
                 shouldNotify = true;
@@ -238,6 +258,7 @@ public class VisualizerController : ControllerBase
         IFormFile? fileA,
         IFormFile? fileB,
         [FromQuery] string? sensorId,
+        [FromForm] string? units,
         [FromQuery] string? projectId = null,
         [FromQuery] string? projectName = null)
     {
@@ -269,7 +290,8 @@ public class VisualizerController : ControllerBase
                 await fileB.CopyToAsync(stream);
             }
 
-            var points = _xyzParser.ParseXyzFiles(filePathA!, filePathB, sensorId);
+            var unitsVal = string.Equals(units, "m", StringComparison.OrdinalIgnoreCase) ? "m" : "mm";
+            var points = _xyzParser.ParseXyzFiles(filePathA!, filePathB, sensorId, unitsVal);
 
             if (points.Count == 0)
                 return BadRequest("No valid points found in .xyz files");
@@ -292,6 +314,8 @@ public class VisualizerController : ControllerBase
                         Console.WriteLine($"Warning: Failed to generate mesh: {meshEx.Message}");
                     }
                 }
+
+                _sessionRevision++;
             }
 
             shouldNotify = true;
@@ -365,6 +389,8 @@ public class VisualizerController : ControllerBase
                         Console.WriteLine($"Warning: Failed to generate mesh from PLY: {meshEx.Message}");
                     }
                 }
+
+                _sessionRevision++;
             }
 
             shouldNotify = true;
@@ -560,6 +586,7 @@ public class VisualizerController : ControllerBase
         {
             _currentPoints.Clear();
             _currentMesh = null;
+            _sessionRevision++;
             return Ok(new { message = "Point cloud cleared." });
         }
     }
@@ -587,5 +614,51 @@ public class VisualizerController : ControllerBase
             User.FindFirstValue("userId") ??
             User.FindFirstValue("uid") ??
             User.FindFirstValue("id");
+    }
+
+    /// <summary>Used by <see cref="RplidarController"/> for <c>/api/rplidar/from-scan</c> (Scanner 2D View).</summary>
+    internal static List<LidarPoint3D> SnapshotCurrentPointsForRplidar()
+    {
+        lock (_lock)
+        {
+            return new List<LidarPoint3D>(_currentPoints);
+        }
+    }
+
+    internal static (int PointCount, long Revision) GetSessionMetaSnapshot()
+    {
+        lock (_lock)
+        {
+            return (_currentPoints.Count, _sessionRevision);
+        }
+    }
+
+    /// <summary>Replace in-memory cloud and regenerate mesh (e.g. completed device scan .xyz ingest).</summary>
+    internal static void ReplaceCurrentPointsFromIngest(
+        IReadOnlyList<LidarPoint3D> points,
+        FastMeshService fastMeshService)
+    {
+        var copy = new List<LidarPoint3D>(points);
+        Models.Visualizer.Mesh? generatedMesh = null;
+        lock (_lock)
+        {
+            _currentPoints = copy;
+            _currentMesh = null;
+
+            if (copy.Count >= 3)
+            {
+                try
+                {
+                    generatedMesh = fastMeshService.CreateWatertightMesh(copy, targetMeshPoints: 20000);
+                    _currentMesh = generatedMesh;
+                }
+                catch (Exception meshEx)
+                {
+                    Console.WriteLine($"Warning: Failed to generate mesh after scan ingest: {meshEx.Message}");
+                }
+            }
+
+            _sessionRevision++;
+        }
     }
 }

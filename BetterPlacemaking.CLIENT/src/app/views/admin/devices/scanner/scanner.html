@@ -142,4 +142,35 @@
     </p-card>
   </div>
 
+  <div class="mt-6 flex flex-col min-h-[min(70vh,640px)]">
+    <div class="flex flex-wrap gap-2 mb-3">
+      <p-button
+        label="2D View"
+        [outlined]="visualMode !== 'solids'"
+        styleClass="p-button-sm"
+        (onClick)="setVisualMode('solids')">
+      </p-button>
+      <p-button
+        label="3D View"
+        [outlined]="visualMode !== '3d'"
+        styleClass="p-button-sm"
+        (onClick)="setVisualMode('3d')">
+      </p-button>
+    </div>
+
+    <div
+      class="flex-1 min-h-0 min-w-0 overflow-hidden [&>*]:flex-1 [&>*]:min-h-0"
+      [ngClass]="visualMode === '3d' ? 'flex flex-col' : 'hidden'">
+      <app-point-cloud-viewer [projectContextId]="projectId || undefined" />
+    </div>
+
+    <div
+      class="flex-1 min-h-0 min-w-0 overflow-hidden [&>*]:flex-1 [&>*]:min-h-0"
+      [ngClass]="visualMode === 'solids' ? 'flex flex-col' : 'hidden'">
+      <app-solid-objects-view
+        [solidTabActive]="visualMode === 'solids'"
+        [projectContextId]="projectId || undefined" />
+    </div>
+  </div>
+
 </div>

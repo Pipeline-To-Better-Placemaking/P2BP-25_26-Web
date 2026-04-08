@@ -14,6 +14,10 @@ import { SelectModule } from 'primeng/select';
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ScanService, ScanScheduleDto } from '../../../../services/scan-service';
+import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
+import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
+
+export type ScannerVisualMode = '3d' | 'solids';
 
 interface FrequencyOption {
   name: string;
@@ -31,13 +35,19 @@ interface FrequencyOption {
     InputTextModule,
     MessageModule,
     DatePickerModule,
-    SelectModule
+    SelectModule,
+    PointCloudViewerComponent,
+    SolidObjectsViewComponent,
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
 })
 export class Scanner implements OnInit {
-  private projectId = '';
+  /** Public for template / child viewer (3D View + manual .xyz upload). */
+  public projectId = '';
+
+  /** Toggle 2D View (floor/clusters) vs 3D View (point cloud); default is 2D. */
+  public visualMode: ScannerVisualMode = 'solids';
 
   public scanMessage: string | null = null;
   public scanning = false;
@@ -70,6 +80,10 @@ export class Scanner implements OnInit {
     if (this.projectId) {
       this.loadSchedules();
     }
+  }
+
+  public setVisualMode(mode: ScannerVisualMode): void {
+    this.visualMode = mode;
   }
 
   public performScan(): void {

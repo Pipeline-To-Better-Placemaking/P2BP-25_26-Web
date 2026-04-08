@@ -1,3 +1,4 @@
+using System;
 using Google.Cloud.Firestore;
 
 namespace BetterPlacemaking.Services
@@ -5,6 +6,36 @@ namespace BetterPlacemaking.Services
     public class ScanService(FirestoreDb db)
     {
         private readonly FirestoreDb _db = db;
+
+        /// <summary>
+        /// Oldest pending scan for the device, or null if none.
+        /// </summary>
+        public string? GetNextPendingScanId(string projectId, string deviceId)
+        {
+            var snap = _db
+                .Collection("projects")
+                .Document(projectId)
+                .Collection("devices")
+                .Document(deviceId)
+                .Collection("scans")
+                .GetSnapshotAsync()
+                .Result;
+
+            static Timestamp CreatedAtOrEpoch(DocumentSnapshot d)
+            {
+                if (d.ContainsField("CreatedAt"))
+                    return d.GetValue<Timestamp>("CreatedAt");
+                return Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UnixEpoch, DateTimeKind.Utc));
+            }
+
+            return snap.Documents
+                .Where(d => d.Exists
+                    && d.ContainsField("Status")
+                    && string.Equals(d.GetValue<string>("Status"), "pending", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(CreatedAtOrEpoch)
+                .Select(d => d.Id)
+                .FirstOrDefault();
+        }
 
         public object CreateScan(string projectId, string deviceId)
         {
@@ -102,10 +133,13 @@ namespace BetterPlacemaking.Services
             if (!string.IsNullOrWhiteSpace(error))
                 updates["Error"] = error;
 
-            if (!string.IsNullOrWhiteSpace(status) && status == "running")
+            if (!string.IsNullOrWhiteSpace(status)
+                && string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
                 updates["StartedAt"] = Timestamp.GetCurrentTimestamp();
 
-            if (!string.IsNullOrWhiteSpace(status) && (status == "complete" || status == "error"))
+            if (!string.IsNullOrWhiteSpace(status)
+                && (string.Equals(status, "complete", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "error", StringComparison.OrdinalIgnoreCase)))
                 updates["FinishedAt"] = Timestamp.GetCurrentTimestamp();
 
             if (updates.Count == 0)

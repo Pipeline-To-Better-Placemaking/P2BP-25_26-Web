@@ -56,6 +56,7 @@ builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<BoardLibraryService>();
 builder.Services.AddScoped<LidarService>();
+builder.Services.AddScoped<ScanService>();
 builder.Services.AddScoped<ScanScheduleService>();
 
 // Visualizer services (point cloud, mesh generation, export)
@@ -67,6 +68,43 @@ builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.MeshGenerati
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.FastMeshService>();
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.GeometryExportService>();
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PlyParserService>();
+
+// RPLidar solid-objects / floor-map (ported from P2BP-25_26-Visualizer)
+builder.Services.AddSingleton<CoordinateTransformService>();
+builder.Services.AddSingleton<TrackingDataService>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var log = sp.GetService<ILogger<TrackingDataService>>();
+    var transform = sp.GetRequiredService<CoordinateTransformService>();
+    return new TrackingDataService(cfg, log, transform);
+});
+builder.Services.AddSingleton<BetterPlacemaking.Services.Rplidar.RplidarScanService>();
+
+builder.Services.Configure<ScanIngestOptions>(builder.Configuration.GetSection(ScanIngestOptions.SectionName));
+builder.Services.PostConfigure<ScanIngestOptions>(o =>
+{
+    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var h in o.AllowedHosts ?? [])
+    {
+        if (!string.IsNullOrWhiteSpace(h))
+            set.Add(h.Trim());
+    }
+
+    // GCS signed URLs (path/virtual-hosted) and Firebase Storage download URLs the Pi may store in ObjUrl.
+    foreach (var d in new[]
+             {
+                 "storage.googleapis.com",
+                 "firebasestorage.googleapis.com",
+                 "storage.cloud.google.com",
+             })
+        set.Add(d);
+    o.AllowedHosts = set.ToArray();
+});
+builder.Services.AddHttpClient(ScanCompleteVisualizerIngestService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
+builder.Services.AddSingleton<ScanCompleteVisualizerIngestService>();
 
 // Caching
 // Cloud Run can scale to multiple instances, so use Redis when configured.
@@ -165,6 +203,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddControllers().AddJsonOptions(opts =>
 {
   opts.JsonSerializerOptions.PropertyNamingPolicy = null;
+  // Pi / JS / Python clients often send camelCase; sponsors may send PascalCase — accept both.
+  opts.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 });
 
 builder.Services.AddSingleton<FirestoreDb>(_ =>

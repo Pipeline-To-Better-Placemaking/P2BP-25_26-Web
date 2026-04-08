@@ -1,4 +1,4 @@
-<div class="point-cloud-viewer">
+<div class="flex flex-col gap-4">
 
   <!-- Controls Panel -->
   <p-card>
@@ -9,29 +9,30 @@
       </div>
     </ng-template>
 
-    <div class="controls-row">
+    <div class="flex flex-wrap items-end gap-y-4 gap-x-6">
 
-      <!-- Quality Preset -->
-      <div class="control-item">
-        <label class="control-label">Quality:</label>
-        <select
-          [(ngModel)]="qualityPreset"
-          (ngModelChange)="onQualityChange()"
-          class="p-inputtext p-component control-select">
-          <option *ngFor="let opt of qualityOptions" [value]="opt.value">{{ opt.label }}</option>
-        </select>
-      </div>
-
-      <!-- Upload File -->
-      <div class="control-item">
-        <label class="control-label">Upload File:</label>
-        <div class="control-inline">
+      <!-- Upload File (.xyz manual upload + other formats) -->
+      <div class="flex flex-col gap-1.5 shrink-0">
+        <label class="text-sm font-medium whitespace-nowrap">Upload (.xyz, .obj, .ply…)</label>
+        <div class="flex flex-wrap items-end gap-2">
+          <div class="flex flex-col gap-1">
+            <label class="text-sm font-medium whitespace-nowrap" for="xyz-units">.xyz units</label>
+            <select
+              id="xyz-units"
+              name="xyzUnits"
+              [(ngModel)]="xyzUnits"
+              class="p-inputtext p-component text-sm py-1.5 px-2 cursor-pointer min-w-[140px]"
+              title="File coordinates: meters (typical RPLidar) or millimeters">
+              <option [ngValue]="'m'">Meters (m)</option>
+              <option [ngValue]="'mm'">Millimeters (mm)</option>
+            </select>
+          </div>
           <input
             #fileInput
             type="file"
-            accept=".obj,.xyz,.ply,.pts,.txt"
+            accept=".xyz,.obj,.ply,.pts,.txt"
             (change)="onFileSelected($event)"
-            class="file-input-hidden">
+            class="absolute w-0 h-0 opacity-0 overflow-hidden pointer-events-none">
           <p-button
             [label]="selectedFile ? selectedFile.name : 'Choose File...'"
             icon="pi pi-file"
@@ -46,18 +47,20 @@
             (onClick)="uploadFile()">
           </p-button>
         </div>
-        <div *ngIf="uploadProgress > 0" class="progress-bar">
-          <div class="progress-fill" [style.width.%]="uploadProgress"></div>
+        <div *ngIf="uploadProgress > 0" class="w-full h-1 rounded-sm overflow-hidden bg-[var(--surface-200,#e0e0e0)]">
+          <div
+            class="h-full bg-[var(--primary-color,#4a90e2)] transition-[width] duration-300 ease-out"
+            [style.width.%]="uploadProgress"></div>
         </div>
       </div>
 
       <!-- Export -->
-      <div class="control-item">
-        <label class="control-label">Export:</label>
-        <div class="control-inline">
+      <div class="flex flex-col gap-1.5 shrink-0">
+        <label class="text-sm font-medium whitespace-nowrap">Export:</label>
+        <div class="flex items-center gap-2 flex-nowrap">
           <select
             [(ngModel)]="selectedExport"
-            class="p-inputtext p-component control-select">
+            class="p-inputtext p-component text-sm py-1.5 px-2 cursor-pointer min-w-[140px]">
             <option [ngValue]="undefined" disabled>Select format...</option>
             <option *ngFor="let opt of exportOptions" [ngValue]="opt">{{ opt.label }}</option>
           </select>
@@ -72,7 +75,7 @@
       </div>
 
       <!-- Actions -->
-      <div class="control-item actions-group">
+      <div class="flex flex-row items-end gap-2 shrink-0 ml-auto">
         <p-button
           label="Refresh"
           icon="pi pi-refresh"
@@ -99,23 +102,23 @@
     </div>
 
     <!-- Info bar -->
-    <div class="info-bar mt-3">
-      <span class="info-chip">
+    <div class="flex gap-4 flex-wrap mt-3">
+      <span class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-[var(--surface-100,#f5f5f5)] text-[var(--text-color-secondary,#666)]">
         <i class="pi pi-chart-bar"></i>
         {{ currentFps }} FPS
       </span>
-      <span class="info-chip">
+      <span class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-[var(--surface-100,#f5f5f5)] text-[var(--text-color-secondary,#666)]">
         <i class="pi pi-database"></i>
         {{ lidar3D.length.toLocaleString() }} points
       </span>
     </div>
   </p-card>
 
-  <!-- 3D Canvas -->
-  <div class="canvas-wrapper">
-    <canvas #rendererCanvas></canvas>
-    <div *ngIf="isLoading" class="loading-overlay">
-      <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+  <!-- 3D Canvas — same intrinsic size as gallery-view (CSS scales display) -->
+  <div class="relative w-full max-w-full rounded-lg overflow-hidden bg-[#1a1a1a]">
+    <canvas #rendererCanvas class="block w-full h-auto align-middle" width="1200" height="800"></canvas>
+    <div *ngIf="isLoading" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-white text-base z-10">
+      <i class="pi pi-spin pi-spinner text-2xl"></i>
       <span>Loading...</span>
     </div>
   </div>

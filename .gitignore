@@ -21,10 +21,13 @@ node_modules/
 
 .env
 .env.*
-!.env.example
 
 **/firebase-service.json
 
 # Visualizer temp uploads
 **/uploads/
+
 BetterPlacemaking.CLIENT/public/test-puzzle/test-points.jsonl
+
+# Local documentation, notes, test-scripts, and shell helpers (see docs/)
+docs/
