@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenCvSharp;
@@ -16,25 +17,12 @@ using BetterPlacemaking.Services;
 // ─────────────────────────────────────────────
 public static class FusionConfig
 {
-    // Firebase Storage paths
-    public const string InputStoragePath    = "vision/tracks-raw";
+    public const string InputStorageFolder  = "vision/tracks-raw";   // folder containing JSONL files
     public const string OutputStorageFolder = "vision/fused";
 
-    // Derives the output filename from the input filename, e.g.:
-    //   tracks_events-20241201-123456.jsonl  ->  fused_tracks-20241201-123456.json
-    public static string BuildOutputStoragePath(string inputStoragePath, string? outputFolder = null)
-    {
-        string folder     = (outputFolder ?? OutputStorageFolder).TrimEnd('/');
-        string inputName  = inputStoragePath.Split('/').Last();            // tracks_events-20241201-123456.jsonl
-        string withoutExt = Path.GetFileNameWithoutExtension(inputName);   // tracks_events-20241201-123456
-        int    dashIdx    = withoutExt.IndexOf('-');
-        string suffix     = dashIdx >= 0 ? withoutExt[dashIdx..] : "";    // -20241201-123456
-        return $"{folder}/fused_tracks{suffix}.json";                      // vision/fused/fused_tracks-20241201-123456.json
-    }
-
     public const double SimThreshold   = 0.75;
-    public const double MaxSpeedPxPerS = 4000.0;  // pixels per second
-    public const double MaxGapMs       = 12000.0; // ms
+    public const double MaxSpeedPxPerS = 4000.0;
+    public const double MaxGapMs       = 12000.0;
     public const int    MinTrackPoints = 8;
     public const double MinDurationS   = 1.0;
     public const double MaxJumpClean   = 6000.0;
@@ -68,21 +56,20 @@ public class TrackObject
 
 public class FusedIdentity
 {
-    public int                        Gid     { get; set; }
-    public float[]                    Rep     { get; set; } = Array.Empty<float>();
-    public long                       TStart  { get; set; }
-    public long                       TEnd    { get; set; }
-    public double                     X       { get; set; }
-    public double                     Y       { get; set; }
-    public List<List<TrackEvent>>     Tracks  { get; set; } = new();
+    public int                         Gid     { get; set; }
+    public float[]                     Rep     { get; set; } = Array.Empty<float>();
+    public long                        TStart  { get; set; }
+    public long                        TEnd    { get; set; }
+    public double                      X       { get; set; }
+    public double                      Y       { get; set; }
+    public List<List<TrackEvent>>      Tracks  { get; set; } = new();
     public List<(string Cam, int Sid)> Sources { get; set; } = new();
 }
 
-//          All fields are optional — FusionConfig defaults are used if null.
 public class FusionRequest
 {
-    /// <summary>GCS path to the raw tracks JSONL. Defaults to FusionConfig.InputStoragePath.</summary>
-    public string? InputStoragePath { get; set; }
+
+    public string? InputStorageFolder { get; set; }
 
     /// <summary>GCS folder to write the fused output JSON. Defaults to FusionConfig.OutputStorageFolder.</summary>
     public string? OutputStorageFolder { get; set; }
@@ -147,7 +134,7 @@ public static class VectorMath
 }
 
 // ─────────────────────────────────────────────
-// KALMAN FILTER 2D  
+// KALMAN FILTER 2D 
 // ─────────────────────────────────────────────
 public class Kalman2D
 {
@@ -265,11 +252,9 @@ public class Kalman2D
 // ─────────────────────────────────────────────
 public class FusionCameraIntrinsics
 {
-    // CHANGED: private set → set
     public double[,] CameraMatrix { get; set; } = new double[3, 3];
     public double[]  DistCoeffs   { get; set; } = Array.Empty<double>();
 
-    // Kept for standalone / test use; not called by FusionService any more.
     public static FusionCameraIntrinsics? Load(string path)
     {
         if (!File.Exists(path)) return null;
@@ -301,7 +286,7 @@ public class FusionCameraIntrinsics
 }
 
 // ─────────────────────────────────────────────
-// LENS UNDISTORTION
+// LENS UNDISTORTION 
 // ─────────────────────────────────────────────
 public static class LensUndistort
 {
@@ -346,23 +331,7 @@ public class HomographyEntry
 }
 
 // ─────────────────────────────────────────────
-// FIRESTORE CONFIG LOADER  ← NEW
-//
-// Reads homographies from : locked_homographies/{deviceId}_{mac}
-// Reads intrinsics from   : camera_intrinsics/{deviceId}_{mac}
-//
-// Document ID format: "SiDJweLpgP3xesyoyu78_d0:3b:f4:01:52:79"
-//   split on the FIRST underscore → deviceId | mac
-//   (MACs never contain underscores, so this is unambiguous)
-//
-// Firestore field layout
-//   locked_homographies doc:
-//     matrix                 : array<double>  — 9 values, row-major
-//     used_undistorted_image : bool
-//
-//   camera_intrinsics doc:
-//     camera_matrix : array<double>  — 9 values, row-major
-//     dist_coeffs   : array<double>  — [k1, k2, p1, p2, k3]
+// FIRESTORE CONFIG LOADER
 // ─────────────────────────────────────────────
 public class FusionFirestoreLoader
 {
@@ -370,7 +339,6 @@ public class FusionFirestoreLoader
 
     public FusionFirestoreLoader(FirestoreDb db) => _db = db;
 
-    // ── Homographies ──────────────────────────────────────────────────────
     public async Task<Dictionary<string, HomographyEntry>> LoadHomographiesAsync(
         ISet<string> cameraMacs, CancellationToken ct = default)
     {
@@ -390,7 +358,7 @@ public class FusionFirestoreLoader
         foreach (var doc in snapshot.Documents)
         {
             if (!TryGetMac(doc, out string mac)) continue;
-            if (!cameraMacs.Contains(mac))             continue;
+            if (!cameraMacs.Contains(mac))        continue;
 
             var entry = ParseHomographyDoc(doc, mac);
             if (entry != null)
@@ -410,7 +378,6 @@ public class FusionFirestoreLoader
         return result;
     }
 
-    // ── Intrinsics ────────────────────────────────────────────────────────
     public async Task<Dictionary<string, FusionCameraIntrinsics>> LoadIntrinsicsAsync(
         ISet<string> cameraMacs, CancellationToken ct = default)
     {
@@ -430,7 +397,7 @@ public class FusionFirestoreLoader
         foreach (var doc in snapshot.Documents)
         {
             if (!TryGetMac(doc, out string mac)) continue;
-            if (!cameraMacs.Contains(mac))             continue;
+            if (!cameraMacs.Contains(mac))        continue;
 
             var intrinsics = ParseIntrinsicsDoc(doc, mac);
             if (intrinsics != null)
@@ -447,10 +414,6 @@ public class FusionFirestoreLoader
         return result;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    // Reads the CameraMac field directly from the document.
-    // Falls back to splitting the doc ID on the first underscore if the field is absent.
     private static bool TryGetMac(DocumentSnapshot doc, out string mac)
     {
         if (doc.TryGetValue("CameraMac", out string? stored) && !string.IsNullOrWhiteSpace(stored))
@@ -458,15 +421,12 @@ public class FusionFirestoreLoader
             mac = stored.ToLower().Trim();
             return true;
         }
-        // Fallback: split "SiDJweLpgP3xesyoyu78_d0:3b:f4:01:52:79" on the first underscore.
         int idx = doc.Id.IndexOf('_');
         if (idx < 1 || idx == doc.Id.Length - 1) { mac = ""; return false; }
         mac = doc.Id[(idx + 1)..].ToLower();
         return true;
     }
 
-    // Reads a 3×3 nested Firestore array (list-of-lists) into a double[3,3].
-    // Firestore stores [[a,b,c],[d,e,f],[g,h,i]] as IReadOnlyList<object> of IReadOnlyList<object>.
     private static bool TryParseMatrix3x3(DocumentSnapshot doc, string field, string mac,
         out double[,] matrix)
     {
@@ -494,25 +454,17 @@ public class FusionFirestoreLoader
 
     private static HomographyEntry? ParseHomographyDoc(DocumentSnapshot doc, string mac)
     {
-        // Field name in document: "Matrix" (PascalCase to match the stored schema)
         if (!TryParseMatrix3x3(doc, "Matrix", mac, out var matrix))
             return null;
 
-        // No UsedUndistortedImage field in the current schema — defaults to false.
-        return new HomographyEntry
-        {
-            Matrix               = matrix,
-            UsedUndistortedImage = false
-        };
+        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = false };
     }
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
     {
-        // Field name in document: "CameraMatrix" (PascalCase)
         if (!TryParseMatrix3x3(doc, "CameraMatrix", mac, out var cameraMatrix))
             return null;
 
-        // Field name in document: "DistortionCoefficients" — flat array [k1, k2, p1, p2, k3]
         if (!doc.TryGetValue("DistortionCoefficients", out IReadOnlyList<object> distRaw))
         {
             Console.WriteLine($"[WARN] cam={mac}: 'DistortionCoefficients' field missing.");
@@ -574,7 +526,7 @@ public static class JsonlLoader
 }
 
 // ─────────────────────────────────────────────
-// TRACK BUILDER 
+// TRACK BUILDER  
 // ─────────────────────────────────────────────
 public static class TrackBuilder
 {
@@ -609,7 +561,7 @@ public static class TrackBuilder
 }
 
 // ─────────────────────────────────────────────
-// HOMOGRAPHY TRANSFORM
+// HOMOGRAPHY TRANSFORM 
 // ─────────────────────────────────────────────
 public static class WorldTransform
 {
@@ -626,9 +578,6 @@ public static class WorldTransform
                 continue;
             }
 
-            // Declared explicitly as null so the compiler knows it is always assigned.
-            // intrinsicsPerCam?.TryGetValue with out var would leave it unassigned when
-            // intrinsicsPerCam itself is null, which the compiler correctly rejects.
             FusionCameraIntrinsics? intrinsics = null;
             intrinsicsPerCam?.TryGetValue(track.Cam, out intrinsics);
 
@@ -646,8 +595,6 @@ public static class WorldTransform
             {
                 double ux = e.X, uy = e.Y;
 
-                // Second null check on intrinsics satisfies the compiler's flow analysis —
-                // doUndist already guarantees it is non-null, but this makes it explicit.
                 if (doUndist && intrinsics != null)
                     (ux, uy) = LensUndistort.UndistortPoint(
                         e.X, e.Y,
@@ -681,7 +628,7 @@ public static class WorldTransform
 }
 
 // ─────────────────────────────────────────────
-// FUSION ENGINE
+// FUSION ENGINE 
 // ─────────────────────────────────────────────
 public class FusionEngine
 {
@@ -802,7 +749,7 @@ public class FusionEngine
 }
 
 // ─────────────────────────────────────────────
-// TRACK CLEANING
+// TRACK CLEANING 
 // ─────────────────────────────────────────────
 public static class TrackCleaner
 {
@@ -911,9 +858,6 @@ public class FusionService
     private readonly CloudStorageService   _gcs;
     private readonly FusionFirestoreLoader _firestoreLoader;
 
-    // Register in Program.cs:
-    //   builder.Services.AddScoped<FusionService>();
-    //   (FirestoreDb and CloudStorageService must already be registered)
     public FusionService(CloudStorageService gcs, FirestoreDb firestoreDb)
     {
         _gcs             = gcs;
@@ -923,20 +867,19 @@ public class FusionService
     public async Task<FusionResult> RunAsync(
         FusionRequest request, bool debug = false, CancellationToken ct = default)
     {
-        // Isolated temp dir — always deleted in finally, safe for concurrent calls
         string tempDir = Path.Combine(Path.GetTempPath(), $"fusion_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
-            // ── 1. Download input JSONL from GCS ──────────────────────────
-            string inputStoragePath = request.InputStoragePath ?? FusionConfig.InputStoragePath;
-            string localInputPath   = Path.Combine(tempDir, "tracks-raw.jsonl");
+            // ── 1. Discover, download, and merge all of today's JSONL files ──
+            // CHANGED: was a single DownloadFileAsync keyed on a hardcoded file path.
+            string inputFolder    = (request.InputStorageFolder ?? FusionConfig.InputStorageFolder).TrimEnd('/');
+            string localInputPath = Path.Combine(tempDir, "tracks-raw.jsonl");
 
-            Console.WriteLine($"[INFO] Downloading input: {inputStoragePath}");
-            await DownloadFileAsync(inputStoragePath, localInputPath, ct);
+            await DownloadAndMergeTodayTracksAsync(inputFolder, localInputPath, ct);
 
-            // Optional time-range filter
+            // Optional time-range filter (unchanged)
             if (request.From.HasValue && request.To.HasValue)
                 localInputPath = FilterByTime(localInputPath, tempDir, request.From.Value, request.To.Value);
 
@@ -952,8 +895,6 @@ public class FusionService
             Console.WriteLine($"[INFO] Active cameras: {string.Join(", ", activeMacs)}");
 
             // ── 4. Fetch homographies + intrinsics from Firestore ─────────
-            //       Collections may be empty until calibration is run —
-            //       both calls return gracefully with warnings in that case.
             var homographies   = await _firestoreLoader.LoadHomographiesAsync(activeMacs, ct);
             var intrinsicsDict = await _firestoreLoader.LoadIntrinsicsAsync(activeMacs, ct);
 
@@ -965,10 +906,14 @@ public class FusionService
             var gids   = engine.Run(trackObjs);
 
             // ── 7. Serialize + upload result to GCS ──────────────────────
-            string localOutputPath   = Path.Combine(tempDir, "fused_tracks.json");
+            // CHANGED: output name is now fused_tracks-YYYYMMDD.json (one stable file per day).
+            string localOutputPath = Path.Combine(tempDir, "fused_tracks.json");
             FusionExporter.Export(gids, localOutputPath);
 
-            string outputStoragePath = FusionConfig.BuildOutputStoragePath(inputStoragePath, request.OutputStorageFolder);
+            string outputFolder      = (request.OutputStorageFolder ?? FusionConfig.OutputStorageFolder).TrimEnd('/');
+            string dateSuffix        = DateTime.UtcNow.ToString("yyyyMMdd");
+            string outputStoragePath = $"{outputFolder}/fused_tracks-{dateSuffix}.json";
+
             Console.WriteLine($"[INFO] Uploading result to: {outputStoragePath}");
             await UploadFileAsync(localOutputPath, outputStoragePath, "application/json", ct);
 
@@ -992,6 +937,100 @@ public class FusionService
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
+
+    private async Task DownloadAndMergeTodayTracksAsync(
+        string folder, string mergedLocalPath, CancellationToken ct)
+    {
+        // GcsFileInfo lives in CloudStorageService.cs (BetterPlacemaking.Services namespace),
+        // which is already imported via "using BetterPlacemaking.Services" at the top.
+        IReadOnlyList<GcsFileInfo> allFiles = await _gcs.ListFilesAsync(folder, ct);
+
+        if (allFiles.Count == 0)
+            throw new InvalidOperationException(
+                $"No track files found in GCS folder '{folder}'.");
+
+        string today = DateTime.UtcNow.ToString("yyyyMMdd");
+
+        static DateTime? ParseTimestampFromName(string storagePath)
+        {
+            string name = storagePath.Split('/').Last();
+            int    dash = name.IndexOf('-');
+            if (dash < 0 || dash + 16 > name.Length) return null;
+            return DateTime.TryParseExact(
+                name.Substring(dash + 1, 15),          // "20250408-143512"
+                "yyyyMMdd-HHmmss",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out DateTime dt)
+                ? dt.ToUniversalTime()
+                : null;
+        }
+
+        var todayFiles = allFiles
+            .Select(f => new
+            {
+                File      = f,
+                Timestamp = ParseTimestampFromName(f.StoragePath) ?? f.LastModified.UtcDateTime
+            })
+            .Where(x => x.Timestamp.ToString("yyyyMMdd") == today)
+            .OrderBy(x => x.Timestamp)
+            .ToList();
+
+        if (todayFiles.Count == 0)
+            throw new InvalidOperationException(
+                $"No track files for today ({today}) found in '{folder}'.");
+
+        Console.WriteLine($"[INFO] Found {todayFiles.Count} track file(s) for {today}:");
+        foreach (var f in todayFiles)
+            Console.WriteLine($"       {f.File.StoragePath}  ({f.Timestamp:O})");
+
+        // Download all parts in parallel (max 4 concurrent)
+        string partsDir = Path.Combine(Path.GetDirectoryName(mergedLocalPath)!, "parts");
+        Directory.CreateDirectory(partsDir);
+
+        await Parallel.ForEachAsync(
+            todayFiles,
+            new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
+            async (item, innerCt) =>
+            {
+                string safeName  = item.File.StoragePath.Replace('/', '_').Replace(':', '-');
+                string localPart = Path.Combine(partsDir, safeName);
+                await DownloadFileAsync(item.File.StoragePath, localPart, innerCt);
+            });
+
+        // Concatenate in chronological order into one merged JSONL
+        await using var outStream = File.Create(mergedLocalPath);
+        await using var writer    = new StreamWriter(outStream);
+
+        foreach (var item in todayFiles)
+        {
+            string safeName  = item.File.StoragePath.Replace('/', '_').Replace(':', '-');
+            string localPart = Path.Combine(partsDir, safeName);
+
+            await foreach (var line in ReadLinesAsync(localPart, ct))
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                    await writer.WriteLineAsync(line.AsMemory(), ct);
+            }
+        }
+
+        Console.WriteLine($"[INFO] Merged {todayFiles.Count} file(s) → {mergedLocalPath}");
+    }
+
+    
+    private static async IAsyncEnumerable<string> ReadLinesAsync(
+        string path,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        await using var fs = File.OpenRead(path);
+        using  var      sr = new StreamReader(fs);
+        while (!sr.EndOfStream)
+        {
+            ct.ThrowIfCancellationRequested();
+            var line = await sr.ReadLineAsync(ct);
+            if (line != null) yield return line;
+        }
+    }
 
     private async Task DownloadFileAsync(string storagePath, string localPath, CancellationToken ct)
     {

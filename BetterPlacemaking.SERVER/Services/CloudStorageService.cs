@@ -6,6 +6,13 @@ using Microsoft.Extensions.Options;
 
 namespace BetterPlacemaking.Services
 {
+    public sealed class GcsFileInfo
+    {
+        public string         StoragePath  { get; init; } = "";
+        public DateTimeOffset LastModified { get; init; }
+    }
+
+
     public sealed class CloudStorageService
     {
         private readonly StorageClient _storage;
@@ -43,7 +50,6 @@ namespace BetterPlacemaking.Services
             var ttl = TimeSpan.FromMinutes(_opt.UrlTtlMinutes);
 
             // V4 signed URL for PUT.
-
             string signedUrl = _urlSigner.Sign(
                 _opt.BucketName,
                 objectName,
@@ -110,7 +116,7 @@ namespace BetterPlacemaking.Services
             return objectName;
         }
 
-        public async Task DownloadToStreamAsync(string objectName,Stream destination,CancellationToken ct)
+        public async Task DownloadToStreamAsync(string objectName, Stream destination, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(objectName)) throw new ArgumentException("objectName required");
 
@@ -120,6 +126,33 @@ namespace BetterPlacemaking.Services
                 destination: destination,
                 cancellationToken: ct);
         }
+
+        
+        public async Task<IReadOnlyList<GcsFileInfo>> ListFilesAsync(
+            string folder, CancellationToken ct = default)
+        {
+            // Ensure the prefix ends with '/' so we don't accidentally match
+            // sibling folders that share a common prefix (e.g. "tracks-raw2").
+            string prefix = folder.TrimEnd('/') + '/';
+
+            var result  = new List<GcsFileInfo>();
+            var request = _storage.ListObjectsAsync(_opt.BucketName, prefix);
+
+            await foreach (var obj in request.WithCancellation(ct))
+            {
+                // Skip the folder placeholder object itself
+                if (obj.Name.EndsWith('/')) continue;
+
+                result.Add(new GcsFileInfo
+                {
+                    StoragePath  = obj.Name,
+                    LastModified = obj.UpdatedDateTimeOffset ?? DateTimeOffset.MinValue
+                });
+            }
+
+            return result;
+        }
+
         private static string SanitizeObjectPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("PathFromRoot required.");
@@ -205,10 +238,9 @@ namespace BetterPlacemaking.Services
 
         public sealed class GcsOptions
         {
-            public string BucketName { get; set; } = "";
-            public int UrlTtlMinutes { get; set; } = 10;
-            public string BasePrefix { get; set; } = "uploads";
+            public string BucketName    { get; set; } = "";
+            public int    UrlTtlMinutes { get; set; } = 10;
+            public string BasePrefix    { get; set; } = "uploads";
         }
     }
 }
-
