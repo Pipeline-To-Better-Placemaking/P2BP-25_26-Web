@@ -1,6 +1,5 @@
 // FusionEngine.cs
-// Full C# rewrite of fusionFinal.py
-// Dependencies (NuGet): YamlDotNet, OpenCvSharp4
+// Dependencies (NuGet): YamlDotNet, OpenCvSharp4, Google.Cloud.Firestore
 
 using System;
 using System.Collections.Generic;
@@ -9,24 +8,38 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenCvSharp;
+using Google.Cloud.Firestore;
+using BetterPlacemaking.Services;
 
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
 public static class FusionConfig
 {
-    public const string InputFile       = "tracks_events.jsonl";
-    public const string OutputFile      = "fused_tracks.json";
-    public const string IntrinsicsFile  = "ANNKE_camera_intrinsics.yml";
+    // Firebase Storage paths
+    public const string InputStoragePath    = "vision/tracks-raw";
+    public const string OutputStorageFolder = "vision/fused";
 
-    public const double SimThreshold    = 0.75;
-    public const double MaxSpeedPxPerS  = 4000.0;   // pixels per second
-    public const double MaxGapMs        = 12000.0;  // ms
-    public const int    MinTrackPoints  = 8;
-    public const double MinDurationS    = 1.0;
-    public const double MaxJumpClean    = 6000.0;
-    public const double DupEps          = 1e-3;
-    public const int    SmoothWin       = 2;
+    // Derives the output filename from the input filename, e.g.:
+    //   tracks_events-20241201-123456.jsonl  ->  fused_tracks-20241201-123456.json
+    public static string BuildOutputStoragePath(string inputStoragePath, string? outputFolder = null)
+    {
+        string folder     = (outputFolder ?? OutputStorageFolder).TrimEnd('/');
+        string inputName  = inputStoragePath.Split('/').Last();            // tracks_events-20241201-123456.jsonl
+        string withoutExt = Path.GetFileNameWithoutExtension(inputName);   // tracks_events-20241201-123456
+        int    dashIdx    = withoutExt.IndexOf('-');
+        string suffix     = dashIdx >= 0 ? withoutExt[dashIdx..] : "";    // -20241201-123456
+        return $"{folder}/fused_tracks{suffix}.json";                      // vision/fused/fused_tracks-20241201-123456.json
+    }
+
+    public const double SimThreshold   = 0.75;
+    public const double MaxSpeedPxPerS = 4000.0;  // pixels per second
+    public const double MaxGapMs       = 12000.0; // ms
+    public const int    MinTrackPoints = 8;
+    public const double MinDurationS   = 1.0;
+    public const double MaxJumpClean   = 6000.0;
+    public const double DupEps         = 1e-3;
+    public const int    SmoothWin      = 2;
 }
 
 // ─────────────────────────────────────────────
@@ -34,8 +47,8 @@ public static class FusionConfig
 // ─────────────────────────────────────────────
 public class TrackEvent
 {
-    public double X   { get; set; }
-    public double Y   { get; set; }
+    public double X    { get; set; }
+    public double Y    { get; set; }
     public long   Time { get; set; }
     public string Cam  { get; set; } = "";
     public int    Sid  { get; set; }
@@ -43,48 +56,53 @@ public class TrackEvent
 
 public class TrackObject
 {
-    public string Cam { get; set; } = "";
-    public int Sid { get; set; }
-    public float[] Rep { get; set; } = Array.Empty<float>();
-    public long TStart { get; set; }
-    public long TEnd { get; set; }
-    public double X { get; set; }
-    public double Y { get; set; }
+    public string           Cam    { get; set; } = "";
+    public int              Sid    { get; set; }
+    public float[]          Rep    { get; set; } = Array.Empty<float>();
+    public long             TStart { get; set; }
+    public long             TEnd   { get; set; }
+    public double           X      { get; set; }
+    public double           Y      { get; set; }
     public List<TrackEvent> Events { get; set; } = new();
 }
 
 public class FusedIdentity
 {
-    public int Gid { get; set; }
-    public float[] Rep { get; set; } = Array.Empty<float>();
-    public long TStart { get; set; }
-    public long TEnd { get; set; }
-    public double X { get; set; }
-    public double Y { get; set; }
-    public List<List<TrackEvent>> Tracks  { get; set; } = new();
+    public int                        Gid     { get; set; }
+    public float[]                    Rep     { get; set; } = Array.Empty<float>();
+    public long                       TStart  { get; set; }
+    public long                       TEnd    { get; set; }
+    public double                     X       { get; set; }
+    public double                     Y       { get; set; }
+    public List<List<TrackEvent>>     Tracks  { get; set; } = new();
     public List<(string Cam, int Sid)> Sources { get; set; } = new();
 }
 
+//          All fields are optional — FusionConfig defaults are used if null.
 public class FusionRequest
 {
-    public string  InputFilePath { get; set; } = FusionConfig.InputFile;
+    /// <summary>GCS path to the raw tracks JSONL. Defaults to FusionConfig.InputStoragePath.</summary>
+    public string? InputStoragePath { get; set; }
+
+    /// <summary>GCS folder to write the fused output JSON. Defaults to FusionConfig.OutputStorageFolder.</summary>
+    public string? OutputStorageFolder { get; set; }
+
     public DateTime? From { get; set; }
-    public DateTime? To { get; set; }
+    public DateTime? To   { get; set; }
 }
 
 public class FusionResult
 {
-    public bool Success { get; set; }
-    public string Message { get; set; } = "";
-    public object? Data { get; set; }
+    public bool    Success { get; set; }
+    public string  Message { get; set; } = "";
+    public object? Data    { get; set; }
 }
 
 // ─────────────────────────────────────────────
-// MATH HELPERS  (replaces numpy + sklearn)
+// MATH HELPERS 
 // ─────────────────────────────────────────────
 public static class VectorMath
 {
-    /// <summary>Cosine similarity between two vectors (replaces sklearn cosine_similarity)</summary>
     public static double CosineSimilarity(float[] a, float[] b)
     {
         if (a.Length != b.Length)
@@ -97,31 +115,25 @@ public static class VectorMath
             normA += a[i] * a[i];
             normB += b[i] * b[i];
         }
-
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
         return denom < 1e-9 ? 0.0 : dot / denom;
     }
 
-    /// <summary>Element-wise mean of a list of vectors (replaces np.mean)</summary>
     public static float[] Mean(List<float[]> vectors)
     {
         if (vectors.Count == 0)
             throw new ArgumentException("Empty vector list");
 
-        int len = vectors[0].Length;
+        int len    = vectors[0].Length;
         var result = new float[len];
-
         foreach (var v in vectors)
             for (int i = 0; i < len; i++)
                 result[i] += v[i];
-
         for (int i = 0; i < len; i++)
             result[i] /= vectors.Count;
-
         return result;
     }
 
-    /// <summary>Running average of two reps (replaces (a + b) / 2)</summary>
     public static float[] AverageReps(float[] a, float[] b)
     {
         var result = new float[a.Length];
@@ -135,84 +147,66 @@ public static class VectorMath
 }
 
 // ─────────────────────────────────────────────
-// KALMAN FILTER 2D  (replaces Python Kalman2D)
+// KALMAN FILTER 2D  
 // ─────────────────────────────────────────────
 public class Kalman2D
 {
-    // State: [x, y, vx, vy]
-    private double[] _x = new double[4];
-    private double[,] _P = new double[4, 4];
+    private double[]   _x = new double[4];
+    private double[,]  _P = new double[4, 4];
     private readonly double[,] _H;
     private readonly double[,] _Q;
     private readonly double[,] _R;
 
     public Kalman2D()
     {
-        // Identity * 100
         for (int i = 0; i < 4; i++) _P[i, i] = 100.0;
-
-        // Observation matrix H = [[1,0,0,0],[0,1,0,0]]
         _H = new double[2, 4];
         _H[0, 0] = 1; _H[1, 1] = 1;
-
-        // Process noise
         _Q = new double[4, 4];
         for (int i = 0; i < 4; i++) _Q[i, i] = 0.01;
-
-        // Measurement noise
         _R = new double[2, 2];
         _R[0, 0] = 5.0; _R[1, 1] = 5.0;
     }
 
     public (double x, double y) Update(double zx, double zy, double dt)
     {
-        // Build F (state transition)
         var F = new double[4, 4];
         F[0, 0] = 1; F[0, 2] = dt;
         F[1, 1] = 1; F[1, 3] = dt;
-        F[2, 2] = 1;
-        F[3, 3] = 1;
+        F[2, 2] = 1; F[3, 3] = 1;
 
-        // Predict
         _x = MatVec(F, _x);
         _P = MatAdd(MatMul(MatMul(F, _P), Transpose(F)), _Q);
 
-        // Innovation
-        double[] z   = { zx, zy };
-        double[] Hx  = MatVec(_H, _x);
-        double[] y   = { z[0] - Hx[0], z[1] - Hx[1] };
+        double[] z  = { zx, zy };
+        double[] Hx = MatVec(_H, _x);
+        double[] y  = { z[0] - Hx[0], z[1] - Hx[1] };
 
-        // S = H P H' + R
-        var S = MatAdd(MatMul(MatMul(_H, _P), Transpose(_H)), _R);
-
-        // K = P H' S^-1
+        var S    = MatAdd(MatMul(MatMul(_H, _P), Transpose(_H)), _R);
         var PH   = MatMul(_P, Transpose(_H));
         var Sinv = Invert2x2(S);
-        var K    = MatMul(PH, Sinv);   // 4x2
+        var K    = MatMul(PH, Sinv);
 
-        // Update
-        double[] Ky = { K[0, 0]*y[0] + K[0, 1]*y[1],
-                        K[1, 0]*y[0] + K[1, 1]*y[1],
-                        K[2, 0]*y[0] + K[2, 1]*y[1],
-                        K[3, 0]*y[0] + K[3, 1]*y[1] };
-
+        double[] Ky = {
+            K[0,0]*y[0] + K[0,1]*y[1],
+            K[1,0]*y[0] + K[1,1]*y[1],
+            K[2,0]*y[0] + K[2,1]*y[1],
+            K[3,0]*y[0] + K[3,1]*y[1]
+        };
         _x[0] += Ky[0]; _x[1] += Ky[1];
         _x[2] += Ky[2]; _x[3] += Ky[3];
 
-        // P = (I - K H) P
-        var KH   = MatMul(K, _H);
-        var IKH  = new double[4, 4];
+        var KH  = MatMul(K, _H);
+        var IKH = new double[4, 4];
         for (int i = 0; i < 4; i++) IKH[i, i] = 1;
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
                 IKH[i, j] -= KH[i, j];
-
         _P = MatMul(IKH, _P);
 
         return (_x[0], _x[1]);
     }
 
-    // ── tiny matrix helpers ──────────────────
     private static double[,] MatMul(double[,] A, double[,] B)
     {
         int r = A.GetLength(0), k = A.GetLength(1), c = B.GetLength(1);
@@ -256,70 +250,285 @@ public class Kalman2D
 
     private static double[,] Invert2x2(double[,] M)
     {
-        double det = M[0, 0]*M[1, 1] - M[0, 1]*M[1, 0];
+        double det = M[0,0]*M[1,1] - M[0,1]*M[1,0];
         if (Math.Abs(det) < 1e-12) det = 1e-12;
         return new double[,]
         {
-            {  M[1, 1]/det, -M[0, 1]/det },
-            { -M[1, 0]/det,  M[0, 0]/det }
+            {  M[1,1]/det, -M[0,1]/det },
+            { -M[1,0]/det,  M[0,0]/det }
         };
     }
 }
 
 // ─────────────────────────────────────────────
-// HOMOGRAPHY LOADER  (replaces cv2.FileStorage)
+// CAMERA INTRINSICS
 // ─────────────────────────────────────────────
-public static class HomographyLoader
+public class FusionCameraIntrinsics
 {
-    /// <summary>
-    /// Loads all *_homography.yml files in a folder.
-    /// Uses OpenCvSharp FileStorage — same format as Python cv2.FileStorage.
-    /// </summary>
-    public static Dictionary<string, double[,]> Load(string folder = ".")
+    // CHANGED: private set → set
+    public double[,] CameraMatrix { get; set; } = new double[3, 3];
+    public double[]  DistCoeffs   { get; set; } = Array.Empty<double>();
+
+    // Kept for standalone / test use; not called by FusionService any more.
+    public static FusionCameraIntrinsics? Load(string path)
     {
-        var result = new Dictionary<string, double[,]>();
+        if (!File.Exists(path)) return null;
 
-        foreach (var file in Directory.GetFiles(folder, "*_homography.yml"))
+        var yaml = new YamlDotNet.Serialization.DeserializerBuilder().Build();
+        var raw  = yaml.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
+        if (raw == null) return null;
+
+        var intrinsics = new FusionCameraIntrinsics();
+
+        if (!raw.TryGetValue("camera_matrix", out var camRaw)) return null;
+        var rows = (List<object>)camRaw;
+        for (int r = 0; r < 3; r++)
         {
-            string fname = Path.GetFileName(file);
-            string mac   = fname
-                .Replace("_homography.yml", "")
-                .Replace("_", ":")
-                .ToLower();
+            var cols = (List<object>)rows[r];
+            for (int c = 0; c < 3; c++)
+                intrinsics.CameraMatrix[r, c] = Convert.ToDouble(cols[c]);
+        }
 
-            using var fs = new FileStorage(file, FileStorage.Mode.Read);
-            if (!fs.IsOpened()) continue;
+        if (!raw.TryGetValue("distortion_coefficients", out var distRaw)) return null;
+        var outer = (List<object>)distRaw;
+        List<object> coeffList = outer.Count > 0 && outer[0] is List<object>
+            ? (List<object>)outer[0]
+            : outer;
+        intrinsics.DistCoeffs = coeffList.Select(v => Convert.ToDouble(v)).ToArray();
 
-            var node = fs["homography"];
-            if (node.Empty)
-                continue;
+        return intrinsics;
+    }
+}
 
-            using Mat H = node.ReadMat();
-            if (H.Empty() || H.Rows != 3 || H.Cols != 3)
-                continue;
+// ─────────────────────────────────────────────
+// LENS UNDISTORTION
+// ─────────────────────────────────────────────
+public static class LensUndistort
+{
+    public static (double ux, double uy) UndistortPoint(
+        double px, double py, double[,] K, double[] D)
+    {
+        double fx = K[0,0], fy = K[1,1];
+        double cx = K[0,2], cy = K[1,2];
 
-            var arr = new double[3, 3];
+        double x = (px - cx) / fx;
+        double y = (py - cy) / fy;
 
-            for (int r = 0; r < 3; r++)
+        double k1 = D.Length > 0 ? D[0] : 0;
+        double k2 = D.Length > 1 ? D[1] : 0;
+        double p1 = D.Length > 2 ? D[2] : 0;
+        double p2 = D.Length > 3 ? D[3] : 0;
+        double k3 = D.Length > 4 ? D[4] : 0;
+
+        double x0 = x, y0 = y;
+        for (int iter = 0; iter < 20; iter++)
+        {
+            double r2     = x*x + y*y;
+            double r4     = r2*r2;
+            double r6     = r4*r2;
+            double radial = 1.0 + k1*r2 + k2*r4 + k3*r6;
+            double tangX  = 2*p1*x*y        + p2*(r2 + 2*x*x);
+            double tangY  = p1*(r2 + 2*y*y) + 2*p2*x*y;
+            x = (x0 - tangX) / radial;
+            y = (y0 - tangY) / radial;
+        }
+        return (x*fx + cx, y*fy + cy);
+    }
+}
+
+// ─────────────────────────────────────────────
+// HOMOGRAPHY ENTRY 
+// ─────────────────────────────────────────────
+public class HomographyEntry
+{
+    public double[,] Matrix               { get; set; } = new double[3, 3];
+    public bool      UsedUndistortedImage { get; set; }
+}
+
+// ─────────────────────────────────────────────
+// FIRESTORE CONFIG LOADER  ← NEW
+//
+// Reads homographies from : locked_homographies/{deviceId}_{mac}
+// Reads intrinsics from   : camera_intrinsics/{deviceId}_{mac}
+//
+// Document ID format: "SiDJweLpgP3xesyoyu78_d0:3b:f4:01:52:79"
+//   split on the FIRST underscore → deviceId | mac
+//   (MACs never contain underscores, so this is unambiguous)
+//
+// Firestore field layout
+//   locked_homographies doc:
+//     matrix                 : array<double>  — 9 values, row-major
+//     used_undistorted_image : bool
+//
+//   camera_intrinsics doc:
+//     camera_matrix : array<double>  — 9 values, row-major
+//     dist_coeffs   : array<double>  — [k1, k2, p1, p2, k3]
+// ─────────────────────────────────────────────
+public class FusionFirestoreLoader
+{
+    private readonly FirestoreDb _db;
+
+    public FusionFirestoreLoader(FirestoreDb db) => _db = db;
+
+    // ── Homographies ──────────────────────────────────────────────────────
+    public async Task<Dictionary<string, HomographyEntry>> LoadHomographiesAsync(
+        ISet<string> cameraMacs, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, HomographyEntry>(StringComparer.OrdinalIgnoreCase);
+
+        QuerySnapshot snapshot;
+        try
+        {
+            snapshot = await _db.Collection("locked_homographies").GetSnapshotAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARN] Could not read locked_homographies: {ex.Message}");
+            return result;
+        }
+
+        foreach (var doc in snapshot.Documents)
+        {
+            if (!TryGetMac(doc, out string mac)) continue;
+            if (!cameraMacs.Contains(mac))             continue;
+
+            var entry = ParseHomographyDoc(doc, mac);
+            if (entry != null)
             {
-                for (int c = 0; c < 3; c++)
-                {
-                    if (H.Type() == MatType.CV_64F)
-                        arr[r, c] = H.At<double>(r, c);
-                    else if (H.Type() == MatType.CV_32F)
-                        arr[r, c] = H.At<float>(r, c);
-                    else
-                        throw new Exception($"Unsupported homography type: {H.Type()}");
-                }
+                result[mac] = entry;
+                Console.WriteLine($"[INFO] Homography loaded from Firestore: {doc.Id}");
+            }
+            else
+            {
+                Console.WriteLine($"[WARN] Homography document {doc.Id} could not be parsed — skipped.");
+            }
+        }
+
+        if (result.Count == 0)
+            Console.WriteLine("[WARN] No homographies found in locked_homographies for the active cameras.");
+
+        return result;
+    }
+
+    // ── Intrinsics ────────────────────────────────────────────────────────
+    public async Task<Dictionary<string, FusionCameraIntrinsics>> LoadIntrinsicsAsync(
+        ISet<string> cameraMacs, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, FusionCameraIntrinsics>(StringComparer.OrdinalIgnoreCase);
+
+        QuerySnapshot snapshot;
+        try
+        {
+            snapshot = await _db.Collection("camera_intrinsics").GetSnapshotAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARN] Could not read camera_intrinsics: {ex.Message} — undistortion skipped.");
+            return result;
+        }
+
+        foreach (var doc in snapshot.Documents)
+        {
+            if (!TryGetMac(doc, out string mac)) continue;
+            if (!cameraMacs.Contains(mac))             continue;
+
+            var intrinsics = ParseIntrinsicsDoc(doc, mac);
+            if (intrinsics != null)
+            {
+                result[mac] = intrinsics;
+                Console.WriteLine($"[INFO] Intrinsics loaded from Firestore: {doc.Id}");
+            }
+            else
+            {
+                Console.WriteLine($"[WARN] Intrinsics document {doc.Id} could not be parsed — undistortion skipped for cam={mac}.");
             }
         }
 
         return result;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    // Reads the CameraMac field directly from the document.
+    // Falls back to splitting the doc ID on the first underscore if the field is absent.
+    private static bool TryGetMac(DocumentSnapshot doc, out string mac)
+    {
+        if (doc.TryGetValue("CameraMac", out string? stored) && !string.IsNullOrWhiteSpace(stored))
+        {
+            mac = stored.ToLower().Trim();
+            return true;
+        }
+        // Fallback: split "SiDJweLpgP3xesyoyu78_d0:3b:f4:01:52:79" on the first underscore.
+        int idx = doc.Id.IndexOf('_');
+        if (idx < 1 || idx == doc.Id.Length - 1) { mac = ""; return false; }
+        mac = doc.Id[(idx + 1)..].ToLower();
+        return true;
+    }
+
+    // Reads a 3×3 nested Firestore array (list-of-lists) into a double[3,3].
+    // Firestore stores [[a,b,c],[d,e,f],[g,h,i]] as IReadOnlyList<object> of IReadOnlyList<object>.
+    private static bool TryParseMatrix3x3(DocumentSnapshot doc, string field, string mac,
+        out double[,] matrix)
+    {
+        matrix = new double[3, 3];
+
+        if (!doc.TryGetValue(field, out IReadOnlyList<object> rows) || rows.Count != 3)
+        {
+            Console.WriteLine($"[WARN] cam={mac}: '{field}' missing or not 3 rows.");
+            return false;
+        }
+
+        for (int r = 0; r < 3; r++)
+        {
+            if (rows[r] is not IReadOnlyList<object> cols || cols.Count != 3)
+            {
+                Console.WriteLine($"[WARN] cam={mac}: '{field}' row {r} is not a 3-element list.");
+                return false;
+            }
+            for (int c = 0; c < 3; c++)
+                matrix[r, c] = Convert.ToDouble(cols[c]);
+        }
+
+        return true;
+    }
+
+    private static HomographyEntry? ParseHomographyDoc(DocumentSnapshot doc, string mac)
+    {
+        // Field name in document: "Matrix" (PascalCase to match the stored schema)
+        if (!TryParseMatrix3x3(doc, "Matrix", mac, out var matrix))
+            return null;
+
+        // No UsedUndistortedImage field in the current schema — defaults to false.
+        return new HomographyEntry
+        {
+            Matrix               = matrix,
+            UsedUndistortedImage = false
+        };
+    }
+
+    private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
+    {
+        // Field name in document: "CameraMatrix" (PascalCase)
+        if (!TryParseMatrix3x3(doc, "CameraMatrix", mac, out var cameraMatrix))
+            return null;
+
+        // Field name in document: "DistortionCoefficients" — flat array [k1, k2, p1, p2, k3]
+        if (!doc.TryGetValue("DistortionCoefficients", out IReadOnlyList<object> distRaw))
+        {
+            Console.WriteLine($"[WARN] cam={mac}: 'DistortionCoefficients' field missing.");
+            return null;
+        }
+
+        return new FusionCameraIntrinsics
+        {
+            CameraMatrix = cameraMatrix,
+            DistCoeffs   = distRaw.Select(Convert.ToDouble).ToArray()
+        };
+    }
 }
 
 // ─────────────────────────────────────────────
-// JSONL LOADER
+// JSONL LOADER 
 // ─────────────────────────────────────────────
 public static class JsonlLoader
 {
@@ -333,32 +542,28 @@ public static class JsonlLoader
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-
             var obj = JsonNode.Parse(line);
             if (obj == null) continue;
 
-            string? mac = obj["mac"]?.GetValue<string>()?.ToLower();
-            int?    sid = obj["sid"]?.GetValue<int>();
+            string? mac  = obj["mac"]?.GetValue<string>()?.ToLower();
+            int?    sid  = obj["sid"]?.GetValue<int>();
             string? type = obj["type"]?.GetValue<string>();
-
             if (mac == null || sid == null || type == null) continue;
 
             var key = (mac, sid.Value);
 
             if (type == "vector")
             {
-                var arr    = obj["vector"]!.AsArray();
-                var vector = arr.Select(v => v!.GetValue<float>()).ToArray();
-
+                var vector = obj["vector"]!.AsArray()
+                    .Select(v => v!.GetValue<float>()).ToArray();
                 if (!vectors.ContainsKey(key)) vectors[key] = new();
                 vectors[key].Add(vector);
             }
             else if (type == "track")
             {
-                long t = obj["time"]?.GetValue<long>() ?? 0;
-                double x = obj["x"]?.GetValue<double>() ?? 0;
-                double y = obj["y"]?.GetValue<double>() ?? 0;
-
+                long   t = obj["time"]?.GetValue<long>()   ?? 0;
+                double x = obj["x"]?.GetValue<double>()    ?? 0;
+                double y = obj["y"]?.GetValue<double>()    ?? 0;
                 if (!tracks.ContainsKey(key)) tracks[key] = new();
                 tracks[key].Add(new TrackEvent { X = x, Y = y, Time = t, Cam = mac, Sid = sid.Value });
             }
@@ -369,20 +574,19 @@ public static class JsonlLoader
 }
 
 // ─────────────────────────────────────────────
-// TRACK BUILDER
+// TRACK BUILDER 
 // ─────────────────────────────────────────────
 public static class TrackBuilder
 {
     public static List<TrackObject> Build(
-        Dictionary<(string, int), List<float[]>> vectors,
+        Dictionary<(string, int), List<float[]>>    vectors,
         Dictionary<(string, int), List<TrackEvent>> tracks)
     {
         var objs = new List<TrackObject>();
 
         foreach (var (key, vecs) in vectors)
         {
-            if (!tracks.TryGetValue(key, out var evs) || evs.Count == 0)
-                continue;
+            if (!tracks.TryGetValue(key, out var evs) || evs.Count == 0) continue;
 
             evs = evs.OrderBy(e => e.Time).ToList();
             var rep = VectorMath.Mean(vecs);
@@ -405,43 +609,67 @@ public static class TrackBuilder
 }
 
 // ─────────────────────────────────────────────
-// HOMOGRAPHY TRANSFORM  (replaces apply_homographies)
+// HOMOGRAPHY TRANSFORM
 // ─────────────────────────────────────────────
 public static class WorldTransform
 {
     public static void Apply(
-        List<TrackObject> trackObjs,
-        Dictionary<string, double[,]> homographies)
+        List<TrackObject>                           trackObjs,
+        Dictionary<string, HomographyEntry>         homographies,
+        Dictionary<string, FusionCameraIntrinsics>? intrinsicsPerCam = null)
     {
         foreach (var track in trackObjs)
         {
-            if (!homographies.TryGetValue(track.Cam, out var H))
+            if (!homographies.TryGetValue(track.Cam, out var entry))
+            {
+                Console.WriteLine($"[WARN] No homography for cam={track.Cam} — skipped.");
                 continue;
+            }
 
-            var kf       = new Kalman2D();
-            long? prevT  = null;
+            // Declared explicitly as null so the compiler knows it is always assigned.
+            // intrinsicsPerCam?.TryGetValue with out var would leave it unassigned when
+            // intrinsicsPerCam itself is null, which the compiler correctly rejects.
+            FusionCameraIntrinsics? intrinsics = null;
+            intrinsicsPerCam?.TryGetValue(track.Cam, out intrinsics);
+
+            bool doUndist = entry.UsedUndistortedImage && intrinsics != null;
+
+            if (entry.UsedUndistortedImage && intrinsics == null)
+                Console.WriteLine($"[WARN] cam={track.Cam}: homography expects undistorted " +
+                                  $"input but no intrinsics found in Firestore.");
+
+            var   H     = entry.Matrix;
+            var   kf    = new Kalman2D();
+            long? prevT = null;
 
             foreach (var e in track.Events)
             {
-                // No undistortion (same as fusion2.py test mode)
                 double ux = e.X, uy = e.Y;
 
-                // Apply homography: p = H * [ux, uy, 1]
-                double p0 = H[0, 0]*ux + H[0, 1]*uy + H[0, 2];
-                double p1 = H[1, 0]*ux + H[1, 1]*uy + H[1, 2];
-                double p2 = H[2, 0]*ux + H[2, 1]*uy + H[2, 2];
+                // Second null check on intrinsics satisfies the compiler's flow analysis —
+                // doUndist already guarantees it is non-null, but this makes it explicit.
+                if (doUndist && intrinsics != null)
+                    (ux, uy) = LensUndistort.UndistortPoint(
+                        e.X, e.Y,
+                        intrinsics.CameraMatrix,
+                        intrinsics.DistCoeffs);
+
+                double p0 = H[0,0]*ux + H[0,1]*uy + H[0,2];
+                double p1 = H[1,0]*ux + H[1,1]*uy + H[1,2];
+                double p2 = H[2,0]*ux + H[2,1]*uy + H[2,2];
 
                 if (Math.Abs(p2) < 1e-9) continue;
 
                 double wx = p0 / p2;
                 double wy = p1 / p2;
 
-                double dt = prevT == null ? 0.0 : Math.Max(1e-3, (e.Time - prevT.Value) / 1000.0);
+                double dt = prevT == null
+                    ? 0.0
+                    : Math.Max(1e-3, (e.Time - prevT.Value) / 1000.0);
 
                 var (fx, fy) = kf.Update(wx, wy, dt);
                 e.X = fx;
                 e.Y = fy;
-
                 prevT = e.Time;
             }
 
@@ -453,48 +681,38 @@ public static class WorldTransform
 }
 
 // ─────────────────────────────────────────────
-// FUSION ENGINE  (replaces offline_fusion)
+// FUSION ENGINE
 // ─────────────────────────────────────────────
 public class FusionEngine
 {
     private readonly bool _debug;
-
     public FusionEngine(bool debug = false) => _debug = debug;
 
-    // ── Physics check ─────────────────────────
     private (bool teleport, double dist, double dtMs, double speed)
         TeleportMetrics(FusedIdentity gid, TrackObject track)
     {
-        double dx   = track.X - gid.X;
-        double dy   = track.Y - gid.Y;
-        double dist = VectorMath.Hypot(dx, dy);
-        double dtMs = track.TStart - gid.TEnd;
-
+        double dx    = track.X - gid.X;
+        double dy    = track.Y - gid.Y;
+        double dist  = VectorMath.Hypot(dx, dy);
+        double dtMs  = track.TStart - gid.TEnd;
         if (dtMs <= 0) return (false, dist, dtMs, 0.0);
-
-        double speed    = dist / (dtMs / 1000.0);
-        bool teleport   = speed > FusionConfig.MaxSpeedPxPerS;
-
-        return (teleport, dist, dtMs, speed);
+        double speed  = dist / (dtMs / 1000.0);
+        return (speed > FusionConfig.MaxSpeedPxPerS, dist, dtMs, speed);
     }
 
-    // ── Time gap check ────────────────────────
     private (bool ok, double gapMs) TimeCompatible(FusedIdentity gid, TrackObject track)
     {
         double gap = track.TStart - gid.TEnd;
         return (gap <= FusionConfig.MaxGapMs, gap);
     }
 
-    // ── Temporal overlap (same camera = different person) ─
     private bool Overlaps(FusedIdentity gid, TrackObject track)
     {
         string gidCam = gid.Tracks[0][0].Cam;
         if (track.Cam != gidCam) return false;
-
         return track.TStart <= gid.TEnd && track.TEnd >= gid.TStart;
     }
 
-    // ── Main fusion loop ──────────────────────
     public List<FusedIdentity> Run(List<TrackObject> trackObjs)
     {
         var gids    = new List<FusedIdentity>();
@@ -505,12 +723,10 @@ public class FusionEngine
             FusedIdentity? best = null;
             double bestSim      = -1;
 
-            if (_debug)
-                Console.WriteLine($"\n[FUSION] track cam={track.Cam} sid={track.Sid}");
+            if (_debug) Console.WriteLine($"\n[FUSION] track cam={track.Cam} sid={track.Sid}");
 
             foreach (var candidate in gids)
             {
-                // 1. PHYSICS
                 var (teleport, dist, dtMs, speed) = TeleportMetrics(candidate, track);
                 if (teleport)
                 {
@@ -520,28 +736,21 @@ public class FusionEngine
                     continue;
                 }
 
-                // 2. TIME OVERLAP (same-camera = different person)
                 if (Overlaps(candidate, track))
                 {
-                    if (_debug)
-                        Console.WriteLine($"  gid={candidate.Gid} rejected (time overlap - same camera)");
+                    if (_debug) Console.WriteLine($"  gid={candidate.Gid} rejected (time overlap - same camera)");
                     continue;
                 }
 
-                // 3. TIME GAP
                 var (okTime, gapMs) = TimeCompatible(candidate, track);
                 if (!okTime)
                 {
-                    if (_debug)
-                        Console.WriteLine($"  gid={candidate.Gid} rejected (time gap) gap={gapMs}ms");
+                    if (_debug) Console.WriteLine($"  gid={candidate.Gid} rejected (time gap) gap={gapMs}ms");
                     continue;
                 }
 
-                // 4. APPEARANCE (cosine similarity — replaces sklearn)
                 double sim = VectorMath.CosineSimilarity(track.Rep, candidate.Rep);
-
-                if (_debug)
-                    Console.WriteLine($"  gid={candidate.Gid} sim={sim:F3}");
+                if (_debug) Console.WriteLine($"  gid={candidate.Gid} sim={sim:F3}");
 
                 if (sim < FusionConfig.SimThreshold)
                 {
@@ -549,18 +758,12 @@ public class FusionEngine
                     continue;
                 }
 
-                if (sim > bestSim)
-                {
-                    bestSim = sim;
-                    best    = candidate;
-                }
+                if (sim > bestSim) { bestSim = sim; best = candidate; }
             }
 
-            // ASSIGN OR CREATE
             if (best == null)
             {
                 if (_debug) Console.WriteLine("  → NEW GID");
-
                 gids.Add(new FusedIdentity
                 {
                     Gid    = nextGid++,
@@ -574,9 +777,7 @@ public class FusionEngine
             }
             else
             {
-                if (_debug)
-                    Console.WriteLine($"  → MERGED into gid={best.Gid} (sim={bestSim:F3})");
-
+                if (_debug) Console.WriteLine($"  → MERGED into gid={best.Gid} (sim={bestSim:F3})");
                 best.Rep  = VectorMath.AverageReps(best.Rep, track.Rep);
                 best.TEnd = track.TEnd;
                 best.X    = track.X;
@@ -585,24 +786,15 @@ public class FusionEngine
             }
         }
 
-        // Flatten + collect sources
         foreach (var gid in gids)
         {
-            var flat = gid.Tracks
-                .SelectMany(t => t)
-                .OrderBy(e => e.Time)
-                .ToList();
-
-            // Store flat list back as a single-element list of lists
+            var flat = gid.Tracks.SelectMany(t => t).OrderBy(e => e.Time).ToList();
             gid.Tracks = new List<List<TrackEvent>> { flat };
 
             var seen = new HashSet<(string, int)>();
             foreach (var e in flat)
-            {
-                var src = (e.Cam, e.Sid);
-                if (seen.Add(src))
-                    gid.Sources.Add(src);
-            }
+                if (seen.Add((e.Cam, e.Sid)))
+                    gid.Sources.Add((e.Cam, e.Sid));
         }
 
         return gids;
@@ -610,7 +802,7 @@ public class FusionEngine
 }
 
 // ─────────────────────────────────────────────
-// TRACK CLEANING  (replaces clean_track)
+// TRACK CLEANING
 // ─────────────────────────────────────────────
 public static class TrackCleaner
 {
@@ -644,27 +836,20 @@ public static class TrackCleaner
 
     private static List<TrackEvent> Smooth(List<TrackEvent> track)
     {
-        int n       = track.Count;
-        int win     = FusionConfig.SmoothWin;
-        var result  = new List<TrackEvent>(n);
-
+        int n      = track.Count;
+        int win    = FusionConfig.SmoothWin;
+        var result = new List<TrackEvent>(n);
         for (int i = 0; i < n; i++)
         {
-            double sx = 0, sy = 0;
-            int count = 0;
+            double sx = 0, sy = 0; int count = 0;
             for (int j = Math.Max(0, i - win); j <= Math.Min(n - 1, i + win); j++)
             {
-                sx += track[j].X;
-                sy += track[j].Y;
-                count++;
+                sx += track[j].X; sy += track[j].Y; count++;
             }
             result.Add(new TrackEvent
             {
-                X    = sx / count,
-                Y    = sy / count,
-                Time = track[i].Time,
-                Cam  = track[i].Cam,
-                Sid  = track[i].Sid
+                X = sx / count, Y = sy / count,
+                Time = track[i].Time, Cam = track[i].Cam, Sid = track[i].Sid
             });
         }
         return result;
@@ -673,42 +858,35 @@ public static class TrackCleaner
     public static List<TrackEvent>? Clean(List<TrackEvent> track)
     {
         if (track.Count == 0) return null;
-
         track = RemoveDuplicates(track);
         track = RemoveLargeJumps(track);
         track = Smooth(track);
-
         double duration = (track.Last().Time - track.First().Time) / 1000.0;
         if (track.Count < FusionConfig.MinTrackPoints || duration < FusionConfig.MinDurationS)
             return null;
-
         return track;
     }
 }
 
 // ─────────────────────────────────────────────
-// EXPORTER
+// EXPORTER 
 // ─────────────────────────────────────────────
 public static class FusionExporter
 {
     public static void Export(List<FusedIdentity> gids, string outputPath)
     {
         var out_ = new Dictionary<string, object>();
+        int idx  = 0;
 
-        int idx = 0;
         foreach (var g in gids)
         {
             var flatEvents = g.Tracks.SelectMany(t => t).ToList();
             var cleaned    = TrackCleaner.Clean(flatEvents);
-
             if (cleaned == null) continue;
 
             var trajectory = cleaned.Select(e => new
             {
-                x   = e.X,
-                y   = e.Y,
-                t   = e.Time,
-                cam = e.Cam
+                x = e.X, y = e.Y, t = e.Time, cam = e.Cam
             }).ToList();
 
             out_[idx.ToString()] = new
@@ -726,52 +904,77 @@ public static class FusionExporter
 }
 
 // ─────────────────────────────────────────────
-// MAIN SERVICE  (wire everything together)
+// MAIN SERVICE
 // ─────────────────────────────────────────────
 public class FusionService
 {
-    private readonly string _workingDir;
-    private readonly string _outputFile;
+    private readonly CloudStorageService   _gcs;
+    private readonly FusionFirestoreLoader _firestoreLoader;
 
-    public FusionService(string workingDir, string outputFile = FusionConfig.OutputFile)
+    // Register in Program.cs:
+    //   builder.Services.AddScoped<FusionService>();
+    //   (FirestoreDb and CloudStorageService must already be registered)
+    public FusionService(CloudStorageService gcs, FirestoreDb firestoreDb)
     {
-        _workingDir = workingDir;
-        _outputFile = outputFile;
+        _gcs             = gcs;
+        _firestoreLoader = new FusionFirestoreLoader(firestoreDb);
     }
 
-    public FusionResult Run(FusionRequest request, bool debug = false)
+    public async Task<FusionResult> RunAsync(
+        FusionRequest request, bool debug = false, CancellationToken ct = default)
     {
+        // Isolated temp dir — always deleted in finally, safe for concurrent calls
+        string tempDir = Path.Combine(Path.GetTempPath(), $"fusion_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+
         try
         {
-            string inputPath = request.InputFilePath;
+            // ── 1. Download input JSONL from GCS ──────────────────────────
+            string inputStoragePath = request.InputStoragePath ?? FusionConfig.InputStoragePath;
+            string localInputPath   = Path.Combine(tempDir, "tracks-raw.jsonl");
 
-            // Optional: filter by timeframe
+            Console.WriteLine($"[INFO] Downloading input: {inputStoragePath}");
+            await DownloadFileAsync(inputStoragePath, localInputPath, ct);
+
+            // Optional time-range filter
             if (request.From.HasValue && request.To.HasValue)
-                inputPath = FilterByTime(inputPath, request.From.Value, request.To.Value);
+                localInputPath = FilterByTime(localInputPath, tempDir, request.From.Value, request.To.Value);
 
-            // 1. Load data
-            var (vectors, tracks) = JsonlLoader.Load(inputPath);
+            // ── 2. Load + build tracks ────────────────────────────────────
+            var (vectors, tracks) = JsonlLoader.Load(localInputPath);
+            var trackObjs         = TrackBuilder.Build(vectors, tracks);
 
-            // 2. Build track objects
-            var trackObjs = TrackBuilder.Build(vectors, tracks);
+            // ── 3. Collect the unique camera MACs present in this batch ───
+            var activeMacs = trackObjs
+                .Select(t => t.Cam.ToLower())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // 3. Load homographies
-            var homos = HomographyLoader.Load(_workingDir);
+            Console.WriteLine($"[INFO] Active cameras: {string.Join(", ", activeMacs)}");
 
-            // 4. Apply world transform (homography + Kalman)
-            WorldTransform.Apply(trackObjs, homos);
+            // ── 4. Fetch homographies + intrinsics from Firestore ─────────
+            //       Collections may be empty until calibration is run —
+            //       both calls return gracefully with warnings in that case.
+            var homographies   = await _firestoreLoader.LoadHomographiesAsync(activeMacs, ct);
+            var intrinsicsDict = await _firestoreLoader.LoadIntrinsicsAsync(activeMacs, ct);
 
-            // 5. Fuse identities
+            // ── 5. World transform (undistortion + homography + Kalman) ───
+            WorldTransform.Apply(trackObjs, homographies, intrinsicsDict);
+
+            // ── 6. Fuse identities ────────────────────────────────────────
             var engine = new FusionEngine(debug);
             var gids   = engine.Run(trackObjs);
 
-            // 6. Export
-            string outputPath = Path.Combine(_workingDir, _outputFile);
-            FusionExporter.Export(gids, outputPath);
+            // ── 7. Serialize + upload result to GCS ──────────────────────
+            string localOutputPath   = Path.Combine(tempDir, "fused_tracks.json");
+            FusionExporter.Export(gids, localOutputPath);
 
-            Console.WriteLine($"[DONE] {gids.Count} fused identities written to {outputPath}");
+            string outputStoragePath = FusionConfig.BuildOutputStoragePath(inputStoragePath, request.OutputStorageFolder);
+            Console.WriteLine($"[INFO] Uploading result to: {outputStoragePath}");
+            await UploadFileAsync(localOutputPath, outputStoragePath, "application/json", ct);
 
-            var json = File.ReadAllText(outputPath);
+            Console.WriteLine($"[DONE] {gids.Count} fused identities written to {outputStoragePath}");
+
+            var json = File.ReadAllText(localOutputPath);
             var data = JsonSerializer.Deserialize<object>(json);
 
             return new FusionResult { Success = true, Data = data };
@@ -781,10 +984,29 @@ public class FusionService
             Console.Error.WriteLine($"[ERROR] {ex.Message}");
             return new FusionResult { Success = false, Message = ex.Message };
         }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch { /* best-effort */ }
+        }
     }
 
-    // Filter .jsonl by Unix ms timestamps
-    private string FilterByTime(string path, DateTime from, DateTime to)
+    // ── Private helpers ───────────────────────────────────────────────────
+
+    private async Task DownloadFileAsync(string storagePath, string localPath, CancellationToken ct)
+    {
+        await using var fs = File.Create(localPath);
+        await _gcs.DownloadToStreamAsync(storagePath, fs, ct);
+    }
+
+    private async Task UploadFileAsync(
+        string localPath, string storagePath, string contentType, CancellationToken ct)
+    {
+        await using var fs = File.OpenRead(localPath);
+        await _gcs.UploadFromStreamAsync(storagePath, contentType, fs, ct);
+    }
+
+    private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
     {
         long fromMs = new DateTimeOffset(from).ToUnixTimeMilliseconds();
         long toMs   = new DateTimeOffset(to).ToUnixTimeMilliseconds();
@@ -793,44 +1015,15 @@ public class FusionService
             .Where(line =>
             {
                 if (string.IsNullOrWhiteSpace(line)) return false;
-                using var doc = System.Text.Json.JsonDocument.Parse(line);
-                if (doc.RootElement.TryGetProperty("time", out var t))
-                {
-                    long ts = t.GetInt64();
-                    return ts >= fromMs && ts <= toMs;
-                }
-                return false;
+                using var doc = JsonDocument.Parse(line);
+                return doc.RootElement.TryGetProperty("time", out var t)
+                       && t.GetInt64() >= fromMs
+                       && t.GetInt64() <= toMs;
             })
             .ToList();
 
-        string tempPath = Path.Combine(_workingDir, $"filtered_{Guid.NewGuid()}.jsonl");
-        File.WriteAllLines(tempPath, filtered);
-        return tempPath;
-    }
-}
-
-// ─────────────────────────────────────────────
-// ENTRY POINT (for standalone console testing)
-// ─────────────────────────────────────────────
-public class TestProgram
-{
-    public static void Main(string[] args)
-    {
-        string workingDir = args.Length > 0
-            ? args[0]
-            : Directory.GetCurrentDirectory();
-
-        string inputFile = args.Length > 1
-            ? args[1]
-            : Path.Combine(workingDir, FusionConfig.InputFile);
-
-        var service = new FusionService(workingDir);
-        var result  = service.Run(new FusionRequest { InputFilePath = inputFile }, debug: true);
-
-        if (!result.Success)
-        {
-            Console.Error.WriteLine($"Fusion failed: {result.Message}");
-            Environment.Exit(1);
-        }
+        string filteredPath = Path.Combine(tempDir, $"filtered_{Guid.NewGuid()}.jsonl");
+        File.WriteAllLines(filteredPath, filtered);
+        return filteredPath;
     }
 }

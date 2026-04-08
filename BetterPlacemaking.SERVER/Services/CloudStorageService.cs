@@ -110,6 +110,16 @@ namespace BetterPlacemaking.Services
             return objectName;
         }
 
+        public async Task DownloadToStreamAsync(string objectName,Stream destination,CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(objectName)) throw new ArgumentException("objectName required");
+
+            await _storage.DownloadObjectAsync(
+                bucket: _opt.BucketName,
+                objectName: objectName,
+                destination: destination,
+                cancellationToken: ct);
+        }
         private static string SanitizeObjectPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("PathFromRoot required.");
