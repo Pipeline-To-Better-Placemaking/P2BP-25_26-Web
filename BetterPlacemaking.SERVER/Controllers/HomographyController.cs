@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Services;
@@ -131,6 +132,65 @@ namespace BetterPlacemaking.Controllers
             {
                 return Problem("An unexpected error occurred.");
             }
+        }
+
+        [HttpGet("workspace/{projectId}")]
+        [Authorize(Policy = "UserJwt")]
+        public async Task<IActionResult> GetPuzzleWorkspace(string projectId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return BadRequest("projectId is required.");
+
+            try
+            {
+                var response = await _homographyService.GetPuzzleWorkspaceAsync(projectId, ct);
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred while loading the puzzle workspace.");
+            }
+        }
+
+        [HttpPost("workspace/{projectId}/global-homographies")]
+        [Authorize(Policy = "UserJwt")]
+        public IActionResult SaveGlobalHomographies(string projectId, [FromBody] SaveGlobalHomographiesDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return BadRequest("projectId is required.");
+            if (dto == null)
+                return BadRequest("Invalid payload.");
+
+            var userId = ResolveCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized("Missing user id claim.");
+
+            try
+            {
+                var response = _homographyService.SaveGlobalHomographies(projectId, userId, dto);
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred while saving global homographies.");
+            }
+        }
+
+        private string? ResolveCurrentUserId()
+        {
+            return
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                User.FindFirstValue("userId") ??
+                User.FindFirstValue("uid") ??
+                User.FindFirstValue("id");
         }
 
     }

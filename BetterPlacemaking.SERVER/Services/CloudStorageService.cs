@@ -127,6 +127,13 @@ namespace BetterPlacemaking.Services
                 cancellationToken: ct);
         }
 
+        public async Task<byte[]> DownloadBytesAsync(string objectName, CancellationToken ct)
+        {
+            using var stream = new MemoryStream();
+            await DownloadToStreamAsync(objectName, stream, ct);
+            return stream.ToArray();
+        }
+
         
         public async Task<IReadOnlyList<GcsFileInfo>> ListFilesAsync(
             string folder, CancellationToken ct = default)

@@ -1,22 +1,28 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Models.Homography;
 using Google.Cloud.Firestore;
 using Microsoft.Extensions.Logging;
+using OpenCvSharp;
 
 namespace BetterPlacemaking.Services
 {
-    public class HomographyService(FirestoreDb db, ILogger<HomographyService> logger)
+    public class HomographyService(FirestoreDb db, CloudStorageService cloudStorage, ILogger<HomographyService> logger)
     {
         private readonly FirestoreDb _db = db;
+        private readonly CloudStorageService _cloudStorage = cloudStorage;
         private readonly ILogger<HomographyService> _logger = logger;
 
         private const string ColLocalHomographies = "local_homographies";
         private const string ColSessions = "aruco_sessions";
         private const string ColSightings = "aruco_sightings";
         private const string ColLockedHomographies = "locked_homographies";
+        private const string ColPuzzlePieces = "puzzle_pieces";
+        private const string ColGlobalHomographies = "global_homographies";
+        private const string ColDevices = "devices";
 
         public LocalHomographyResponseDto SubmitLocalHomography(string deviceId, SubmitLocalHomographyDto dto)
         {
@@ -405,6 +411,564 @@ namespace BetterPlacemaking.Services
                 CamerasTotal: session.CamerasTotal,
                 CreatedAt: session.CreatedAt.ToDateTime().ToString("o")
             );
+        }
+
+        public async Task<PuzzleWorkspaceResponseDto> GetPuzzleWorkspaceAsync(string projectId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                throw new ArgumentException("projectId is required.");
+
+            var deviceDocs = _db.Collection(ColDevices)
+                .WhereEqualTo(nameof(Device.ProjectId), projectId)
+                .GetSnapshotAsync().Result
+                .Documents;
+
+            var projectDevices = deviceDocs
+                .Select(doc => doc.ConvertTo<Device>())
+                .Where(device => device != null && !string.IsNullOrWhiteSpace(device.Id))
+                .ToList()!;
+
+            var deviceIdSet = projectDevices
+                .Select(device => device.Id!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var artifactDocs = _db.Collection(ColPuzzlePieces)
+                .WhereEqualTo(nameof(PuzzlePieceArtifact.ProjectId), projectId)
+                .GetSnapshotAsync().Result
+                .Documents;
+
+            var artifactsByKey = artifactDocs
+                .Select(doc => doc.ConvertTo<PuzzlePieceArtifact>())
+                .Where(artifact =>
+                    artifact != null &&
+                    !string.IsNullOrWhiteSpace(artifact.DeviceId) &&
+                    !string.IsNullOrWhiteSpace(artifact.CameraMac))
+                .ToDictionary(
+                    artifact => BuildCameraKey(artifact!.DeviceId!, artifact.CameraMac!),
+                    artifact => artifact!,
+                    StringComparer.OrdinalIgnoreCase);
+
+            var localDocs = _db.Collection(ColLocalHomographies).GetSnapshotAsync().Result.Documents;
+            var localHomographies = localDocs
+                .Select(doc => doc.ConvertTo<LocalHomography>())
+                .Where(local =>
+                    local != null &&
+                    !string.IsNullOrWhiteSpace(local.DeviceId) &&
+                    !string.IsNullOrWhiteSpace(local.CameraMac) &&
+                    local.Matrix != null &&
+                    deviceIdSet.Contains(local.DeviceId!))
+                .OrderBy(local => local!.CameraMac)
+                .ToList()!;
+
+            var localDtos = new List<LocalHomographyWorkspaceDto>(localHomographies.Count);
+            var puzzlePieces = new List<PuzzlePieceDto>(localHomographies.Count);
+            var puzzlePieceMetaFiles = new List<PuzzlePieceMetadataDto>(localHomographies.Count);
+
+            foreach (var local in localHomographies)
+            {
+                var localHash = ComputeHomographyHash(local.Matrix!);
+                localDtos.Add(ToLocalWorkspaceDto(local, localHash));
+
+                PuzzlePieceDto pieceDto;
+                try
+                {
+                    pieceDto = await ResolvePuzzlePieceAsync(projectId, local, localHash, artifactsByKey, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to resolve puzzle piece for project={ProjectId} device={DeviceId} camera={CameraMac}",
+                        projectId,
+                        local.DeviceId,
+                        local.CameraMac);
+
+                    pieceDto = new PuzzlePieceDto(
+                        PuzzlePieceId: BuildPuzzlePieceDocumentId(projectId, local.DeviceId!, local.CameraMac!),
+                        DeviceId: local.DeviceId!,
+                        CameraMac: NormalizeMac(local.CameraMac),
+                        Status: "generation_failed",
+                        PuzzlePiecePath: null,
+                        PuzzlePieceDownloadUrl: null,
+                        PuzzlePieceDownloadUrlExpiresAt: null,
+                        Metadata: null,
+                        Error: ex.Message);
+                }
+
+                puzzlePieces.Add(pieceDto);
+                if (pieceDto.Metadata != null)
+                    puzzlePieceMetaFiles.Add(pieceDto.Metadata);
+            }
+
+            var globalSnap = _db.Collection(ColGlobalHomographies).Document(projectId).GetSnapshotAsync().Result;
+            var globalRecord = globalSnap.Exists
+                ? globalSnap.ConvertTo<ProjectGlobalHomographySet>()
+                : null;
+
+            var globalDto = globalRecord != null ? ToGlobalHomographySetDto(globalRecord) : null;
+
+            return new PuzzleWorkspaceResponseDto(
+                ProjectId: projectId,
+                PuzzlePieces: puzzlePieces,
+                PuzzlePieceMetaFiles: puzzlePieceMetaFiles,
+                LocalHomographies: localDtos,
+                GlobalHomographies: globalDto,
+                LockedGroups: globalDto?.LockedGroups ?? []);
+        }
+
+        public SaveGlobalHomographiesResponseDto SaveGlobalHomographies(
+            string projectId,
+            string savedByUserId,
+            SaveGlobalHomographiesDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                throw new ArgumentException("projectId is required.");
+            if (string.IsNullOrWhiteSpace(savedByUserId))
+                throw new ArgumentException("savedByUserId is required.");
+            if (dto == null)
+                throw new ArgumentException("Invalid payload.");
+            if (dto.MmPerFpPx <= 0)
+                throw new ArgumentException("MmPerFpPx must be greater than 0.");
+
+            var originFp = NormalizePoint(dto.OriginFp, nameof(dto.OriginFp));
+            var floorplanSize = NormalizeIntPair(dto.FloorplanSize, nameof(dto.FloorplanSize));
+            if (dto.Placements == null || dto.Placements.Count == 0)
+                throw new ArgumentException("At least one placement is required.");
+
+            var placements = dto.Placements.Select(placement =>
+            {
+                ValidateRequired(placement.PuzzlePieceId, nameof(placement.PuzzlePieceId));
+                ValidateRequired(placement.DeviceId, nameof(placement.DeviceId));
+                var cameraMac = NormalizeMac(placement.CameraMac);
+                ValidateMatrix3x3(placement.HLocalCanvas, nameof(placement.HLocalCanvas));
+                var centerFp = NormalizePoint(placement.CenterFp, nameof(placement.CenterFp));
+                var localCanvasSize = NormalizeIntPair(placement.LocalCanvasSize, nameof(placement.LocalCanvasSize));
+
+                var floorplanTransform = BuildPlacementTransform(centerFp, placement.AngleDeg, placement.Scale, localCanvasSize);
+                var hLocalCanvas = ToMatrix3x3(placement.HLocalCanvas);
+                var globalFloorplan = MatMul3x3(floorplanTransform, hLocalCanvas);
+                var floorplanToMm = BuildFloorplanPixelToMmTransform(dto.MmPerFpPx, originFp);
+                var globalMm = MatMul3x3(floorplanToMm, globalFloorplan);
+
+                return new GlobalHomographyPlacementRecord
+                {
+                    PuzzlePieceId = placement.PuzzlePieceId.Trim(),
+                    DeviceId = placement.DeviceId.Trim(),
+                    CameraMac = cameraMac,
+                    CenterFp = centerFp,
+                    AngleDeg = placement.AngleDeg,
+                    Scale = placement.Scale,
+                    HLocalCanvas = placement.HLocalCanvas,
+                    LocalCanvasSize = localCanvasSize,
+                    GlobalHomographyFloorplan = FromMatrix3x3(globalFloorplan),
+                    GlobalHomography = FromMatrix3x3(globalMm),
+                };
+            }).ToList();
+
+            var lockedGroups = (dto.LockedGroups ?? [])
+                .Where(group => !string.IsNullOrWhiteSpace(group.GroupId))
+                .Select(group => new HomographyLockGroupRecord
+                {
+                    GroupId = group.GroupId.Trim(),
+                    CameraMacs = (group.CameraMacs ?? [])
+                        .Where(mac => !string.IsNullOrWhiteSpace(mac))
+                        .Select(NormalizeMac)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                })
+                .Where(group => group.CameraMacs is { Count: > 0 })
+                .ToList();
+
+            var record = new ProjectGlobalHomographySet
+            {
+                Id = projectId,
+                ProjectId = projectId,
+                FloorplanId = CleanNullable(dto.FloorplanId),
+                MmPerFpPx = dto.MmPerFpPx,
+                OriginFp = originFp,
+                FloorplanSize = floorplanSize,
+                Placements = placements,
+                LockedGroups = lockedGroups,
+                SavedByUserId = savedByUserId,
+                SavedAt = Timestamp.GetCurrentTimestamp(),
+            };
+
+            _db.Collection(ColGlobalHomographies).Document(projectId).SetAsync(record).Wait();
+
+            var responseDto = ToGlobalHomographySetDto(record);
+            return new SaveGlobalHomographiesResponseDto(
+                ProjectId: projectId,
+                PlacementsSaved: placements.Count,
+                SavedAt: responseDto.SavedAt,
+                GlobalHomographies: responseDto);
+        }
+
+        private async Task<PuzzlePieceDto> ResolvePuzzlePieceAsync(
+            string projectId,
+            LocalHomography local,
+            string localHash,
+            Dictionary<string, PuzzlePieceArtifact> artifactsByKey,
+            CancellationToken ct)
+        {
+            var deviceId = local.DeviceId!;
+            var cameraMac = NormalizeMac(local.CameraMac);
+            var key = BuildCameraKey(deviceId, cameraMac);
+
+            var artifact = artifactsByKey.TryGetValue(key, out var cached)
+                ? cached
+                : null;
+
+            if (artifact == null || !IsUsablePuzzlePieceArtifact(artifact, localHash))
+            {
+                if (string.IsNullOrWhiteSpace(local.SnapshotPath))
+                {
+                    return new PuzzlePieceDto(
+                        PuzzlePieceId: BuildPuzzlePieceDocumentId(projectId, deviceId, cameraMac),
+                        DeviceId: deviceId,
+                        CameraMac: cameraMac,
+                        Status: "missing_snapshot",
+                        PuzzlePiecePath: null,
+                        PuzzlePieceDownloadUrl: null,
+                        PuzzlePieceDownloadUrlExpiresAt: null,
+                        Metadata: null,
+                        Error: "No snapshot path is stored for this local homography.");
+                }
+
+                artifact = await GeneratePuzzlePieceAsync(projectId, local, localHash, ct);
+                artifactsByKey[key] = artifact;
+            }
+
+            DownloadUrlResponseDto? download = null;
+            if (!string.IsNullOrWhiteSpace(artifact.PuzzlePiecePath))
+            {
+                download = await _cloudStorage.CreateSignedDownloadUrlAsync(
+                    new RequestDownloadUrlDto(artifact.PuzzlePiecePath),
+                    ct);
+            }
+
+            var metadata = ToPuzzlePieceMetadataDto(artifact);
+            return new PuzzlePieceDto(
+                PuzzlePieceId: artifact.Id ?? BuildPuzzlePieceDocumentId(projectId, deviceId, cameraMac),
+                DeviceId: deviceId,
+                CameraMac: cameraMac,
+                Status: "ready",
+                PuzzlePiecePath: artifact.PuzzlePiecePath,
+                PuzzlePieceDownloadUrl: download?.SignedUrl,
+                PuzzlePieceDownloadUrlExpiresAt: download?.ExpiresAt,
+                Metadata: metadata,
+                Error: null);
+        }
+
+        private async Task<PuzzlePieceArtifact> GeneratePuzzlePieceAsync(
+            string projectId,
+            LocalHomography local,
+            string localHash,
+            CancellationToken ct)
+        {
+            if (local.Matrix == null)
+                throw new InvalidOperationException("Local homography matrix is missing.");
+            if (string.IsNullOrWhiteSpace(local.DeviceId))
+                throw new InvalidOperationException("DeviceId is missing on local homography.");
+            if (string.IsNullOrWhiteSpace(local.CameraMac))
+                throw new InvalidOperationException("CameraMac is missing on local homography.");
+            if (string.IsNullOrWhiteSpace(local.SnapshotPath))
+                throw new InvalidOperationException("SnapshotPath is required to generate a puzzle piece.");
+
+            var cameraMac = NormalizeMac(local.CameraMac);
+            var sourceBytes = await _cloudStorage.DownloadBytesAsync(local.SnapshotPath, ct);
+
+            using var decoded = Cv2.ImDecode(sourceBytes, ImreadModes.Unchanged);
+            if (decoded.Empty())
+                throw new InvalidOperationException("The stored snapshot could not be decoded.");
+
+            using var source = EnsureBgra(decoded);
+
+            int frameWidth = source.Cols;
+            int frameHeight = source.Rows;
+            if (local.FrameSize is { Count: >= 2 } &&
+                local.FrameSize[0] > 0 &&
+                local.FrameSize[1] > 0)
+            {
+                frameWidth = local.FrameSize[0];
+                frameHeight = local.FrameSize[1];
+            }
+
+            using var resized = source.Cols == frameWidth && source.Rows == frameHeight
+                ? source.Clone()
+                : new Mat();
+            if (source.Cols != frameWidth || source.Rows != frameHeight)
+                Cv2.Resize(source, resized, new OpenCvSharp.Size(frameWidth, frameHeight), 0, 0, InterpolationFlags.Linear);
+
+            var hLocalCanvas = FitHomographyToOutput(
+                ToMatrix3x3(local.Matrix),
+                frameWidth,
+                frameHeight,
+                frameWidth,
+                frameHeight);
+
+            using var transform = ToCvMat(hLocalCanvas);
+            using var warped = new Mat();
+            Cv2.WarpPerspective(
+                resized,
+                warped,
+                transform,
+                new OpenCvSharp.Size(frameWidth, frameHeight),
+                InterpolationFlags.Linear,
+                BorderTypes.Constant,
+                new Scalar(0, 0, 0, 0));
+
+            Cv2.ImEncode(".png", warped, out var pngBytes);
+
+            var objectPath = _cloudStorage.BuildObjectPath(
+                $"projects/{projectId}/puzzle-pieces",
+                $"{local.DeviceId}_{cameraMac}_{localHash[..8]}",
+                ".png");
+
+            using var uploadStream = new MemoryStream(pngBytes);
+            await _cloudStorage.UploadFromStreamAsync(objectPath, "image/png", uploadStream, ct);
+
+            var artifact = new PuzzlePieceArtifact
+            {
+                Id = BuildPuzzlePieceDocumentId(projectId, local.DeviceId, cameraMac),
+                ProjectId = projectId,
+                DeviceId = local.DeviceId,
+                CameraMac = cameraMac,
+                LocalHomographyId = local.Id ?? $"{local.DeviceId}_{cameraMac}",
+                LocalHomographyHash = localHash,
+                LocalHomographyMatrix = local.Matrix,
+                HLocalCanvas = FromMatrix3x3(hLocalCanvas),
+                SourceFrameSize = [frameWidth, frameHeight],
+                PuzzlePieceSize = [frameWidth, frameHeight],
+                SourceSnapshotPath = local.SnapshotPath,
+                PuzzlePiecePath = objectPath,
+                GeneratedAt = Timestamp.GetCurrentTimestamp(),
+            };
+
+            _db.Collection(ColPuzzlePieces).Document(artifact.Id).SetAsync(artifact).Wait();
+            return artifact;
+        }
+
+        private static bool IsUsablePuzzlePieceArtifact(PuzzlePieceArtifact artifact, string localHash)
+        {
+            return string.Equals(artifact.LocalHomographyHash, localHash, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(artifact.PuzzlePiecePath)
+                && artifact.HLocalCanvas is { Count: 3 }
+                && artifact.SourceFrameSize is { Count: >= 2 }
+                && artifact.PuzzlePieceSize is { Count: >= 2 };
+        }
+
+        private static LocalHomographyWorkspaceDto ToLocalWorkspaceDto(LocalHomography local, string localHash)
+        {
+            return new LocalHomographyWorkspaceDto(
+                HomographyId: local.Id ?? $"{local.DeviceId}_{NormalizeMac(local.CameraMac)}",
+                DeviceId: local.DeviceId ?? string.Empty,
+                CameraMac: NormalizeMac(local.CameraMac),
+                Matrix: local.Matrix ?? [],
+                FrameSize: local.FrameSize ?? [],
+                TimestampUnix: local.TimestampUnix,
+                SnapshotPath: local.SnapshotPath,
+                LocalHomographyHash: localHash);
+        }
+
+        private static PuzzlePieceMetadataDto ToPuzzlePieceMetadataDto(PuzzlePieceArtifact artifact)
+        {
+            return new PuzzlePieceMetadataDto(
+                PuzzlePieceId: artifact.Id ?? string.Empty,
+                DeviceId: artifact.DeviceId ?? string.Empty,
+                CameraMac: NormalizeMac(artifact.CameraMac),
+                LocalHomographyId: artifact.LocalHomographyId ?? string.Empty,
+                LocalHomographyHash: artifact.LocalHomographyHash ?? string.Empty,
+                HLocalCanvas: artifact.HLocalCanvas ?? [],
+                SourceFrameSize: artifact.SourceFrameSize ?? [],
+                PuzzlePieceSize: artifact.PuzzlePieceSize ?? [],
+                SourceSnapshotPath: artifact.SourceSnapshotPath,
+                GeneratedAt: artifact.GeneratedAt.ToDateTime().ToUniversalTime().ToString("o"));
+        }
+
+        private static GlobalHomographySetDto ToGlobalHomographySetDto(ProjectGlobalHomographySet record)
+        {
+            var placements = (record.Placements ?? [])
+                .Select(placement => new GlobalHomographyPlacementDto(
+                    PuzzlePieceId: placement.PuzzlePieceId ?? string.Empty,
+                    DeviceId: placement.DeviceId ?? string.Empty,
+                    CameraMac: NormalizeMac(placement.CameraMac),
+                    CenterFp: placement.CenterFp ?? [],
+                    AngleDeg: placement.AngleDeg,
+                    Scale: placement.Scale,
+                    HLocalCanvas: placement.HLocalCanvas ?? [],
+                    LocalCanvasSize: placement.LocalCanvasSize ?? [],
+                    GlobalHomographyFloorplan: placement.GlobalHomographyFloorplan ?? [],
+                    GlobalHomography: placement.GlobalHomography ?? []))
+                .ToList();
+
+            var lockedGroups = (record.LockedGroups ?? [])
+                .Select(group => new HomographyLockGroupDto(
+                    GroupId: group.GroupId ?? string.Empty,
+                    CameraMacs: (group.CameraMacs ?? [])
+                        .Where(mac => !string.IsNullOrWhiteSpace(mac))
+                        .Select(NormalizeMac)
+                        .ToList()))
+                .ToList();
+
+            return new GlobalHomographySetDto(
+                ProjectId: record.ProjectId ?? string.Empty,
+                FloorplanId: record.FloorplanId,
+                MmPerFpPx: record.MmPerFpPx,
+                OriginFp: record.OriginFp ?? [],
+                FloorplanSize: record.FloorplanSize ?? [],
+                Placements: placements,
+                LockedGroups: lockedGroups,
+                SavedAt: record.SavedAt.ToDateTime().ToUniversalTime().ToString("o"),
+                SavedByUserId: record.SavedByUserId);
+        }
+
+        private static double[,] FitHomographyToOutput(
+            double[,] homography,
+            int srcWidth,
+            int srcHeight,
+            int outWidth,
+            int outHeight)
+        {
+            var corners = new List<(double x, double y)>
+            {
+                (0, 0),
+                (srcWidth - 1, 0),
+                (srcWidth - 1, srcHeight - 1),
+                (0, srcHeight - 1),
+            };
+
+            var warped = corners
+                .Select(corner => ApplyHomographyPoint(homography, corner.x, corner.y))
+                .Where(point => point.Count >= 2)
+                .ToList();
+
+            if (warped.Count == 0)
+                return homography;
+
+            var xs = warped.Select(point => point[0]).ToList();
+            var ys = warped.Select(point => point[1]).ToList();
+            double minX = xs.Min();
+            double minY = ys.Min();
+            double maxX = xs.Max();
+            double maxY = ys.Max();
+            double bboxWidth = maxX - minX;
+            double bboxHeight = maxY - minY;
+
+            if (bboxWidth < 1e-6 || bboxHeight < 1e-6)
+                return homography;
+
+            double scale = Math.Min(outWidth / bboxWidth, outHeight / bboxHeight);
+            double padX = (outWidth - bboxWidth * scale) / 2.0;
+            double padY = (outHeight - bboxHeight * scale) / 2.0;
+
+            var fit = new double[,]
+            {
+                { scale, 0, padX - scale * minX },
+                { 0, scale, padY - scale * minY },
+                { 0, 0, 1 },
+            };
+
+            return MatMul3x3(fit, homography);
+        }
+
+        private static double[,] BuildPlacementTransform(List<double> centerFp, double angleDeg, double scale, List<int> localCanvasSize)
+        {
+            if (localCanvasSize.Count < 2 || localCanvasSize[0] <= 0 || localCanvasSize[1] <= 0)
+                throw new ArgumentException("LocalCanvasSize must contain positive width and height.");
+
+            double pivotX = localCanvasSize[0] / 2.0;
+            double pivotY = localCanvasSize[1] / 2.0;
+            double angle = angleDeg * Math.PI / 180.0;
+            double cos = Math.Cos(angle) * scale;
+            double sin = Math.Sin(angle) * scale;
+            double centerX = centerFp[0];
+            double centerY = centerFp[1];
+
+            return new double[,]
+            {
+                { cos, -sin, centerX - cos * pivotX + sin * pivotY },
+                { sin,  cos, centerY - sin * pivotX - cos * pivotY },
+                { 0, 0, 1 },
+            };
+        }
+
+        private static double[,] BuildFloorplanPixelToMmTransform(double mmPerFpPx, List<double> originFp)
+        {
+            return new double[,]
+            {
+                { mmPerFpPx, 0, -originFp[0] * mmPerFpPx },
+                { 0, -mmPerFpPx, originFp[1] * mmPerFpPx },
+                { 0, 0, 1 },
+            };
+        }
+
+        private static Mat EnsureBgra(Mat source)
+        {
+            if (source.Channels() == 4)
+                return source.Clone();
+
+            var converted = new Mat();
+            if (source.Channels() == 3)
+                Cv2.CvtColor(source, converted, ColorConversionCodes.BGR2BGRA);
+            else if (source.Channels() == 1)
+                Cv2.CvtColor(source, converted, ColorConversionCodes.GRAY2BGRA);
+            else
+                throw new InvalidOperationException("Unsupported snapshot image format.");
+
+            return converted;
+        }
+
+        private static Mat ToCvMat(double[,] matrix)
+        {
+            var cv = new Mat(3, 3, MatType.CV_64FC1);
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                    cv.Set(i, j, matrix[i, j]);
+            return cv;
+        }
+
+        private static List<double> NormalizePoint(List<double>? point, string parameterName)
+        {
+            if (point == null || point.Count < 2)
+                throw new ArgumentException($"{parameterName} must contain two numeric values.");
+
+            return [point[0], point[1]];
+        }
+
+        private static List<int> NormalizeIntPair(List<int>? values, string parameterName)
+        {
+            if (values == null || values.Count < 2 || values[0] <= 0 || values[1] <= 0)
+                throw new ArgumentException($"{parameterName} must contain positive width and height values.");
+
+            return [values[0], values[1]];
+        }
+
+        private static void ValidateRequired(string? value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException($"{parameterName} is required.");
+        }
+
+        private static void ValidateMatrix3x3(List<List<double>>? matrix, string parameterName)
+        {
+            if (matrix == null || matrix.Count != 3 || matrix.Any(row => row == null || row.Count != 3))
+                throw new ArgumentException($"{parameterName} must be a 3x3 matrix.");
+        }
+
+        private static string? CleanNullable(string? value)
+        {
+            var cleaned = value?.Trim();
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        }
+
+        private static string BuildPuzzlePieceDocumentId(string projectId, string deviceId, string cameraMac)
+        {
+            return $"{projectId}__{deviceId}__{NormalizeMac(cameraMac).Replace(':', '_')}";
+        }
+
+        private static string BuildCameraKey(string deviceId, string cameraMac)
+        {
+            return $"{deviceId}::{NormalizeMac(cameraMac)}";
         }
 
         private static double[,] Identity3x3() => new double[,]

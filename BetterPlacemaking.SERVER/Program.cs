@@ -55,6 +55,7 @@ builder.Services.AddSingleton<CloudStorageService>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<BoardLibraryService>();
+builder.Services.AddScoped<FloorplanLibraryService>();
 builder.Services.AddScoped<LidarService>();
 builder.Services.AddScoped<ScanService>();
 builder.Services.AddScoped<ScanScheduleService>();

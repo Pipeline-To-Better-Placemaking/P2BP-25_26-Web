@@ -106,4 +106,106 @@ namespace BetterPlacemaking.Models.Dtos
         int SightingsUsed,
         double ComputedAtUnix
     );
+
+    public sealed record PuzzlePieceMetadataDto(
+        string PuzzlePieceId,
+        string DeviceId,
+        string CameraMac,
+        string LocalHomographyId,
+        string LocalHomographyHash,
+        List<List<double>> HLocalCanvas,
+        List<int> SourceFrameSize,
+        List<int> PuzzlePieceSize,
+        string? SourceSnapshotPath,
+        string GeneratedAt
+    );
+
+    public sealed record PuzzlePieceDto(
+        string PuzzlePieceId,
+        string DeviceId,
+        string CameraMac,
+        string Status,
+        string? PuzzlePiecePath,
+        string? PuzzlePieceDownloadUrl,
+        DateTimeOffset? PuzzlePieceDownloadUrlExpiresAt,
+        PuzzlePieceMetadataDto? Metadata,
+        string? Error
+    );
+
+    public sealed record LocalHomographyWorkspaceDto(
+        string HomographyId,
+        string DeviceId,
+        string CameraMac,
+        List<List<double>> Matrix,
+        List<int> FrameSize,
+        double TimestampUnix,
+        string? SnapshotPath,
+        string LocalHomographyHash
+    );
+
+    public sealed record HomographyLockGroupDto(
+        string GroupId,
+        List<string> CameraMacs
+    );
+
+    public sealed record GlobalHomographyPlacementDto(
+        string PuzzlePieceId,
+        string DeviceId,
+        string CameraMac,
+        List<double> CenterFp,
+        double AngleDeg,
+        double Scale,
+        List<List<double>> HLocalCanvas,
+        List<int> LocalCanvasSize,
+        List<List<double>> GlobalHomographyFloorplan,
+        List<List<double>> GlobalHomography
+    );
+
+    public sealed record GlobalHomographySetDto(
+        string ProjectId,
+        string? FloorplanId,
+        double MmPerFpPx,
+        List<double> OriginFp,
+        List<int> FloorplanSize,
+        List<GlobalHomographyPlacementDto> Placements,
+        List<HomographyLockGroupDto> LockedGroups,
+        string SavedAt,
+        string? SavedByUserId
+    );
+
+    public sealed record PuzzleWorkspaceResponseDto(
+        string ProjectId,
+        List<PuzzlePieceDto> PuzzlePieces,
+        List<PuzzlePieceMetadataDto> PuzzlePieceMetaFiles,
+        List<LocalHomographyWorkspaceDto> LocalHomographies,
+        GlobalHomographySetDto? GlobalHomographies,
+        List<HomographyLockGroupDto> LockedGroups
+    );
+
+    public sealed record SaveGlobalHomographyPlacementDto(
+        string PuzzlePieceId,
+        string DeviceId,
+        string CameraMac,
+        List<double> CenterFp,
+        double AngleDeg,
+        double Scale,
+        List<List<double>> HLocalCanvas,
+        List<int> LocalCanvasSize
+    );
+
+    public sealed record SaveGlobalHomographiesDto(
+        string? FloorplanId,
+        double MmPerFpPx,
+        List<double> OriginFp,
+        List<int> FloorplanSize,
+        List<SaveGlobalHomographyPlacementDto> Placements,
+        List<HomographyLockGroupDto>? LockedGroups = null
+    );
+
+    public sealed record SaveGlobalHomographiesResponseDto(
+        string ProjectId,
+        int PlacementsSaved,
+        string SavedAt,
+        GlobalHomographySetDto GlobalHomographies
+    );
 }
