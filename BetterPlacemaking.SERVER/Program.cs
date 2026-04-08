@@ -61,6 +61,8 @@ builder.Services.AddScoped<ScanScheduleService>();
 
 
 //Fusion services
+
+builder.Services.AddScoped<FusionRunner>();
 builder.Services.AddScoped<FusionService>();
 
 // Visualizer services (point cloud, mesh generation, export)
