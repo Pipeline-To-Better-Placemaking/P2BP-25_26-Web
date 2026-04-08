@@ -1,0 +1,44 @@
+.fusion-panel-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.fusion-map-launch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--p-primary-500) 12%, transparent), transparent 65%),
+    color-mix(in srgb, var(--p-surface-100) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-primary-400) 18%, var(--p-surface-300));
+}
+
+.fusion-launch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fusion-launch-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.fusion-launch-text {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+  .fusion-panel-action,
+  .fusion-map-launch {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

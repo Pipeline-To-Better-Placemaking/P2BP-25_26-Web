@@ -54,6 +54,13 @@ export const routes: Routes = [
             path: 'vision',
             loadComponent: () => import('./views/projects/selected/vision/vision').then((m) => m.Vision),
           },
+          
+          {
+            path: 'fusion',
+            loadComponent: () =>
+              import('./views/projects/selected/fusion/fusion').then((m) => m.Fusion),
+          },
+
           {
             path: 'calibration/puzzle',
             loadComponent: () =>

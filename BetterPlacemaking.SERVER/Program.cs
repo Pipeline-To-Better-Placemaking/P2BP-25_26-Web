@@ -59,6 +59,10 @@ builder.Services.AddScoped<LidarService>();
 builder.Services.AddScoped<ScanService>();
 builder.Services.AddScoped<ScanScheduleService>();
 
+
+//Fusion services
+builder.Services.AddScoped<FusionService>();
+
 // Visualizer services (point cloud, mesh generation, export)
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PointCloudService>();
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.GeometryCalculationService>();
