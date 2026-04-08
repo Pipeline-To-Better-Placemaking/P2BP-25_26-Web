@@ -15,7 +15,7 @@ using BetterPlacemaking.Services;
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-public static class FusionConfig
+public static class FusionEngineConfig
 {
     public const string InputStorageFolder  = "vision/tracks-raw";   // folder containing JSONL files
     public const string OutputStorageFolder = "vision/fused";
@@ -644,13 +644,13 @@ public class FusionEngine
         double dtMs  = track.TStart - gid.TEnd;
         if (dtMs <= 0) return (false, dist, dtMs, 0.0);
         double speed  = dist / (dtMs / 1000.0);
-        return (speed > FusionConfig.MaxSpeedPxPerS, dist, dtMs, speed);
+        return (speed > FusionEngineConfig.MaxSpeedPxPerS, dist, dtMs, speed);
     }
 
     private (bool ok, double gapMs) TimeCompatible(FusedIdentity gid, TrackObject track)
     {
         double gap = track.TStart - gid.TEnd;
-        return (gap <= FusionConfig.MaxGapMs, gap);
+        return (gap <= FusionEngineConfig.MaxGapMs, gap);
     }
 
     private bool Overlaps(FusedIdentity gid, TrackObject track)
@@ -699,7 +699,7 @@ public class FusionEngine
                 double sim = VectorMath.CosineSimilarity(track.Rep, candidate.Rep);
                 if (_debug) Console.WriteLine($"  gid={candidate.Gid} sim={sim:F3}");
 
-                if (sim < FusionConfig.SimThreshold)
+                if (sim < FusionEngineConfig.SimThreshold)
                 {
                     if (_debug) Console.WriteLine("     rejected (low similarity)");
                     continue;
@@ -760,8 +760,8 @@ public static class TrackCleaner
         foreach (var p in track.Skip(1))
         {
             var prev = cleaned.Last();
-            if (Math.Abs(p.X - prev.X) > FusionConfig.DupEps ||
-                Math.Abs(p.Y - prev.Y) > FusionConfig.DupEps)
+            if (Math.Abs(p.X - prev.X) > FusionEngineConfig.DupEps ||
+                Math.Abs(p.Y - prev.Y) > FusionEngineConfig.DupEps)
                 cleaned.Add(p);
         }
         return cleaned;
@@ -776,7 +776,7 @@ public static class TrackCleaner
             var prev = cleaned.Last();
             if (p.Cam != prev.Cam) { cleaned.Add(p); continue; }
             double d = VectorMath.Hypot(p.X - prev.X, p.Y - prev.Y);
-            if (d < FusionConfig.MaxJumpClean) cleaned.Add(p);
+            if (d < FusionEngineConfig.MaxJumpClean) cleaned.Add(p);
         }
         return cleaned;
     }
@@ -784,7 +784,7 @@ public static class TrackCleaner
     private static List<TrackEvent> Smooth(List<TrackEvent> track)
     {
         int n      = track.Count;
-        int win    = FusionConfig.SmoothWin;
+        int win    = FusionEngineConfig.SmoothWin;
         var result = new List<TrackEvent>(n);
         for (int i = 0; i < n; i++)
         {
@@ -809,7 +809,7 @@ public static class TrackCleaner
         track = RemoveLargeJumps(track);
         track = Smooth(track);
         double duration = (track.Last().Time - track.First().Time) / 1000.0;
-        if (track.Count < FusionConfig.MinTrackPoints || duration < FusionConfig.MinDurationS)
+        if (track.Count < FusionEngineConfig.MinTrackPoints || duration < FusionEngineConfig.MinDurationS)
             return null;
         return track;
     }
@@ -853,12 +853,12 @@ public static class FusionExporter
 // ─────────────────────────────────────────────
 // MAIN SERVICE
 // ─────────────────────────────────────────────
-public class FusionService
+public class FusionRunner
 {
     private readonly CloudStorageService   _gcs;
     private readonly FusionFirestoreLoader _firestoreLoader;
 
-    public FusionService(CloudStorageService gcs, FirestoreDb firestoreDb)
+    public FusionRunner(CloudStorageService gcs, FirestoreDb firestoreDb)
     {
         _gcs             = gcs;
         _firestoreLoader = new FusionFirestoreLoader(firestoreDb);
@@ -874,7 +874,7 @@ public class FusionService
         {
             // ── 1. Discover, download, and merge all of today's JSONL files ──
             // CHANGED: was a single DownloadFileAsync keyed on a hardcoded file path.
-            string inputFolder    = (request.InputStorageFolder ?? FusionConfig.InputStorageFolder).TrimEnd('/');
+            string inputFolder    = (request.InputStorageFolder ?? FusionEngineConfig.InputStorageFolder).TrimEnd('/');
             string localInputPath = Path.Combine(tempDir, "tracks-raw.jsonl");
 
             await DownloadAndMergeTodayTracksAsync(inputFolder, localInputPath, ct);
@@ -910,7 +910,7 @@ public class FusionService
             string localOutputPath = Path.Combine(tempDir, "fused_tracks.json");
             FusionExporter.Export(gids, localOutputPath);
 
-            string outputFolder      = (request.OutputStorageFolder ?? FusionConfig.OutputStorageFolder).TrimEnd('/');
+            string outputFolder      = (request.OutputStorageFolder ?? FusionEngineConfig.OutputStorageFolder).TrimEnd('/');
             string dateSuffix        = DateTime.UtcNow.ToString("yyyyMMdd");
             string outputStoragePath = $"{outputFolder}/fused_tracks-{dateSuffix}.json";
 
