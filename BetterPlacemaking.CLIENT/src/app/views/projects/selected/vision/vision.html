@@ -18,10 +18,10 @@
       <div class="text-xs text-muted-color mt-1">Fully calibrated</div>
       <div class="mt-4">
         <p-button
-          label="Review Cameras"
-          icon="pi pi-eye"
+          [label]="camsNeedingAttention > 0 ? 'Calibrate (' + camsNeedingAttention + ')' : 'Review Cameras'"
+          [icon]="camsNeedingAttention > 0 ? 'pi pi-exclamation-triangle' : 'pi pi-eye'"
           size="small"
-          severity="secondary"
+          [severity]="camsNeedingAttention > 0 ? 'danger' : 'secondary'"
           [disabled]="!firstCamera"
           (onClick)="openCameraDiscovery()" />
       </div>
@@ -82,8 +82,10 @@
           icon="pi pi-lock"
           size="small"
           severity="contrast"
-          [disabled]="!firstDevice"
-          (onClick)="openArucoLock()" />
+          [disabled]="!firstDevice || !hasLocalHomographies"
+          (onClick)="openArucoLock()"
+          [pTooltip]="!hasLocalHomographies ? 'Run a ChArUco homography scan on all cameras first' : ''"
+          tooltipPosition="top" />
       </div>
     </p-card>
   </div>

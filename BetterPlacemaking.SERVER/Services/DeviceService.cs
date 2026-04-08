@@ -109,6 +109,17 @@ namespace BetterPlacemaking.Services
             var existing = snap.ConvertTo<Device>();
 			device.ApiKeyHash = existing.ApiKeyHash;
 			device.HealthReport = existing.HealthReport;
+
+            // If BeginCalibration is transitioning from false to true, clear stale
+            // IntrinsicsCalibration status from the HealthReport. Without this, the
+            // heartbeat handler sees the previous "done"/"failed" status and immediately
+            // clears BeginCalibration on the very next heartbeat, before the device has
+            // a chance to start the new calibration run and report "collecting".
+            bool wasCalibrating = existing.Config?.Intrinsics?.BeginCalibration == true;
+            bool willCalibrate = device.Config?.Intrinsics?.BeginCalibration == true;
+            if (!wasCalibrating && willCalibrate && device.HealthReport?.IntrinsicsCalibration != null)
+                device.HealthReport.IntrinsicsCalibration = null;
+
             docRef.SetAsync(device).Wait();
             var updated = docRef.GetSnapshotAsync().Result
                 .ConvertTo<Device>();
@@ -320,10 +331,15 @@ namespace BetterPlacemaking.Services
 
             if (cachedHash != newHash)
             {
+                // Write only the fields the heartbeat handler actually changes (HealthReport and
+                // TrackingCameras). Writing the entire Config field here would race with
+                // UpdateDevice: if a heartbeat loaded the device from a stale cache entry
+                // (pre-UpdateDevice), writing Config here would overwrite trigger flags like
+                // Intrinsics.BeginCalibration that the admin just set.
                 docRef.UpdateAsync(new Dictionary<string, object>
                 {
                     { nameof(Device.HealthReport), device.HealthReport! },
-                    { nameof(Device.Config), device.Config! }
+                    { $"{nameof(Device.Config)}.{nameof(Config.TrackingCameras)}", device.Config.TrackingCameras ?? [] }
                 }).Wait();
 
                 _cache.SetString(stableHashKey, newHash,

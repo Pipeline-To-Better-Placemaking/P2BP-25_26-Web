@@ -497,5 +497,14 @@ namespace BetterPlacemaking.Services
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
             return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
         }
+
+        public bool HasLocalHomography(string deviceId)
+        {
+            var snap = _db.Collection(ColLocalHomographies)
+            .WhereEqualTo(nameof(LocalHomography.DeviceId), deviceId)
+            .Limit(1)
+            .GetSnapshotAsync().Result;
+            return snap.Documents.Count > 0;
+        }
     }
 }

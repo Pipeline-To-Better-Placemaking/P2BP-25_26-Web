@@ -230,7 +230,7 @@ export class CameraModal implements OnInit, OnDestroy {
   }
 
   toggleIntrinsics(): void {
-    if (!this.device?.Id || !this.device.Config) return;
+    if (!this.device?.Id) return;
 
     const nextEnabled = !this.isIntrinsicsEnabled;
 
@@ -238,15 +238,16 @@ export class CameraModal implements OnInit, OnDestroy {
     this.intrinsicsError = false;
     this.intrinsicsActionMessage = null;
 
+    const existingConfig = this.device.Config ?? { HeartbeatInterval: 30 };
     const board = this.selectedBoard;
     const updated: DeviceDto = {
       ...this.device,
       Config: {
-        ...this.device.Config,
+        ...existingConfig,
         CharucoBoard: nextEnabled && board
           ? {
-              ...this.device.Config.CharucoBoard,
-              BeginScanning: this.device.Config.CharucoBoard?.BeginScanning ?? false,
+              ...existingConfig.CharucoBoard,
+              BeginScanning: existingConfig.CharucoBoard?.BeginScanning ?? false,
               Board: {
                 SquaresX: board.Cols ?? 7,
                 SquaresY: board.Rows ?? 5,
@@ -255,9 +256,9 @@ export class CameraModal implements OnInit, OnDestroy {
                 Dictionary: board.Dictionary,
               },
             }
-          : (this.device.Config.CharucoBoard ?? { BeginScanning: false }),
+          : (existingConfig.CharucoBoard ?? { BeginScanning: false }),
         Intrinsics: {
-          ...this.device.Config.Intrinsics,
+          ...existingConfig.Intrinsics,
           BeginCalibration: nextEnabled,
         },
       },

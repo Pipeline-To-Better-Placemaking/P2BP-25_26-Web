@@ -17,6 +17,9 @@ import { BoardGenerateModal } from './board-generate-modal/board-generate-modal'
 import { BoardDetailModal } from './board-detail-modal/board-detail-modal';
 import { BoardService } from '../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../models/BoardLibrary';
+import { HomographyService } from '../../../../services/homography-service';
+import { forkJoin, of } from 'rxjs';
+
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
@@ -55,6 +58,8 @@ export class Vision implements OnInit {
   boardLibrary: BoardLibraryItem[] = [];
   boardLibraryLoading = false;
   boardLibraryError = false;
+  hasLocalHomographies = false;
+
 
   private camRef: DynamicDialogRef | null = null;
   private deviceRef: DynamicDialogRef | null = null;
@@ -67,6 +72,7 @@ export class Vision implements OnInit {
     private readonly deviceService: DeviceService,
     private readonly boardService: BoardService,
     private readonly dialogService: DialogService,
+    private readonly homographyService: HomographyService,
   ) {}
 
   ngOnInit(): void {
@@ -80,12 +86,26 @@ export class Vision implements OnInit {
       next: (all) => {
         this.devices = all.filter((d) => d.ProjectId === this.projectId);
         this.loading = false;
+        this.checkLocalHomographies();
       },
-      error: () => {
-        this.loading = false;
-      },
+      error: () => { this.loading = false; },
     });
   }
+
+  private checkLocalHomographies(): void {
+    if (this.devices.length === 0) {
+      this.hasLocalHomographies = false;
+      return;
+    }
+    const checks = this.devices
+      .filter((d) => d.Id)
+      .map((d) => this.homographyService.hasLocalHomography(d.Id));
+    forkJoin(checks.length ? checks : [of(false)]).subscribe({
+      next: (results) => { this.hasLocalHomographies = results.some(Boolean); },
+      error: () => { this.hasLocalHomographies = false; },
+    });
+  }
+
 
   get allCameras(): CameraEntry[] {
     // Collect all (device, mac, info) tuples across all devices
@@ -295,8 +315,9 @@ export class Vision implements OnInit {
   }
 
   openCameraDiscovery(): void {
-    if (this.firstCamera) {
-      this.openCameraModal(this.firstCamera);
+    const target = this.firstCameraNeedingIntrinsics ?? this.firstCamera;
+    if (target) {
+      this.openCameraModal(target);
     }
   }
 

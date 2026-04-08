@@ -114,5 +114,24 @@ namespace BetterPlacemaking.Controllers
                 return Problem("An unexpected error occurred while retrieving session status.");
             }
         }
+
+        [HttpGet("has-local/{deviceId}")]
+        [Authorize(Policy = "UserJwt")]
+        public IActionResult HasLocalHomography(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return BadRequest("deviceId is required.");
+
+            try
+            {
+                var result = _homographyService.HasLocalHomography(deviceId);
+                return Ok(new { HasLocalHomography = result });
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred.");
+            }
+        }
+
     }
 }
