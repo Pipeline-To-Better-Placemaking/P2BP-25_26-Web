@@ -31,6 +31,14 @@
         <div class="font-semibold">{{ sys.Gpu?.FrequencyMhz ?? '—' }}</div>
       </div>
       <div>
+        <div class="text-sm text-muted-color">GPU Temperature (°C)</div>
+        <div class="font-semibold">{{ (sys.Gpu?.TemperatureC ?? -1) >= 0 ? sys.Gpu?.TemperatureC : '—' }}</div>
+      </div>
+      <div>
+        <div class="text-sm text-muted-color">CPU Temperature (°C)</div>
+        <div class="font-semibold">{{ (sys.CpuTemperatureC ?? -1) >= 0 ? sys.CpuTemperatureC : '—' }}</div>
+      </div>
+      <div>
         <div class="text-sm text-muted-color">Memory Used (MB)</div>
         <div class="font-semibold">{{ sys.Memory?.UsedMb ?? '—' }}</div>
       </div>

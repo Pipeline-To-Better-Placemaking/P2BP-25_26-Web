@@ -125,6 +125,9 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public List<DiskPartitionInfo>? Disk { get; set; }
+
+        [FirestoreProperty]
+        public double CpuTemperatureC { get; set; }
     }
 
     [FirestoreData]
@@ -160,6 +163,9 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public int FrequencyMhz { get; set; }
+
+        [FirestoreProperty]
+        public double TemperatureC { get; set; }
     }
 
     [FirestoreData]
