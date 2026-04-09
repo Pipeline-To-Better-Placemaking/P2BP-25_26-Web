@@ -6,6 +6,7 @@ import { CardModule } from 'primeng/card';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { TooltipModule } from 'primeng/tooltip';
+import { TableModule } from 'primeng/table';
 import { DynamicDialogModule, DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { interval, Subject } from 'rxjs';
 import { startWith, switchMap, takeUntil } from 'rxjs/operators';
@@ -27,6 +28,7 @@ const POLL_INTERVAL_MS = 6_000;
     TagModule,
     MessageModule,
     TooltipModule,
+    TableModule,
     DynamicDialogModule,
   ],
   templateUrl: './fusion.html',

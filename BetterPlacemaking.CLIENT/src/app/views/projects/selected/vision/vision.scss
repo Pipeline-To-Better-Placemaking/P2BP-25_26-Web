@@ -13,10 +13,8 @@
   gap: 1rem;
   padding: 1rem 1.25rem;
   border-radius: 0.75rem;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--p-primary-500) 12%, transparent), transparent 65%),
-    color-mix(in srgb, var(--p-surface-100) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--p-primary-400) 18%, var(--p-surface-300));
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
 }
 
 .vision-map-copy {

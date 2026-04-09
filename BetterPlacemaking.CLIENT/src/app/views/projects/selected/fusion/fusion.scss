@@ -142,29 +142,22 @@
   margin-bottom: 0.5rem;
 }
 
-// ── Run rows ──────────────────────────────────────────────────────────────────
-.fusion-run-list {
-  display: flex;
-  flex-direction: column;
+// ── Run rows (PrimeNG table) ─────────────────────────────────────────────────
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr > td {
+  vertical-align: top;
 }
 
-.fusion-run-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1.5rem;
-  border-bottom: 1px solid var(--p-content-border-color);
-  border-left: 4px solid transparent;
-  transition: background-color 0.15s;
-
-  &:last-child { border-bottom: none; }
-  &:hover { background: var(--p-surface-50); }
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-success > td:first-child {
+  border-left: 4px solid var(--p-green-500);
 }
 
-.fusion-run-success { border-left-color: var(--p-green-500); }
-.fusion-run-failed  { border-left-color: var(--p-red-500); }
-.fusion-run-running { border-left-color: var(--p-primary-color); }
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-failed > td:first-child {
+  border-left: 4px solid var(--p-red-500);
+}
+
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-running > td:first-child {
+  border-left: 4px solid var(--p-primary-color);
+}
 
 .fusion-run-left {
   display: flex;

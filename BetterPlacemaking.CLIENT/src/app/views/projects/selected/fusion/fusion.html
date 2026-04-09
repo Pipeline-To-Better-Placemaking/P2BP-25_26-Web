@@ -77,57 +77,71 @@
       <p-button label="Run Manual Fusion" icon="pi pi-play" severity="secondary" (onClick)="openFusionModal()" />
     </div>
 
-    <div *ngIf="!historyLoading && history.length > 0" class="fusion-run-list">
-      <div
-        *ngFor="let run of history"
-        class="fusion-run-row"
-        [class.fusion-run-success]="run.Status === 'success'"
-        [class.fusion-run-failed]="run.Status === 'failed'"
-        [class.fusion-run-running]="run.Status === 'running'">
-
-        <div class="fusion-run-left">
-          <i [class]="runStatusIcon(run.Status)" class="fusion-run-icon"></i>
-          <div>
-            <div class="fusion-run-range">{{ formatDateRange(run) }}</div>
-            <div class="fusion-run-meta">
-              Started {{ formatUnix(run.StartedAtUnix) }}
-              <span *ngIf="run.Status !== 'running'"> · {{ formatDuration(run) }}</span>
+    <p-table
+      *ngIf="!historyLoading && history.length > 0"
+      [value]="history"
+      [rowHover]="true"
+      styleClass="fusion-run-table"
+    >
+      <ng-template #header>
+        <tr>
+          <th>Date Range</th>
+          <th>Started</th>
+          <th>Duration</th>
+          <th>Status</th>
+          <th>Triggered By</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-run>
+        <tr
+          [class.fusion-run-success]="run.Status === 'success'"
+          [class.fusion-run-failed]="run.Status === 'failed'"
+          [class.fusion-run-running]="run.Status === 'running'"
+        >
+          <td>
+            <div class="fusion-run-left">
+              <i [class]="runStatusIcon(run.Status)" class="fusion-run-icon"></i>
+              <div>
+                <div class="fusion-run-range">{{ formatDateRange(run) }}</div>
+                <div *ngIf="run.ErrorMessage" class="fusion-run-error" [title]="run.ErrorMessage">
+                  {{ run.ErrorMessage }}
+                </div>
+              </div>
             </div>
-            <div *ngIf="run.ErrorMessage" class="fusion-run-error" [title]="run.ErrorMessage">
-              {{ run.ErrorMessage }}
+          </td>
+          <td>{{ formatUnix(run.StartedAtUnix) }}</td>
+          <td>{{ run.Status !== 'running' ? formatDuration(run) : '—' }}</td>
+          <td><p-tag [severity]="runStatusSeverity(run.Status)" [value]="run.Status | titlecase" /></td>
+          <td><p-tag severity="secondary" [value]="run.TriggeredBy | titlecase" /></td>
+          <td>
+            <div class="fusion-run-right">
+              <p-button
+                *ngIf="run.Status === 'success' && run.OutputGcsPath"
+                icon="pi pi-download"
+                severity="secondary"
+                size="small"
+                [loading]="downloadingRunId === run.Id"
+                pTooltip="Download fused data (JSON)"
+                tooltipPosition="top"
+                [text]="true"
+                (onClick)="downloadRun(run, $event)" />
+
+              <p-button
+                *ngIf="run.Status !== 'running'"
+                icon="pi pi-trash"
+                severity="danger"
+                size="small"
+                [loading]="deletingRunId === run.Id"
+                pTooltip="Delete this run"
+                tooltipPosition="top"
+                [text]="true"
+                (onClick)="deleteRun(run, $event)" />
             </div>
-          </div>
-        </div>
-
-        <div class="fusion-run-right">
-          <p-tag [severity]="runStatusSeverity(run.Status)" [value]="run.Status | titlecase" />
-          <p-tag severity="secondary" [value]="run.TriggeredBy | titlecase" />
-
-          <p-button
-            *ngIf="run.Status === 'success' && run.OutputGcsPath"
-            icon="pi pi-download"
-            severity="secondary"
-            size="small"
-            [loading]="downloadingRunId === run.Id"
-            pTooltip="Download fused data (JSON)"
-            tooltipPosition="top"
-            [text]="true"
-            (onClick)="downloadRun(run, $event)" />
-
-          <p-button
-            *ngIf="run.Status !== 'running'"
-            icon="pi pi-trash"
-            severity="danger"
-            size="small"
-            [loading]="deletingRunId === run.Id"
-            pTooltip="Delete this run"
-            tooltipPosition="top"
-            [text]="true"
-            (onClick)="deleteRun(run, $event)" />
-        </div>
-
-      </div>
-    </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
 
   </div>
 
