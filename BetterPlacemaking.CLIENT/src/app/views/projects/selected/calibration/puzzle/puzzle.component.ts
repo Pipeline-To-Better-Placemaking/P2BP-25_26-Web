@@ -48,6 +48,8 @@ export class PuzzleComponent implements AfterViewInit {
   fpW = 0;
   fpH = 0;
   dscale = 1;
+  floorplanId: string | null = null;
+  projectId = '';
 
   // Drag state
   dragging = false;
@@ -61,6 +63,8 @@ export class PuzzleComponent implements AfterViewInit {
   trackPoints: { mac: string; x: number; y: number }[] = [];
 
   loading = false;
+  saving = false;
+  saveError: string | null = null;
   error: string | null = null;
 
   constructor(
@@ -70,8 +74,9 @@ export class PuzzleComponent implements AfterViewInit {
 
 
   ngAfterViewInit() {
-    const projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
-    this.loadWorkspace(projectId);
+    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+    this.floorplanId = this.route.snapshot.queryParamMap.get('floorplanId') ?? null;
+    this.loadWorkspace(this.projectId);
   }
 
   private loadWorkspace(projectId: string): void {
@@ -96,7 +101,6 @@ export class PuzzleComponent implements AfterViewInit {
   private initCanvas(): void {
     const floorplanUrl = this.route.snapshot.queryParamMap.get('floorplanUrl')
       ?? 'test-puzzle/floorplan.png';
-    this.floorplanImg.crossOrigin = 'anonymous';
     this.floorplanImg.src = floorplanUrl;
     this.floorplanImg.onload = () => {
       this.fpW = this.floorplanImg.naturalWidth;
@@ -112,7 +116,6 @@ export class PuzzleComponent implements AfterViewInit {
 
   private loadPiece(piece: PuzzlePieceDto): void {
     const img = new Image();
-    img.crossOrigin = 'anonymous'; // required for images loaded from signed GCS URLs
     const layer: LayerState = {
       puzzlePieceId: piece.PuzzlePieceId,
       deviceId: piece.DeviceId,
@@ -435,24 +438,35 @@ export class PuzzleComponent implements AfterViewInit {
   // ---- Save ----
 
   save() {
+    if (this.saving) return;
+    this.saveError = null;
+
     const placements = this.layers.map(l => ({
-      macTag: l.macTag,
-      centerFp: l.centerFp,
-      angleDeg: l.angleDeg,
-      scale: l.scale,
-      hLocalCanvas: l.hLocalCanvas,
-      localCanvasSize: [l.bevImage.naturalWidth, l.bevImage.naturalHeight],
+      PuzzlePieceId: l.puzzlePieceId,
+      DeviceId: l.deviceId,
+      CameraMac: l.cameraMac,
+      CenterFp: [l.centerFp[0], l.centerFp[1]],
+      AngleDeg: l.angleDeg,
+      Scale: l.scale,
+      HLocalCanvas: l.hLocalCanvas,
+      LocalCanvasSize: [l.bevImage.naturalWidth, l.bevImage.naturalHeight],
     }));
 
-    const output = {
-      mmPerFpPx: this.mmPerFpPx,
-      originFp: this.originFp,
-      floorplanSize: [this.fpW, this.fpH],
-      placements: placements,
+    const payload = {
+      FloorplanId: this.floorplanId ?? null,
+      MmPerFpPx: this.mmPerFpPx,
+      OriginFp: [this.originFp[0], this.originFp[1]],
+      FloorplanSize: [this.fpW, this.fpH],
+      Placements: placements,
     };
 
-    // Need to add POST to server.
-    console.log('Puzzle state:', JSON.stringify(output, null, 2));
-    alert('Saved! Check console for output.');
+    this.saving = true;
+    this.homographyService.saveGlobalHomographies(this.projectId, payload).subscribe({
+      next: () => { this.saving = false; },
+      error: () => {
+        this.saving = false;
+        this.saveError = 'Failed to save. Try again.';
+      },
+    });
   }
 }

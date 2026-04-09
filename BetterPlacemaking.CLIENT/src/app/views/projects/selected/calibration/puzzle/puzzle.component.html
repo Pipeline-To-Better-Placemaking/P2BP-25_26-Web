@@ -40,7 +40,8 @@
     <span>Layer: {{ selectedIndex + 1 }}/{{ layers.length }} — {{ layers[selectedIndex]?.macTag }}</span>
     <span>Rot: {{ layers[selectedIndex]?.angleDeg?.toFixed(1) }}°</span>
     <span>Scale: {{ layers[selectedIndex]?.scale?.toFixed(3) }}</span>
-    <p-button label="Save" (onClick)="save()" />
+    <span *ngIf="saveError" class="save-error">{{ saveError }}</span>
+    <p-button label="Save" [loading]="saving" (onClick)="save()" />
   </div>
 
   <!-- Controls panel -->
