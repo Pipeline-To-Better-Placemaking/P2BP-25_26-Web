@@ -135,18 +135,24 @@ export class Fusion implements OnInit, OnDestroy {
     });
   }
   
-  downloadRun(run: FusionRunDto, event: Event): void {
-    event.stopPropagation();
-    if (!run.OutputGcsPath) return;
-    this.downloadingRunId = run.Id;
-    this.fusionService.getDownloadUrl(run.Id).subscribe({
-      next: (res) => {
-        window.open(res.url, '_blank');
-        this.downloadingRunId = null;
-      },
-      error: () => (this.downloadingRunId = null),
-    });
-  }
+downloadRun(run: FusionRunDto, event: Event): void {
+  event.stopPropagation();
+  if (!run.OutputGcsPath) return;
+  this.downloadingRunId = run.Id;
+  this.fusionService.downloadRun(run.Id).subscribe({
+    next: (blob) => {
+      const filename = run.OutputGcsPath!.split('/').pop() ?? 'fused_tracks.json';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.downloadingRunId = null;
+    },
+    error: () => (this.downloadingRunId = null),
+  });
+}
 
   runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'secondary' {
     if (status === 'success') return 'success';

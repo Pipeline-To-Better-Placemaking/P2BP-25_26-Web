@@ -1,5 +1,7 @@
 using BetterPlacemaking.Models.Dtos.Fusion;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Models.Fusion;
+using Google.Cloud.Firestore;   
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,9 +10,11 @@ namespace BetterPlacemaking.Controllers
     [ApiController]
     [Route("api/[controller]")]
     [Authorize(Policy = "UserJwt")]
-    public class FusionController(FusionService fusionService) : ControllerBase
+    public class FusionController(FusionService fusionService, CloudStorageService gcs, FirestoreDb db) : ControllerBase
     {
         private readonly FusionService _fusionService = fusionService;
+        private readonly CloudStorageService _gcs = gcs;
+        private readonly FirestoreDb _db = db;
 
         [HttpGet("history")]
         public IActionResult GetHistory([FromQuery] int limit = 50)
@@ -54,6 +58,21 @@ namespace BetterPlacemaking.Controllers
                 return Ok(new { url });
             }
             catch (Exception) { return Problem("Error generating download URL."); }
+        }
+
+        [HttpGet("{runId}/download")]
+        public async Task<IActionResult> DownloadRun(string runId, CancellationToken ct)
+        {
+            var snap = await _db.Collection("fusion_runs").Document(runId).GetSnapshotAsync(ct);
+            if (!snap.Exists) return NotFound();
+
+            var run = snap.ConvertTo<FusionRun>();
+            if (string.IsNullOrWhiteSpace(run.OutputGcsPath)) return NotFound();
+
+            var bytes    = await _gcs.DownloadBytesAsync(run.OutputGcsPath, ct);
+            var filename = run.OutputGcsPath.Split('/').Last();
+
+            return File(bytes, "application/json", filename);
         }
 
         [HttpGet("config")]

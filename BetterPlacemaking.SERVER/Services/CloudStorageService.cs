@@ -64,15 +64,22 @@ namespace BetterPlacemaking.Services
             CancellationToken ct)
         {
             string objectName = NormalizeObjectPath(req.PathFromRoot);
+            string filename   = objectName.Split('/').Last();
 
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_opt.UrlTtlMinutes);
-            var ttl = TimeSpan.FromMinutes(_opt.UrlTtlMinutes);
+            var ttl       = TimeSpan.FromMinutes(_opt.UrlTtlMinutes);
 
-            string signedUrl = _urlSigner.Sign(
-                _opt.BucketName,
-                objectName,
-                ttl,
-                HttpMethod.Get);
+            var requestTemplate = UrlSigner.RequestTemplate
+                .FromBucket(_opt.BucketName)
+                .WithObjectName(objectName)
+                .WithHttpMethod(HttpMethod.Get)
+                .WithQueryParameters(new Dictionary<string, IEnumerable<string>>
+                {
+                    { "response-content-disposition", new List<string> { $"attachment; filename=\"{filename}\"" } }
+                });
+
+            var options   = UrlSigner.Options.FromDuration(ttl);
+            string signedUrl = _urlSigner.Sign(requestTemplate, options);
 
             return Task.FromResult(new DownloadUrlResponseDto(objectName, signedUrl, expiresAt));
         }

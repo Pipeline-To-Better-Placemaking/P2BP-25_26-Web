@@ -40,7 +40,12 @@ export class FusionService {
       .get<{ url: string }>(`${environment.apiBaseUrl}/api/fusion/${runId}/download-url`)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to get download URL')));
   }
-
+  
+  downloadRun(runId: string): Observable<Blob> {
+    return this.http
+      .get(`${environment.apiBaseUrl}/api/fusion/${runId}/download`, { responseType: 'blob' })
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to download fusion run')));
+  }
   getConfig(): Observable<FusionConfigDto> {
     return this.http
       .get<FusionConfigDto>(`${environment.apiBaseUrl}/api/fusion/config`)

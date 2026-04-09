@@ -38,6 +38,8 @@ namespace BetterPlacemaking.Services
             await _db.Collection(ColFusionRuns).Document(runId).DeleteAsync();
         }
 
+
+        
         // ── Trigger ───────────────────────────────────────────────────────────
 
         public FusionRunDto TriggerFusion(
