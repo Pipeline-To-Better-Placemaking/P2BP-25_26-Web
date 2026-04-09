@@ -190,6 +190,9 @@
               <span class="font-semibold text-color">{{ device.HealthReport?.System?.Memory?.UsedMb ?? '—' }}</span> MB RAM
             </span>
             <span>
+              <span class="font-semibold text-color">{{ (device.HealthReport?.System?.CpuTemperatureC ?? -1) >= 0 ? device.HealthReport?.System?.CpuTemperatureC : '—' }}</span>°C CPU
+            </span>
+            <span>
               <span class="font-semibold text-color">{{ camerasForDevice(device) }}</span> cam{{ camerasForDevice(device) !== 1 ? 's' : '' }}
             </span>
           </div>

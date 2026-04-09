@@ -21,6 +21,7 @@ export interface CameraInfo {
 export interface GpuInfo {
 	UtilizationPct: number;
 	FrequencyMhz: number;
+	TemperatureC: number;
 }
 
 export interface MemoryInfo {
@@ -32,6 +33,7 @@ export interface SystemInfo {
 	Gpu?: GpuInfo | null;
 	Memory?: MemoryInfo | null;
 	Disk?: DiskPartitionInfo[] | null;
+	CpuTemperatureC?: number | null;
 }
 
 export interface DiskPartitionInfo {

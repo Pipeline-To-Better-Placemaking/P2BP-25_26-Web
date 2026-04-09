@@ -94,6 +94,16 @@ export class DeviceModal implements OnInit {
     return this.system?.Gpu?.UtilizationPct ?? null;
   }
 
+  get gpuTempC(): number | null {
+    const v = this.system?.Gpu?.TemperatureC ?? -1;
+    return v >= 0 ? v : null;
+  }
+
+  get cpuTempC(): number | null {
+    const v = this.system?.CpuTemperatureC ?? -1;
+    return v >= 0 ? v : null;
+  }
+
   get memUsedMb(): number | null {
     return this.system?.Memory?.UsedMb ?? null;
   }

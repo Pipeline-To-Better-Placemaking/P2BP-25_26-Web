@@ -13,6 +13,7 @@
           {{ gpuPct != null ? gpuPct + '%' : '—' }}
         </div>
         <div class="text-xs text-muted-color">utilization</div>
+        <div class="text-xs text-muted-color mt-1">{{ gpuTempC != null ? gpuTempC + '°C' : '—' }}</div>
       </div>
 
       <div class="rounded-lg p-3 text-center bg-surface-200 dark:bg-surface-700">
@@ -21,6 +22,7 @@
         <div class="text-xs text-muted-color">
           / {{ memTotalMb != null ? memTotalMb : '—' }} MB
         </div>
+        <div class="text-xs text-muted-color mt-1">CPU {{ cpuTempC != null ? cpuTempC + '°C' : '—' }}</div>
       </div>
 
       <div class="rounded-lg p-3 text-center bg-surface-200 dark:bg-surface-700">
