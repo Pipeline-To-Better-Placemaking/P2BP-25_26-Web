@@ -18,7 +18,7 @@ using BetterPlacemaking.Services;
 public static class FusionEngineConfig
 {
     public const string InputStorageFolder  = "vision/tracks-raw";   // folder containing JSONL files
-    public const string OutputStorageFolder = "vision/fused";
+    public const string OutputStorageFolder = "vision/tracks-fused";
 
     public const double SimThreshold   = 0.75;
     public const double MaxSpeedPxPerS = 4000.0;
@@ -342,9 +342,6 @@ public class HomographyEntry
 // ─────────────────────────────────────────────
 // FIRESTORE CONFIG LOADER
 // ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-// FIRESTORE CONFIG LOADER
-// ─────────────────────────────────────────────
 public class FusionFirestoreLoader
 {
     private readonly FirestoreDb _db;
@@ -526,12 +523,12 @@ public class FusionFirestoreLoader
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
     {
-        if (!TryParseMatrix3x3Flat(doc, "CameraMatrixFlat", mac, out var cameraMatrix))
+        if (!TryParseMatrix3x3Flat(doc, "camera_matrix", mac, out var cameraMatrix))
             return null;
 
-        if (!doc.TryGetValue("DistortionCoefficients", out IReadOnlyList<object> distRaw))
+        if (!doc.TryGetValue("distortion_coefficients", out IReadOnlyList<object> distRaw))
         {
-            Console.WriteLine($"[WARN] cam={mac}: 'DistortionCoefficients' field missing.");
+            Console.WriteLine($"[WARN] cam={mac}: 'distortion_coefficients' field missing.");
             return null;
         }
 

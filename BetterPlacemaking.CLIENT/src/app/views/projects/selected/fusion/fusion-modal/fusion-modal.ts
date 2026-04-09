@@ -61,7 +61,8 @@ export class FusionModal implements OnInit {
     const fromUnix = Math.floor(this.fromDate.getTime() / 1000);
     const toUnix = Math.floor(this.toDate.getTime() / 1000);
 
-    this.fusionService.triggerFusion({ fromDateUnix: fromUnix, toDateUnix: toUnix }).subscribe({
+    const projectId: string | undefined = this.config.data?.projectId || undefined;
+    this.fusionService.triggerFusion({ fromDateUnix: fromUnix, toDateUnix: toUnix, projectId }).subscribe({
       next: (run: FusionRunDto) => {
         this.submitting = false;
         this.ref.close({ triggered: true, run });

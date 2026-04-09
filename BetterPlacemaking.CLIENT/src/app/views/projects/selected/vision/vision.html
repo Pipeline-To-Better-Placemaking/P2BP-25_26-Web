@@ -51,7 +51,11 @@
     <p-card styleClass="h-full">
       <div class="text-sm text-muted-color">Homographies</div>
       <div class="text-2xl font-bold mt-1">
-        <span class="text-muted-color">N/A</span>
+        <span [class.text-green-500]="statHomographiesDone === allCameras.length && allCameras.length > 0"
+              [class.text-yellow-500]="statHomographiesDone > 0 && statHomographiesDone < allCameras.length"
+              [class.text-red-500]="statHomographiesDone === 0">
+          {{ statHomographiesDone }}
+        </span>
         <span class="text-sm font-normal text-muted-color"> / {{ allCameras.length }}</span>
       </div>
       <div class="text-xs text-muted-color mt-1">Pixel → world mapping</div>
@@ -134,11 +138,11 @@
             <p-tag [severity]="intrinsicsSeverity(cam)" value="I"
                    pTooltip="Intrinsics" tooltipPosition="bottom"
                    styleClass="flex-1 justify-center text-xs cursor-pointer" />
-            <p-tag severity="secondary" value="H"
-                   pTooltip="Homography (N/A)" tooltipPosition="bottom"
+            <p-tag [severity]="homographySeverity(cam)" value="H"
+                   [pTooltip]="homographyTooltip(cam)" tooltipPosition="bottom"
                    styleClass="flex-1 justify-center text-xs cursor-pointer" />
-            <p-tag severity="secondary" value="A"
-                   pTooltip="ArUco Lock (device-level)" tooltipPosition="bottom"
+            <p-tag [severity]="arucoSeverity(cam)" value="A"
+                   [pTooltip]="arucoTooltip(cam)" tooltipPosition="bottom"
                    styleClass="flex-1 justify-center text-xs cursor-pointer" />
           </div>
         </div>

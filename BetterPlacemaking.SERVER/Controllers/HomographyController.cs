@@ -134,6 +134,24 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
+        [HttpGet("snapshot-url/{deviceId}/{cameraMac}")]
+        [Authorize(Policy = "UserJwt")]
+        public async Task<IActionResult> GetSnapshotUrl(string deviceId, string cameraMac, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(cameraMac))
+                return BadRequest("deviceId and cameraMac are required.");
+
+            try
+            {
+                var url = await _homographyService.GetSnapshotUrlAsync(deviceId, cameraMac, ct);
+                return Ok(new { SnapshotUrl = url });
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred.");
+            }
+        }
+
         [HttpGet("workspace/{projectId}")]
         [Authorize(Policy = "UserJwt")]
         public async Task<IActionResult> GetPuzzleWorkspace(string projectId, CancellationToken ct)

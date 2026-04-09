@@ -21,5 +21,8 @@ namespace BetterPlacemaking.Models.Fusion
 
         [FirestoreProperty]
         public double? UpdatedAtUnix { get; set; }
+
+        [FirestoreProperty]
+        public string? ProjectId { get; set; }
     }
 }

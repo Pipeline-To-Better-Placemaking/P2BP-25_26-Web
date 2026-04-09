@@ -1419,5 +1419,19 @@ namespace BetterPlacemaking.Services
             .GetSnapshotAsync().Result;
             return snap.Documents.Count > 0;
         }
+
+        public async Task<string?> GetSnapshotUrlAsync(string deviceId, string cameraMac, CancellationToken ct)
+        {
+            var docId = $"{deviceId}_{NormalizeMac(cameraMac)}";
+            var snap = await _db.Collection(ColLocalHomographies).Document(docId).GetSnapshotAsync(ct);
+            if (!snap.Exists) return null;
+
+            var record = snap.ConvertTo<LocalHomography>();
+            if (string.IsNullOrWhiteSpace(record?.SnapshotPath)) return null;
+
+            var dto = await _cloudStorage.CreateSignedDownloadUrlAsync(
+                new RequestDownloadUrlDto(record.SnapshotPath), ct);
+            return dto.SignedUrl;
+        }
     }
 }
