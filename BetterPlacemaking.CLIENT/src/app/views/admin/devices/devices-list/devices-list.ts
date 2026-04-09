@@ -133,6 +133,7 @@ export class DevicesList implements OnInit {
       header: `Health Report${device?.Name ? ` - ${device.Name}` : ''}`,
       width: '70vw',
       modal: true,
+      contentStyle: { 'max-height': '80vh', overflow: 'auto' },
       data: { device },
       dismissableMask: true,
       closable: true,
@@ -159,6 +160,7 @@ export class DevicesList implements OnInit {
       header: 'Select a Device',
       width: '50vw',
       modal: true,
+      contentStyle: { 'max-height': '80vh', overflow: 'auto' },
       data: this.scopedProjectId ? ({ ProjectId: this.scopedProjectId } as Partial<DeviceDto>) : undefined,
       breakpoints: {
         '960px': '75vw',
@@ -191,6 +193,7 @@ export class DevicesList implements OnInit {
       header: 'Edit Device',
       width: '50vw',
       modal: true,
+      contentStyle: { 'max-height': '80vh', overflow: 'auto' },
       data: device,
       dismissableMask: true,
       closable: true,
