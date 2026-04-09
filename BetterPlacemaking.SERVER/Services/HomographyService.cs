@@ -24,6 +24,7 @@ namespace BetterPlacemaking.Services
         private const string ColPuzzlePieces = "puzzle_pieces";
         private const string ColGlobalHomographies = "global_homographies";
         private const string ColDevices = "devices";
+        private const string ColCameraIntrinsics = "camera_intrinsics";
         private const int PuzzlePieceGenerationVersion = 2;
 
         public LocalHomographyResponseDto SubmitLocalHomography(string deviceId, SubmitLocalHomographyDto dto)
@@ -761,6 +762,23 @@ namespace BetterPlacemaking.Services
             var cameraMac = NormalizeMac(local.CameraMac);
             var sourceBytes = await _cloudStorage.DownloadBytesAsync(local.SnapshotPath, ct);
 
+            // Resolve camera intrinsics, falling back to the camera_intrinsics collection
+            // if they were not embedded in the local homography record.
+            var effectiveCameraMatrix = local.CameraMatrix;
+            var effectiveDistortion = local.DistortionCoefficients;
+            if (effectiveCameraMatrix == null || effectiveDistortion is not { Count: >= 4 })
+            {
+                var intrSnap = await _db.Collection(ColCameraIntrinsics)
+                    .Document($"{local.DeviceId}_{cameraMac}")
+                    .GetSnapshotAsync(ct);
+                if (intrSnap.Exists)
+                {
+                    var intr = intrSnap.ConvertTo<CameraIntrinsics>();
+                    if (intr?.CameraMatrix != null) effectiveCameraMatrix = intr.CameraMatrix;
+                    if (intr?.DistortionCoefficients is { Count: >= 4 }) effectiveDistortion = intr.DistortionCoefficients;
+                }
+            }
+
             using var decoded = Cv2.ImDecode(sourceBytes, ImreadModes.Unchanged);
             if (decoded.Empty())
                 throw new InvalidOperationException("The stored snapshot could not be decoded.");
@@ -770,10 +788,10 @@ namespace BetterPlacemaking.Services
             int sourceHeight = source.Rows;
 
             var referenceSize = NormalizeOutputSize(local.FrameSize, sourceWidth, sourceHeight);
-            var useUndistortedImage = ResolveUsedUndistortedImage(local);
+            var useUndistortedImage = local.UsedUndistortedImage ?? (effectiveCameraMatrix != null && effectiveDistortion is { Count: >= 4 });
 
             using var prepared = useUndistortedImage
-                ? UndistortImage(source, local, referenceSize)
+                ? UndistortImage(source, effectiveCameraMatrix!, effectiveDistortion!, referenceSize)
                 : source.Clone();
 
             var hLocalCanvasRaw = FitHomographyToOutput(
@@ -796,7 +814,7 @@ namespace BetterPlacemaking.Services
             Cv2.ImEncode(".png", trimmed, out var pngBytes);
 
             var objectPath = _cloudStorage.BuildObjectPath(
-                $"projects/{projectId}/puzzle-pieces",
+                $"vision/puzzle-pieces/{projectId}",
                 $"{local.DeviceId}_{cameraMac}_{localHash[..8]}",
                 ".png");
 
@@ -804,7 +822,7 @@ namespace BetterPlacemaking.Services
             await _cloudStorage.UploadFromStreamAsync(objectPath, "image/png", uploadStream, ct);
 
             var metadataPath = _cloudStorage.BuildObjectPath(
-                $"projects/{projectId}/puzzle-pieces",
+                $"vision/puzzle-pieces/{projectId}",
                 $"{local.DeviceId}_{cameraMac}_{localHash[..8]}_meta",
                 ".yml");
 
@@ -942,14 +960,6 @@ namespace BetterPlacemaking.Services
             return new OpenCvSharp.Size(fallbackWidth, fallbackHeight);
         }
 
-        private static bool ResolveUsedUndistortedImage(LocalHomography local)
-        {
-            if (local.UsedUndistortedImage.HasValue)
-                return local.UsedUndistortedImage.Value;
-
-            return local.CameraMatrix != null && local.DistortionCoefficients is { Count: >= 4 };
-        }
-
         private static double[,] BuildEffectiveHomography(
             double[,] homography,
             OpenCvSharp.Size referenceSize,
@@ -987,19 +997,17 @@ namespace BetterPlacemaking.Services
 
         private static Mat UndistortImage(
             Mat sourceBgra,
-            LocalHomography local,
+            List<List<double>> cameraMatrix,
+            List<double> distortionCoefficients,
             OpenCvSharp.Size referenceSize)
         {
-            if (local.CameraMatrix == null || local.DistortionCoefficients is not { Count: >= 4 })
-                throw new InvalidOperationException("Camera intrinsics are required to generate an undistorted BEV image.");
-
             using var sourceBgr = EnsureBgr(sourceBgra);
             using var scaledCameraMatrix = ToCvMat(
                 ScaleCameraMatrix(
-                    ToMatrix3x3(local.CameraMatrix),
+                    ToMatrix3x3(cameraMatrix),
                     referenceSize,
                     new OpenCvSharp.Size(sourceBgr.Cols, sourceBgr.Rows)));
-            using var distortion = ToCvDistortion(local.DistortionCoefficients);
+            using var distortion = ToCvDistortion(distortionCoefficients);
 
             using var undistortedBgr = new Mat();
             Cv2.Undistort(sourceBgr, undistortedBgr, scaledCameraMatrix, distortion);

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CardModule } from 'primeng/card';
@@ -19,9 +19,12 @@ import { BoardService } from '../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../models/BoardLibrary';
 import { HomographyService, GlobalHomographySetDto } from '../../../../services/homography-service';
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
+import { interval, Subject } from 'rxjs';
+import { takeUntil, startWith } from 'rxjs/operators';
 
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
+const POLL_INTERVAL_MS = 30_000;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
 const MIN_ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
@@ -51,7 +54,7 @@ export interface CameraEntry {
   templateUrl: './vision.html',
   styleUrls: ['./vision.scss'],
 })
-export class Vision implements OnInit {
+export class Vision implements OnInit, OnDestroy {
   projectId = '';
   devices: DeviceDto[] = [];
   loading = true;
@@ -71,6 +74,8 @@ export class Vision implements OnInit {
 
 
 
+  private readonly destroy$ = new Subject<void>();
+
   private camRef: DynamicDialogRef | null = null;
   private deviceRef: DynamicDialogRef | null = null;
   private boardGenRef: DynamicDialogRef | null = null;
@@ -89,9 +94,19 @@ export class Vision implements OnInit {
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
-    this.loadDevices();
+
+    interval(POLL_INTERVAL_MS).pipe(
+      startWith(0),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadDevices());
+
     this.loadBoardLibrary();
     this.loadFloorplans();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   private loadDevices(): void {
