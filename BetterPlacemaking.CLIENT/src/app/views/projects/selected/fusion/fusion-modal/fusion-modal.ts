@@ -58,8 +58,8 @@ export class FusionModal implements OnInit {
     this.submitting = true;
     this.error = null;
 
-    const fromUnix = this.fromDate.getTime() / 1000;
-    const toUnix = this.toDate.getTime() / 1000;
+    const fromUnix = Math.floor(this.fromDate.getTime() / 1000);
+    const toUnix = Math.floor(this.toDate.getTime() / 1000);
 
     this.fusionService.triggerFusion({ fromDateUnix: fromUnix, toDateUnix: toUnix }).subscribe({
       next: (run: FusionRunDto) => {

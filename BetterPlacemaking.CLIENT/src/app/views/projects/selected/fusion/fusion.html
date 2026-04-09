@@ -1,276 +1,155 @@
-<div class="p-4 flex flex-col gap-4">
+<div class="fusion-page">
 
-  <!-- Active run banner -->
+  <!-- ── Header row ──────────────────────────────────────────────────── -->
+  <div class="fusion-header">
+    <div>
+      <h1 class="fusion-title">Data Fusion</h1>
+      <p class="fusion-subtitle">Merge multi-camera tracking data into unified pedestrian identities</p>
+    </div>
+    <p-button
+      label="Run Manual Fusion"
+      icon="pi pi-play"
+      (onClick)="openFusionModal()"
+      [loading]="hasRunningFusion"
+      pTooltip="Select a date range and run the fusion pipeline"
+      tooltipPosition="left" />
+  </div>
+
+  <!-- ── Active run banner ────────────────────────────────────────────── -->
   <p-message
     *ngIf="hasRunningFusion"
     severity="info"
-    text="A fusion run is currently in progress. The history will update automatically."
+    text="Fusion is running — this may take a few minutes. Results will appear below automatically."
     styleClass="w-full" />
 
-  <!-- Stat bar -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+  <!-- ── Stat cards ────────────────────────────────────────────────────── -->
+  <div class="fusion-stats">
 
-    <p-card styleClass="h-full">
-      <div class="text-sm text-muted-color">Last Run</div>
-      <div class="text-2xl font-bold mt-1">
-        <span *ngIf="lastRun"
-              [class.text-green-500]="lastRun.status === 'success'"
-              [class.text-red-500]="lastRun.status === 'failed'"
-              [class.text-blue-500]="lastRun.status === 'running'">
-          {{ lastRun.status | titlecase }}
-        </span>
-        <span *ngIf="!lastRun" class="text-muted-color">—</span>
+    <div class="fusion-stat-card">
+      <div class="fusion-stat-label">Last Run</div>
+      <div class="fusion-stat-value"
+           [class.fusion-stat-success]="lastRun?.status === 'success'"
+           [class.fusion-stat-danger]="lastRun?.status === 'failed'"
+           [class.fusion-stat-info]="lastRun?.status === 'running'">
+        {{ lastRun ? (lastRun.status | titlecase) : '—' }}
       </div>
-      <div class="text-xs text-muted-color mt-1">
-        {{ lastRun ? formatUnix(lastRun.startedAtUnix) : 'No runs yet' }}
-      </div>
-    </p-card>
+      <div class="fusion-stat-meta">{{ lastRun ? formatUnix(lastRun.startedAtUnix) : 'No runs yet' }}</div>
+    </div>
 
-    <p-card styleClass="h-full">
-      <div class="text-sm text-muted-color">Successful Runs</div>
-      <div class="text-2xl font-bold mt-1"
-           [class.text-green-500]="successCount > 0"
-           [class.text-muted-color]="successCount === 0">
+    <div class="fusion-stat-card">
+      <div class="fusion-stat-label">Successful</div>
+      <div class="fusion-stat-value" [class.fusion-stat-success]="successCount > 0">
         {{ successCount }}
       </div>
-      <div class="text-xs text-muted-color mt-1">Of {{ history.length }} total</div>
-    </p-card>
+      <div class="fusion-stat-meta">of {{ history.length }} total</div>
+    </div>
 
-    <p-card styleClass="h-full">
-      <div class="text-sm text-muted-color">Failed Runs</div>
-      <div class="text-2xl font-bold mt-1"
-           [class.text-red-500]="failedCount > 0"
-           [class.text-muted-color]="failedCount === 0">
+    <div class="fusion-stat-card">
+      <div class="fusion-stat-label">Failed</div>
+      <div class="fusion-stat-value" [class.fusion-stat-danger]="failedCount > 0">
         {{ failedCount }}
       </div>
-      <div class="text-xs text-muted-color mt-1">Errors in last {{ history.length }}</div>
-    </p-card>
+      <div class="fusion-stat-meta">errors</div>
+    </div>
 
-    <p-card styleClass="h-full">
-      <div class="text-sm text-muted-color">Next Scheduled</div>
-      <div class="text-lg font-bold mt-1"
-           [class.text-muted-color]="!config?.enabled"
-           [class.accent-color]="config?.enabled">
-        {{ config?.enabled ? scheduledTimeLabel : 'Disabled' }}
+    <div class="fusion-stat-card">
+      <div class="fusion-stat-label">Auto-Run</div>
+      <div class="fusion-stat-value" [class.fusion-stat-success]="config?.enabled" [class.fusion-stat-danger]="config?.enabled === false">
+        {{ config?.enabled ? 'Enabled' : (config ? 'Disabled' : '—') }}
       </div>
-      <div class="text-xs text-muted-color mt-1">Daily auto-run</div>
-    </p-card>
+      <div class="fusion-stat-meta">nightly schedule</div>
+    </div>
 
   </div>
 
-  <!-- Main content row -->
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+  <!-- ── Fusion History ────────────────────────────────────────────────── -->
+  <div class="fusion-history-card">
 
-    <!-- Fusion History panel -->
-    <p-panel header="Fusion History" [toggleable]="true">
-      <div class="fusion-panel-action">
-        <div class="text-sm text-muted-color">
-          Recent fusion runs, newest first. Polling every 8 seconds.
-        </div>
-        <p-button
-          label="Run Manual Fusion"
-          icon="pi pi-play"
-          size="small"
-          (onClick)="openFusionModal()"
-          pTooltip="Select a custom date range and run fusion immediately"
-          tooltipPosition="top" />
+    <div class="fusion-history-header">
+      <div>
+        <span class="fusion-history-title">Fusion History</span>
+        <span class="fusion-history-subtitle">Refreshes every 6 seconds</span>
       </div>
-
-      <div *ngIf="historyLoading" class="text-muted-color text-sm py-4 text-center">
-        Loading history...
-      </div>
-
-      <p-message
-        *ngIf="historyError"
-        severity="error"
-        text="Failed to load fusion history."
-        styleClass="w-full mb-3" />
-
-      <div *ngIf="!historyLoading && !historyError && history.length === 0"
-           class="text-muted-color text-sm py-4 text-center">
-        No fusion runs yet. Trigger one manually or wait for the nightly schedule.
-      </div>
-
-      <div *ngIf="!historyLoading && history.length > 0" class="flex flex-col gap-2">
-        <div
-          *ngFor="let run of history"
-          class="border-l-4 rounded-lg p-3 bg-surface-100 dark:bg-surface-800"
-          [class.border-green-500]="run.status === 'success'"
-          [class.border-red-500]="run.status === 'failed'"
-          [class.border-blue-500]="run.status === 'running'"
-          [class.border-surface-300]="run.status === 'unknown'">
-
-          <div class="flex items-start justify-between gap-2 mb-1">
-            <div class="flex items-center gap-2">
-              <i [class]="runStatusIcon(run.status)" class="text-sm"></i>
-              <span class="font-semibold text-sm">{{ formatDateRange(run) }}</span>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <p-tag
-                [severity]="runStatusSeverity(run.status)"
-                [value]="run.status | titlecase"
-                styleClass="text-xs" />
-              <p-tag
-                severity="secondary"
-                [value]="run.triggeredBy | titlecase"
-                styleClass="text-xs" />
-            </div>
-          </div>
-
-          <div class="flex gap-4 text-xs text-muted-color mt-1">
-            <span>Started: {{ formatUnix(run.startedAtUnix) }}</span>
-            <span *ngIf="run.status !== 'running'">Duration: {{ formatDuration(run) }}</span>
-            <span *ngIf="run.recordsFused != null">{{ run.recordsFused }} records</span>
-          </div>
-
-          <div *ngIf="run.errorMessage"
-               class="mt-2 text-xs text-red-500 font-mono truncate"
-               [title]="run.errorMessage">
-            {{ run.errorMessage }}
-          </div>
-        </div>
-      </div>
-    </p-panel>
-
-    <!-- Right column: Manual + Calibration stacked -->
-    <div class="flex flex-col gap-4">
-
-      <!-- Manual Fusion panel -->
-      <p-panel header="Manual Fusion" [toggleable]="true">
-        <div class="fusion-map-launch">
-          <div class="fusion-launch-copy">
-            <div class="fusion-launch-title">Run fusion on demand</div>
-            <div class="fusion-launch-text">
-              Choose a custom date range and immediately fuse sensor data for that period.
-              The run will appear in history once submitted.
-            </div>
-          </div>
-          <p-button
-            label="Open Fusion Dialog"
-            icon="pi pi-play"
-            severity="contrast"
-            [loading]="hasRunningFusion"
-            (onClick)="openFusionModal()"
-            pTooltip="Opens a dialog to select date range and trigger fusion"
-            tooltipPosition="top" />
-        </div>
-
-        <div *ngIf="hasRunningFusion"
-             class="mt-4 border-2 border-dashed rounded-lg p-4 text-center text-muted-color">
-          <i class="pi pi-spin pi-spinner text-2xl opacity-60 block mb-2"></i>
-          <div class="font-semibold opacity-70 text-sm">Fusion In Progress</div>
-          <div class="text-xs opacity-50 mt-1">History will update automatically when complete.</div>
-        </div>
-
-        <div *ngIf="!hasRunningFusion"
-             class="mt-4 border-2 border-dashed rounded-lg p-6 text-center text-muted-color">
-          <i class="pi pi-database text-3xl opacity-30 block mb-2"></i>
-          <div class="font-semibold opacity-70 text-sm">No active fusion run</div>
-          <div class="text-xs opacity-50 mt-1">Click the button above to start one.</div>
-        </div>
-      </p-panel>
-
-      <!-- Fusion Calibration / Schedule panel -->
-      <p-panel header="Fusion Calibration" [toggleable]="true">
-
-        <div *ngIf="configLoading" class="text-muted-color text-sm py-4 text-center">
-          Loading configuration...
-        </div>
-
-        <p-message
-          *ngIf="configError"
-          severity="error"
-          text="Failed to load fusion configuration."
-          styleClass="w-full mb-3" />
-
-        <div *ngIf="!configLoading && !configError && config" class="flex flex-col gap-4">
-
-          <div class="text-sm text-muted-color">
-            Configure when the nightly automated fusion runs. Changes take effect on the server immediately after saving.
-          </div>
-
-          <!-- Enabled toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-semibold">Auto-run enabled</div>
-              <div class="text-xs text-muted-color">Run fusion automatically every night</div>
-            </div>
-            <p-toggleswitch [(ngModel)]="editEnabled" />
-          </div>
-
-          <!-- Time pickers -->
-          <div class="flex flex-col gap-3" [class.opacity-50]="!editEnabled">
-            <div class="text-sm font-semibold">Scheduled time (UTC)</div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-muted-color">Hour (0 – 23)</label>
-                <p-inputnumber
-                  [(ngModel)]="editHour"
-                  [min]="0"
-                  [max]="23"
-                  [showButtons]="true"
-                  [disabled]="!editEnabled"
-                  buttonLayout="horizontal"
-                  incrementButtonIcon="pi pi-plus"
-                  decrementButtonIcon="pi pi-minus"
-                  styleClass="bp-stepper-medium w-full" />
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-muted-color">Minute (0 – 59)</label>
-                <p-inputnumber
-                  [(ngModel)]="editMinute"
-                  [min]="0"
-                  [max]="59"
-                  [showButtons]="true"
-                  [disabled]="!editEnabled"
-                  buttonLayout="horizontal"
-                  incrementButtonIcon="pi pi-plus"
-                  decrementButtonIcon="pi pi-minus"
-                  styleClass="bp-stepper-medium w-full" />
-              </div>
-            </div>
-
-            <div class="text-xs text-muted-color">
-              Currently set to run at
-              <span class="font-semibold text-color">{{ scheduledTimeLabel }}</span>
-            </div>
-          </div>
-
-          <!-- Save feedback -->
-          <p-message
-            *ngIf="configSaveSuccess"
-            severity="success"
-            text="Schedule saved. The Hangfire job has been updated."
-            styleClass="w-full" />
-          <p-message
-            *ngIf="configSaveError"
-            severity="error"
-            [text]="configSaveError"
-            styleClass="w-full" />
-
-          <!-- Actions -->
-          <div class="flex items-center justify-end gap-2 border-t border-surface-200 dark:border-surface-700 pt-3">
-            <p-button
-              label="Reset"
-              severity="secondary"
-              size="small"
-              [disabled]="!configDirty || configSaving"
-              (onClick)="resetConfig()" />
-            <p-button
-              label="Save Schedule"
-              icon="pi pi-save"
-              size="small"
-              [loading]="configSaving"
-              [disabled]="!configDirty"
-              (onClick)="saveConfig()" />
-          </div>
-
-        </div>
-      </p-panel>
-
     </div>
+
+    <!-- Loading -->
+    <div *ngIf="historyLoading" class="fusion-empty">
+      <i class="pi pi-spin pi-spinner fusion-empty-icon"></i>
+      <div>Loading runs...</div>
+    </div>
+
+    <!-- Error -->
+    <p-message
+      *ngIf="historyError"
+      severity="error"
+      text="Failed to load fusion history. Is the server running?"
+      styleClass="w-full" />
+
+    <!-- Empty -->
+    <div *ngIf="!historyLoading && !historyError && history.length === 0" class="fusion-empty">
+      <i class="pi pi-database fusion-empty-icon"></i>
+      <div class="fusion-empty-title">No fusion runs yet</div>
+      <div class="fusion-empty-text">Click "Run Manual Fusion" above to start one.</div>
+      <p-button label="Run Manual Fusion" icon="pi pi-play" severity="secondary" (onClick)="openFusionModal()" />
+    </div>
+
+    <!-- Run list -->
+    <div *ngIf="!historyLoading && history.length > 0" class="fusion-run-list">
+      <div
+        *ngFor="let run of history"
+        class="fusion-run-row"
+        [class.fusion-run-success]="run.status === 'success'"
+        [class.fusion-run-failed]="run.status === 'failed'"
+        [class.fusion-run-running]="run.status === 'running'">
+
+        <!-- Left: status icon + date range -->
+        <div class="fusion-run-left">
+          <i [class]="runStatusIcon(run.status)" class="fusion-run-icon"></i>
+          <div>
+            <div class="fusion-run-range">{{ formatDateRange(run) }}</div>
+            <div class="fusion-run-meta">
+              Started {{ formatUnix(run.startedAtUnix) }}
+              <span *ngIf="run.status !== 'running'"> · {{ formatDuration(run) }}</span>
+            </div>
+            <div *ngIf="run.errorMessage" class="fusion-run-error" [title]="run.errorMessage">
+              {{ run.errorMessage }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: badges + actions -->
+        <div class="fusion-run-right">
+          <p-tag [severity]="runStatusSeverity(run.status)" [value]="run.status | titlecase" />
+          <p-tag severity="secondary" [value]="run.triggeredBy | titlecase" />
+
+          <!-- Download button (only when output exists) -->
+          <p-button
+            *ngIf="run.status === 'success' && run.outputGcsPath"
+            icon="pi pi-download"
+            severity="secondary"
+            size="small"
+            [loading]="downloadingRunId === run.id"
+            pTooltip="Download fused data (JSON)"
+            tooltipPosition="top"
+            [text]="true"
+            (onClick)="downloadRun(run, $event)" />
+
+          <!-- Delete button -->
+          <p-button
+            *ngIf="run.status !== 'running'"
+            icon="pi pi-trash"
+            severity="danger"
+            size="small"
+            [loading]="deletingRunId === run.id"
+            pTooltip="Delete this run"
+            tooltipPosition="top"
+            [text]="true"
+            (onClick)="deleteRun(run, $event)" />
+        </div>
+
+      </div>
+    </div>
+
   </div>
 
 </div>

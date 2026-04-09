@@ -7,8 +7,6 @@ import { PanelModule } from 'primeng/panel';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { TooltipModule } from 'primeng/tooltip';
-import { InputNumberModule } from 'primeng/inputnumber';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { DynamicDialogModule, DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { interval, Subject } from 'rxjs';
 import { startWith, switchMap, takeUntil } from 'rxjs/operators';
@@ -16,7 +14,7 @@ import { FusionService } from '../../../../services/fusion-service';
 import { FusionConfigDto, FusionRunDto } from '../../../../models/FusionDtos';
 import { FusionModal } from './fusion-modal/fusion-modal';
 
-const POLL_INTERVAL_MS = 8_000;
+const POLL_INTERVAL_MS = 6_000;
 
 @Component({
   selector: 'app-fusion',
@@ -31,8 +29,6 @@ const POLL_INTERVAL_MS = 8_000;
     TagModule,
     MessageModule,
     TooltipModule,
-    InputNumberModule,
-    ToggleSwitchModule,
     DynamicDialogModule,
   ],
   templateUrl: './fusion.html',
@@ -44,15 +40,9 @@ export class Fusion implements OnInit, OnDestroy {
   historyError = false;
 
   config: FusionConfigDto | null = null;
-  configLoading = true;
-  configError = false;
 
-  editHour = 21;
-  editMinute = 0;
-  editEnabled = true;
-  configSaving = false;
-  configSaveSuccess = false;
-  configSaveError: string | null = null;
+  deletingRunId: string | null = null;
+  downloadingRunId: string | null = null;
 
   private readonly destroy$ = new Subject<void>();
   private modalRef: DynamicDialogRef | null = null;
@@ -63,8 +53,6 @@ export class Fusion implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.loadConfig();
-
     interval(POLL_INTERVAL_MS)
       .pipe(
         startWith(0),
@@ -82,12 +70,19 @@ export class Fusion implements OnInit, OnDestroy {
           this.historyError = true;
         },
       });
+
+    this.fusionService.getConfig().subscribe({
+      next: (cfg: FusionConfigDto) => (this.config = cfg),
+      error: () => {},
+    });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
   }
+
+  // ── Computed ──────────────────────────────────────────────────────────────
 
   get hasRunningFusion(): boolean {
     return this.history.some((r) => r.status === 'running');
@@ -105,28 +100,12 @@ export class Fusion implements OnInit, OnDestroy {
     return this.history.filter((r) => r.status === 'failed').length;
   }
 
-  get scheduledTimeLabel(): string {
-    if (!this.config) return '—';
-    const h = this.config.scheduledHourUtc;
-    const m = this.config.scheduledMinuteUtc;
-    const suffix = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${h12}:${String(m).padStart(2, '0')} ${suffix} UTC`;
-  }
-
-  get configDirty(): boolean {
-    if (!this.config) return false;
-    return (
-      this.editHour !== this.config.scheduledHourUtc ||
-      this.editMinute !== this.config.scheduledMinuteUtc ||
-      this.editEnabled !== this.config.enabled
-    );
-  }
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   openFusionModal(): void {
     const ref = this.dialogService.open(FusionModal, {
       header: 'Run Manual Fusion',
-      width: '560px',
+      width: '520px',
       modal: true,
       dismissableMask: true,
       closable: true,
@@ -136,70 +115,43 @@ export class Fusion implements OnInit, OnDestroy {
     if (!ref) return;
     this.modalRef = ref;
 
-    ref.onClose.subscribe((result?: { triggered?: boolean }) => {
-      if (result?.triggered) {
-        this.fusionService.getHistory().subscribe({
-          next: (runs: FusionRunDto[]) => (this.history = runs),
-        });
+  ref.onClose.subscribe((result?: { triggered?: boolean; run?: FusionRunDto }) => {
+      if (result?.triggered && result.run) {
+        // INSTANTLY show the new run at the top
+        this.history = [result.run, ...this.history];
       }
+  });
+}
+
+  deleteRun(run: FusionRunDto, event: Event): void {
+    event.stopPropagation();
+    if (run.status === 'running') return;
+
+    this.deletingRunId = run.id;
+    this.fusionService.deleteRun(run.id).subscribe({
+      next: () => {
+        this.history = this.history.filter((r) => r.id !== run.id);
+        this.deletingRunId = null;
+      },
+      error: () => (this.deletingRunId = null),
     });
   }
 
-  saveConfig(): void {
-    if (!this.configDirty || this.configSaving) return;
+  downloadRun(run: FusionRunDto, event: Event): void {
+    event.stopPropagation();
+    if (!run.outputGcsPath) return;
 
-    if (this.editHour < 0 || this.editHour > 23 || this.editMinute < 0 || this.editMinute > 59) {
-      this.configSaveError = 'Hour must be 0–23 and minute must be 0–59.';
-      return;
-    }
-
-    this.configSaving = true;
-    this.configSaveError = null;
-    this.configSaveSuccess = false;
-
-    this.fusionService
-      .updateConfig({
-        scheduledHourUtc: this.editHour,
-        scheduledMinuteUtc: this.editMinute,
-        enabled: this.editEnabled,
-      })
-      .subscribe({
-        next: (updated: FusionConfigDto) => {
-          this.config = updated;
-          this.configSaving = false;
-          this.configSaveSuccess = true;
-          setTimeout(() => (this.configSaveSuccess = false), 3000);
-        },
-        error: () => {
-          this.configSaving = false;
-          this.configSaveError = 'Failed to save config. Please try again.';
-        },
-      });
-  }
-
-  resetConfig(): void {
-    if (!this.config) return;
-    this.editHour = this.config.scheduledHourUtc;
-    this.editMinute = this.config.scheduledMinuteUtc;
-    this.editEnabled = this.config.enabled;
-    this.configSaveError = null;
-  }
-
-  private loadConfig(): void {
-    this.fusionService.getConfig().subscribe({
-      next: (cfg: FusionConfigDto) => {
-        this.config = cfg;
-        this.editHour = cfg.scheduledHourUtc;
-        this.editMinute = cfg.scheduledMinuteUtc;
-        this.editEnabled = cfg.enabled;
-        this.configLoading = false;
+    this.downloadingRunId = run.id;
+    this.fusionService.getDownloadUrl(run.id).subscribe({
+      next: (res) => {
+        window.open(res.url, '_blank');
+        this.downloadingRunId = null;
       },
-      error: () => {
-        this.configLoading = false;
-        this.configError = true;
-      },
+      error: () => (this.downloadingRunId = null),
     });
   }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'secondary' {
     if (status === 'success') return 'success';
@@ -218,8 +170,7 @@ export class Fusion implements OnInit, OnDestroy {
   formatUnix(unix?: number): string {
     if (!unix) return '—';
     const date = new Date(unix * 1000);
-    if (isNaN(date.getTime())) return '—';
-    return date.toLocaleString();
+    return isNaN(date.getTime()) ? '—' : date.toLocaleString();
   }
 
   formatDuration(run: FusionRunDto): string {
@@ -232,7 +183,7 @@ export class Fusion implements OnInit, OnDestroy {
   formatDateRange(run: FusionRunDto): string {
     if (!run.fromDateUnix || !run.toDateUnix) return '—';
     const from = new Date(run.fromDateUnix * 1000).toLocaleDateString();
-    const to = new Date(run.toDateUnix * 1000).toLocaleDateString();
+    const to   = new Date(run.toDateUnix   * 1000).toLocaleDateString();
     return from === to ? from : `${from} – ${to}`;
   }
 }

@@ -31,5 +31,8 @@ namespace BetterPlacemaking.Models.Fusion
 
         [FirestoreProperty]
         public string? ErrorMessage { get; set; }
+
+        [FirestoreProperty]
+        public string? OutputGcsPath { get; set; } // e.g. "vision/fused/fused_tracks-20250408.json"
     }
 }

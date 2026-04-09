@@ -1,44 +1,203 @@
-.fusion-panel-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.fusion-map-launch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border-radius: 0.75rem;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--p-primary-500) 12%, transparent), transparent 65%),
-    color-mix(in srgb, var(--p-surface-100) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--p-primary-400) 18%, var(--p-surface-300));
-}
-
-.fusion-launch-copy {
+// ── Page shell ───────────────────────────────────────────────────────────────
+.fusion-page {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 1.5rem;
+  max-width: 1100px;
 }
 
-.fusion-launch-title {
-  font-size: 1rem;
-  font-weight: 600;
-}
+// ── Header ───────────────────────────────────────────────────────────────────
+.fusion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 
-.fusion-launch-text {
-  color: var(--p-text-muted-color);
-  font-size: 0.875rem;
-}
-
-@media (max-width: 768px) {
-  .fusion-panel-action,
-  .fusion-map-launch {
+  @media (max-width: 600px) {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.fusion-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.15rem;
+  color: var(--p-text-color);
+}
+
+.fusion-subtitle {
+  font-size: 0.875rem;
+  color: var(--p-text-muted-color);
+  margin: 0;
+}
+
+// ── Stat cards ────────────────────────────────────────────────────────────────
+.fusion-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+
+  @media (max-width: 900px) { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 500px) { grid-template-columns: 1fr; }
+}
+
+.fusion-stat-card {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.75rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.fusion-stat-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--p-text-muted-color);
+  margin-bottom: 0.4rem;
+}
+
+.fusion-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--p-text-color);
+  line-height: 1.1;
+}
+
+.fusion-stat-meta {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fusion-stat-success { color: var(--p-green-500); }
+.fusion-stat-danger  { color: var(--p-red-500); }
+.fusion-stat-info    { color: var(--p-primary-color); }
+
+// ── History card ──────────────────────────────────────────────────────────────
+.fusion-history-card {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.fusion-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.fusion-history-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.fusion-history-subtitle {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-left: 0.6rem;
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+.fusion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 3rem 1.5rem;
+  color: var(--p-text-muted-color);
+  text-align: center;
+}
+
+.fusion-empty-icon {
+  font-size: 2.5rem;
+  opacity: 0.3;
+}
+
+.fusion-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.fusion-empty-text {
+  font-size: 0.85rem;
+  opacity: 0.55;
+  margin-bottom: 0.5rem;
+}
+
+// ── Run rows ──────────────────────────────────────────────────────────────────
+.fusion-run-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.fusion-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+  border-left: 4px solid transparent;
+  transition: background-color 0.15s;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: var(--p-surface-50); }
+}
+
+.fusion-run-success { border-left-color: var(--p-green-500); }
+.fusion-run-failed  { border-left-color: var(--p-red-500); }
+.fusion-run-running { border-left-color: var(--p-primary-color); }
+
+.fusion-run-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.fusion-run-icon {
+  font-size: 1.1rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  color: var(--p-text-muted-color);
+}
+
+.fusion-run-range {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.fusion-run-meta {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-top: 0.15rem;
+}
+
+.fusion-run-error {
+  font-size: 0.75rem;
+  font-family: var(--p-font-family-monospace, monospace);
+  color: var(--p-red-500);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+.fusion-run-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }

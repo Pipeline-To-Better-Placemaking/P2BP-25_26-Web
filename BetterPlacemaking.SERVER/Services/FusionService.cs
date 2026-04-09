@@ -2,17 +2,18 @@ using BetterPlacemaking.Models.Dtos.Fusion;
 using BetterPlacemaking.Models.Fusion;
 using Google.Cloud.Firestore;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
+using BetterPlacemaking.Models.Dtos;
 
 namespace BetterPlacemaking.Services
 {
-    
-    public class FusionService(FirestoreDb db, ILogger<FusionService> logger, FusionRunner fusionRunner)
+    public class FusionService(
+        FirestoreDb db,
+        ILogger<FusionService> logger,
+        CloudStorageService gcs)
     {
-        private readonly FirestoreDb            _db           = db;
-        private readonly ILogger<FusionService> _logger       = logger;
-        // CHANGED: was missing — now stores the injected FusionRunner
-        private readonly FusionRunner           _fusionRunner = fusionRunner;
+        private readonly FirestoreDb            _db     = db;
+        private readonly ILogger<FusionService> _logger = logger;
+        private readonly CloudStorageService    _gcs    = gcs;
 
         private const string ColFusionRuns   = "fusion_runs";
         private const string ColFusionConfig = "fusion_config";
@@ -27,14 +28,22 @@ namespace BetterPlacemaking.Services
                 .Limit(limit)
                 .GetSnapshotAsync().Result.Documents;
 
-            return docs
-                .Select(d => ToDto(d.ConvertTo<FusionRun>()))
-                .ToList();
+            return docs.Select(d => ToDto(d.ConvertTo<FusionRun>())).ToList();
         }
 
-        // ── Manual trigger ────────────────────────────────────────────────────
+        // ── Delete a run ──────────────────────────────────────────────────────
 
-        public FusionRunDto TriggerFusion(double fromUnix, double toUnix, string triggeredBy = "manual")
+        public async Task DeleteRunAsync(string runId)
+        {
+            await _db.Collection(ColFusionRuns).Document(runId).DeleteAsync();
+        }
+
+        // ── Trigger ───────────────────────────────────────────────────────────
+
+        public FusionRunDto TriggerFusion(
+            double fromUnix,
+            double toUnix,
+            string triggeredBy = "manual")
         {
             var run = new FusionRun
             {
@@ -48,24 +57,48 @@ namespace BetterPlacemaking.Services
             var docRef = _db.Collection(ColFusionRuns).AddAsync(run).Result;
             var runId  = docRef.Id;
 
-            // Fire-and-forget: run the fusion logic in the background so the
-            // HTTP response returns immediately with status "running".
+            var gcs = _gcs;
+            var db  = _db;
+            var log = _logger;
+
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var recordsFused = await ExecuteFusionAsync(fromUnix, toUnix);
+                    var runner = new FusionRunner(gcs, db);
+
+                    var fromUtc = DateTimeOffset.FromUnixTimeSeconds((long)fromUnix).UtcDateTime;
+                    var toUtc   = DateTimeOffset.FromUnixTimeSeconds((long)toUnix).UtcDateTime;
+
+                    var result = await runner.RunAsync(new FusionRequest
+                    {
+                        From = fromUtc,
+                        To   = toUtc,
+                    });
+
+                    if (!result.Success)
+                        throw new InvalidOperationException(result.Message);
+
+                    // Build the output GCS path the same way FusionRunner does
+                    string fromStr   = fromUtc.Date.ToString("yyyyMMdd");
+                    string toStr     = toUtc.Date.ToString("yyyyMMdd");
+                    string outputKey = fromStr == toStr
+                        ? $"vision/fused/fused_tracks-{fromStr}.json"
+                        : $"vision/fused/fused_tracks-{fromStr}_{toStr}.json";
+
                     await docRef.UpdateAsync(new Dictionary<string, object>
                     {
-                        { "Status",           "success" },
-                        { "RecordsFused",     recordsFused },
-                        { "CompletedAtUnix",  DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+                        { "Status",          "success" },
+                        { "RecordsFused",    0 },          // FusionExporter doesn't return count yet
+                        { "OutputGcsPath",   outputKey },
+                        { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                     });
-                    _logger.LogInformation("Fusion {RunId} completed: {Count} records fused", runId, recordsFused);
+
+                    log.LogInformation("Fusion {RunId} completed → {Output}", runId, outputKey);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Fusion {RunId} failed", runId);
+                    log.LogError(ex, "Fusion {RunId} failed", runId);
                     await docRef.UpdateAsync(new Dictionary<string, object>
                     {
                         { "Status",          "failed" },
@@ -79,29 +112,21 @@ namespace BetterPlacemaking.Services
             return ToDto(run);
         }
 
-        // ── Core fusion logic ─────────────────────────────────────────────────
+        // ── Signed download URL for a fused output file ───────────────────────
 
-        // CHANGED: replaced the placeholder Task.Delay stub with a real call to FusionRunner.
-        //          Converts the unix-second timestamps to DateTime, runs the engine,
-        //          throws on failure, and counts the fused identities from the result.
-        private async Task<int> ExecuteFusionAsync(double fromUnix, double toUnix)
+        public async Task<string?> GetDownloadUrlAsync(string runId)
         {
-            _logger.LogInformation("ExecuteFusionAsync: from={From} to={To}", fromUnix, toUnix);
+            var snap = await _db.Collection(ColFusionRuns).Document(runId).GetSnapshotAsync();
+            if (!snap.Exists) return null;
 
-            var result = await _fusionRunner.RunAsync(new FusionRequest
-            {
-                From = DateTimeOffset.FromUnixTimeMilliseconds((long)(fromUnix * 1000)).UtcDateTime,
-                To   = DateTimeOffset.FromUnixTimeMilliseconds((long)(toUnix   * 1000)).UtcDateTime,
-            });
+            var run = snap.ConvertTo<FusionRun>();
+            if (string.IsNullOrWhiteSpace(run.OutputGcsPath)) return null;
 
-            if (!result.Success)
-                throw new Exception(result.Message);
+            var dto = await _gcs.CreateSignedDownloadUrlAsync(
+                new RequestDownloadUrlDto(run.OutputGcsPath),
+                CancellationToken.None);
 
-            // Count the number of fused identities written to the output JSON
-            if (result.Data is JsonElement je && je.ValueKind == JsonValueKind.Object)
-                return je.EnumerateObject().Count();
-
-            return 0;
+            return dto.SignedUrl;
         }
 
         // ── Config ────────────────────────────────────────────────────────────
@@ -118,9 +143,9 @@ namespace BetterPlacemaking.Services
 
         public FusionConfigDto UpdateConfig(UpdateFusionConfigDto dto)
         {
-            if (dto.ScheduledHourUtc < 0 || dto.ScheduledHourUtc > 23)
+            if (dto.ScheduledHourUtc is < 0 or > 23)
                 throw new ArgumentOutOfRangeException(nameof(dto.ScheduledHourUtc), "Hour must be 0-23.");
-            if (dto.ScheduledMinuteUtc < 0 || dto.ScheduledMinuteUtc > 59)
+            if (dto.ScheduledMinuteUtc is < 0 or > 59)
                 throw new ArgumentOutOfRangeException(nameof(dto.ScheduledMinuteUtc), "Minute must be 0-59.");
 
             var cfg = new FusionConfig
@@ -132,25 +157,22 @@ namespace BetterPlacemaking.Services
             };
 
             _db.Collection(ColFusionConfig).Document(ConfigDocId).SetAsync(cfg).Wait();
-            _logger.LogInformation(
-                "Fusion config updated: {Hour:D2}:{Minute:D2} UTC enabled={Enabled}",
-                dto.ScheduledHourUtc, dto.ScheduledMinuteUtc, dto.Enabled);
-
             return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
         private static FusionRunDto ToDto(FusionRun r) => new(
-            r.Id            ?? string.Empty,
-            r.Status        ?? "unknown",
-            r.TriggeredBy   ?? "unknown",
+            r.Id             ?? string.Empty,
+            r.Status         ?? "unknown",
+            r.TriggeredBy    ?? "unknown",
             r.FromDateUnix,
             r.ToDateUnix,
             r.StartedAtUnix,
             r.CompletedAtUnix,
             r.RecordsFused,
-            r.ErrorMessage
+            r.ErrorMessage,
+            r.OutputGcsPath
         );
     }
 }

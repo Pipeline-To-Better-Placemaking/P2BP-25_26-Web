@@ -8,11 +8,9 @@ import {
   FusionConfigDto,
   TriggerFusionDto,
   UpdateFusionConfigDto,
-} from './../models/FusionDtos';
+} from '../models/FusionDtos';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class FusionService {
   constructor(
     private readonly http: HttpClient,
@@ -29,6 +27,18 @@ export class FusionService {
     return this.http
       .post<FusionRunDto>(`${environment.apiBaseUrl}/api/fusion/trigger`, payload)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to trigger fusion')));
+  }
+
+  deleteRun(runId: string): Observable<void> {
+    return this.http
+      .delete<void>(`${environment.apiBaseUrl}/api/fusion/${runId}`)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to delete fusion run')));
+  }
+
+  getDownloadUrl(runId: string): Observable<{ url: string }> {
+    return this.http
+      .get<{ url: string }>(`${environment.apiBaseUrl}/api/fusion/${runId}/download-url`)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to get download URL')));
   }
 
   getConfig(): Observable<FusionConfigDto> {

@@ -8,6 +8,7 @@ export interface FusionRunDto {
   completedAtUnix?: number;
   recordsFused?: number;
   errorMessage?: string;
+  outputGcsPath?: string;
 }
 
 export interface FusionConfigDto {
