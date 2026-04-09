@@ -15,6 +15,12 @@ export type ProjectRoleAssignmentDto = {
   ProjectId?: string;
   ProjectName?: string;
   Roles: string[];
+  NotifyOnOwnScan?: boolean;
+  NotifyOnOthersScan?: boolean;
+  NotifyOnScheduledScan?: boolean;
+  NotifyOnSystemToggle?: boolean;
+  NotifyOnHealthAlert?: boolean;
+  EmailPdfOnSystemOff?: boolean;
 };
 
 export type UserProjectRoleAssignmentsDto = {

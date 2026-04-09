@@ -19,12 +19,6 @@ namespace BetterPlacemaking.Models
         public bool? EmailAlerts { get; set; }
 
         [FirestoreProperty]
-        public bool? ScanCompletionAlerts { get; set; }
-
-        [FirestoreProperty]
-        public bool? ChangeDetectionAlerts { get; set; }
-
-        [FirestoreProperty]
         public string? Email { get; set; }
 
         [FirestoreProperty]

@@ -1,5 +1,3 @@
-using BetterPlacemaking.Models;
-
 namespace BetterPlacemaking.Services
 {
     public class NotificationService(
@@ -15,63 +13,45 @@ namespace BetterPlacemaking.Services
         private readonly EmailService _emailService = emailService;
         private readonly ILogger<NotificationService> _logger = logger;
 
-        public void NotifyScanCompleted(string userId, string? projectId = null, string? projectName = null)
+        public void NotifyScanCompleted(string triggerUserId, string projectId, string? projectName = null, bool isScheduled = false)
         {
-            if (!TryResolveEligibleUser(userId, out var user))
-                return;
-
-            if (!(user!.ScanCompletionAlerts ?? false))
-                return;
-
             var resolvedProjectName = ResolveProjectName(projectId, projectName);
             var resultUrl = ResolveResultUrl(projectId);
 
-            _emailService.SendScanCompletedEmail(
-                user.Email!,
-                resolvedProjectName,
-                DateTime.UtcNow,
-                resultUrl
-            );
-        }
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var members = _userService.GetProjectMembersForNotification(projectId);
 
-        public void NotifyChangeDetected(string userId, double changeAmount, string? projectId = null, string? projectName = null)
-        {
-            if (changeAmount <= 0)
-                return;
+                    foreach (var member in members)
+                    {
+                        if (!member.EmailAlerts || !member.EmailVerified || string.IsNullOrWhiteSpace(member.Email))
+                            continue;
 
-            if (!TryResolveEligibleUser(userId, out var user))
-                return;
+                        bool shouldNotify;
+                        if (isScheduled)
+                        {
+                            shouldNotify = member.NotifyOnScheduledScan;
+                        }
+                        else
+                        {
+                            shouldNotify = member.UserId == triggerUserId
+                                ? member.NotifyOnOwnScan
+                                : member.NotifyOnOthersScan;
+                        }
 
-            if (!(user!.ChangeDetectionAlerts ?? true))
-                return;
-
-            var resolvedProjectName = ResolveProjectName(projectId, projectName);
-            var resultUrl = ResolveResultUrl(projectId);
-
-            _emailService.SendChangeDetectedEmail(
-                user.Email!,
-                resolvedProjectName,
-                DateTime.UtcNow,
-                resultUrl
-            );
-        }
-
-        private bool TryResolveEligibleUser(string userId, out User? user)
-        {
-            user = _userService.GetUser(userId);
-            if (user == null)
-                return false;
-
-            if (string.IsNullOrWhiteSpace(user.Email))
-                return false;
-
-            if (!user.EmailVerified)
-                return false;
-
-            if (!(user.EmailAlerts ?? true))
-                return false;
-
-            return true;
+                        if (shouldNotify)
+                        {
+                            _emailService.SendScanCompletedEmail(member.Email, resolvedProjectName, DateTime.UtcNow, resultUrl);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send scan notifications for project {ProjectId}", projectId);
+                }
+            });
         }
 
         private string ResolveProjectName(string? projectId, string? fallbackName)

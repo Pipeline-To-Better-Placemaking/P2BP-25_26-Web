@@ -1,7 +1,8 @@
+<p-toast></p-toast>
 <p-card header="User Settings">
   <div class="settings-grid">
 
-    <!-- Profile + Notifications -->
+    <!-- Profile -->
     <div class="col">
       <p-card header="Profile" class="subcard">
         <div class="settings-form">
@@ -25,7 +26,7 @@
             label="Save"
             icon="pi pi-save"
             [loading]="saving"
-            (onClick)="save()"> 
+            (onClick)="save()">
           </p-button>
 
           <p-message
@@ -42,37 +43,9 @@
 
         </div>
       </p-card>
-
-      <p-card header="Notifications" class="subcard">
-        <div class="settings-form">
-          <p-checkbox
-            inputId="emailAlerts"
-            [binary]="true"
-            [(ngModel)]="notifications.emailAlerts"
-            (ngModelChange)="saveNotifications()">
-          </p-checkbox>
-          <label for="emailAlerts">Email alerts</label>
-
-          <p-checkbox
-            inputId="scanCompletion"
-            [binary]="true"
-            [(ngModel)]="notifications.scanCompletionAlerts"
-            (ngModelChange)="saveNotifications()">
-          </p-checkbox>
-          <label for="scanCompletion">Scan completion alerts</label>
-
-          <p-checkbox
-            inputId="changeDetection"
-            [binary]="true"
-            [(ngModel)]="notifications.changeDetectionAlerts"
-            (ngModelChange)="saveNotifications()">
-          </p-checkbox>
-          <label for="changeDetection">Change detection alerts</label>
-        </div>
-      </p-card>
     </div>
 
-    <!-- Change Password + Projects -->
+    <!-- Change Password -->
     <div class="col">
       <p-card header="Change Password" class="subcard">
         <div class="settings-form">
@@ -156,29 +129,64 @@
 
         </div>
       </p-card>
-
-      <p-card header="Assigned Projects" class="subcard">
-        <p-table [value]="assignedProjects" [scrollable]="true" scrollHeight="260px">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Project</th>
-              <th>Role</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-row>
-            <tr>
-              <td>{{ row.name }}</td>
-              <td><p-tag [value]="row.role"></p-tag></td>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="emptymessage">
-            <tr>
-              <td colspan="2" class="text-center text-sm text-surface-500">No projects assigned.</td>
-            </tr>
-          </ng-template>
-        </p-table>
-      </p-card>
     </div>
 
   </div>
+
+  <!-- Full-width notifications table below the two-column grid -->
+  <p-card header="Notifications Per Assigned Project" class="subcard">
+    <p-table [value]="assignedProjects">
+      <ng-template pTemplate="header">
+        <tr>
+          <th rowspan="2">Project</th>
+          <th rowspan="2">Role</th>
+          <th colspan="3" class="text-center" style="font-weight:700">Scan Notifications</th>
+          <th colspan="3" class="text-center" style="font-weight:700">System Notifications</th>
+        </tr>
+        <tr>
+          <th>Own Scan</th>
+          <th>Others' Scans</th>
+          <th>Scheduled</th>
+          <th>On/Off</th>
+          <th>Health</th>
+          <th>Email PDF</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td>{{ row.name }}</td>
+          <td><p-tag [value]="row.role"></p-tag></td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.notifyOnOwnScan"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.notifyOnOthersScan"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.notifyOnScheduledScan"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.notifyOnSystemToggle"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.notifyOnHealthAlert"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+          <td>
+            <p-checkbox [binary]="true" [(ngModel)]="row.emailPdfOnSystemOff"
+              (ngModelChange)="onNotificationPrefChange(row)"></p-checkbox>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="8" class="text-center text-sm text-surface-500">No projects assigned.</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
 </p-card>

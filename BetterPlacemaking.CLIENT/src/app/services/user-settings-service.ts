@@ -7,8 +7,15 @@ type UserSettingsDto = {
   FirstName?: string;
   LastName?: string;
   EmailAlerts?: boolean;
-  ScanCompletionAlerts?: boolean;
-  ChangeDetectionAlerts?: boolean;
+};
+
+export type ProjectNotificationPrefsDto = {
+  NotifyOnOwnScan: boolean;
+  NotifyOnOthersScan: boolean;
+  NotifyOnScheduledScan: boolean;
+  NotifyOnSystemToggle: boolean;
+  NotifyOnHealthAlert: boolean;
+  EmailPdfOnSystemOff: boolean;
 };
 
 @Injectable({ providedIn: 'root' })
@@ -23,5 +30,9 @@ export class UserSettingsService {
 
   updateMySettings(dto: UserSettingsDto): Observable<void> {
     return this.http.patch<void>(`${this.baseUrl}/api/User/me/settings`, dto);
+  }
+
+  updateProjectNotificationPrefs(projectId: string, dto: ProjectNotificationPrefsDto): Observable<void> {
+    return this.http.patch<void>(`${this.baseUrl}/api/User/me/projects/${projectId}/notifications`, dto);
   }
 }

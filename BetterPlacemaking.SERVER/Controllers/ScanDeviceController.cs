@@ -13,10 +13,12 @@ namespace BetterPlacemaking.Controllers
     [Authorize(Policy = "DeviceApiKey")]
     public sealed class ScanDeviceController(
         ScanService scanService,
-        ScanCompleteVisualizerIngestService scanIngest) : ControllerBase
+        ScanCompleteVisualizerIngestService scanIngest,
+        NotificationService notificationService) : ControllerBase
     {
         private readonly ScanService _scanService = scanService;
         private readonly ScanCompleteVisualizerIngestService _scanIngest = scanIngest;
+        private readonly NotificationService _notificationService = notificationService;
 
         [HttpGet("next-pending")]
         public IActionResult GetNextPending()
@@ -71,6 +73,16 @@ namespace BetterPlacemaking.Controllers
 
             var scan = _scanService.GetScan(device.ProjectId, device.Id, scanId);
             await _scanIngest.TryIngestFromScanDocumentAsync(scan, cancellationToken).ConfigureAwait(false);
+
+            if (body.Status?.Trim().Equals("complete", StringComparison.OrdinalIgnoreCase) == true
+                && !string.IsNullOrWhiteSpace(device.ProjectId))
+            {
+                var initiatedBy = scan?.TryGetValue("InitiatedByUserId", out var uid) == true ? uid?.ToString() : null;
+                if (!string.IsNullOrWhiteSpace(initiatedBy))
+                {
+                    _notificationService.NotifyScanCompleted(initiatedBy, device.ProjectId);
+                }
+            }
 
             return NoContent();
         }

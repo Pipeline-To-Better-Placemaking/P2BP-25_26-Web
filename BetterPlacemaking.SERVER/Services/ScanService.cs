@@ -37,7 +37,7 @@ namespace BetterPlacemaking.Services
                 .FirstOrDefault();
         }
 
-        public object CreateScan(string projectId, string deviceId)
+        public object CreateScan(string projectId, string deviceId, string? initiatedByUserId = null)
         {
             var collection = _db
                 .Collection("projects")
@@ -53,7 +53,8 @@ namespace BetterPlacemaking.Services
                 { "StartedAt", null },
                 { "FinishedAt", null },
                 { "ObjUrl", null },
-                { "Error", null }
+                { "Error", null },
+                { "InitiatedByUserId", initiatedByUserId }
             };
 
             var docRef = collection.Document();

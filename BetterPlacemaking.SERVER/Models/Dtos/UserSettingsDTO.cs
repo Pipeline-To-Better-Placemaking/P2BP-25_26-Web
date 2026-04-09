@@ -6,6 +6,4 @@ public class UserSettingsDto
     public string? LastName { get; set; }
 
     public bool? EmailAlerts { get; set; }
-    public bool? ScanCompletionAlerts { get; set; }
-    public bool? ChangeDetectionAlerts { get; set; }
 }

@@ -59,18 +59,6 @@ namespace BetterPlacemaking.Services
             );
         }
 
-        public void SendChangeDetectedEmail(string toEmail, string projectName, DateTime completedAtUtc, string resultUrl)
-        {
-            SendNotificationEmail(
-                toEmail,
-                "Change Detected",
-                "Change Detected",
-                projectName,
-                completedAtUtc,
-                resultUrl
-            );
-        }
-
         private void SendNotificationEmail(
             string toEmail,
             string subject,

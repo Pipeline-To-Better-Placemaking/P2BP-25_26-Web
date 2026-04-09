@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
@@ -17,7 +18,8 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
     {
         try
         {
-            var result = _scheduleService.CreateSchedule(projectId, schedule);
+            var userId = ResolveCurrentUserId();
+            var result = _scheduleService.CreateSchedule(projectId, schedule, userId);
             return Ok(result);
         }
         catch (Exception)
@@ -66,5 +68,14 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
         {
             return Problem("Failed to update scan schedule.");
         }
+    }
+
+    private string? ResolveCurrentUserId()
+    {
+        return
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue("userId") ??
+            User.FindFirstValue("uid") ??
+            User.FindFirstValue("id");
     }
 }

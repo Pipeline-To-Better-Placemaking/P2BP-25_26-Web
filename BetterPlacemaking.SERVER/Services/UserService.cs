@@ -109,8 +109,6 @@ namespace BetterPlacemaking.Services
             }
 
             if (dto.EmailAlerts.HasValue) updates["EmailAlerts"] = dto.EmailAlerts.Value;
-            if (dto.ScanCompletionAlerts.HasValue) updates["ScanCompletionAlerts"] = dto.ScanCompletionAlerts.Value;
-            if (dto.ChangeDetectionAlerts.HasValue) updates["ChangeDetectionAlerts"] = dto.ChangeDetectionAlerts.Value;
 
             if (updates.Count == 0) return;
 
@@ -128,8 +126,6 @@ namespace BetterPlacemaking.Services
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 EmailAlerts = user.EmailAlerts,
-                ScanCompletionAlerts = user.ScanCompletionAlerts,
-                ChangeDetectionAlerts = user.ChangeDetectionAlerts,
             };
         }
 
@@ -189,11 +185,24 @@ namespace BetterPlacemaking.Services
                         assignmentMap[member.Id] = assignments;
                     }
 
+                    member.TryGetValue("notifyOnOwnScan", out bool notifyOwn);
+                    member.TryGetValue("notifyOnOthersScan", out bool notifyOthers);
+                    member.TryGetValue("notifyOnScheduledScan", out bool notifyScheduled);
+                    member.TryGetValue("notifyOnSystemToggle", out bool notifyToggle);
+                    member.TryGetValue("notifyOnHealthAlert", out bool notifyHealth);
+                    member.TryGetValue("emailPdfOnSystemOff", out bool emailPdf);
+
                     assignments.Add(new ProjectRoleAssignmentDto
                     {
                         ProjectId = project.Id,
                         ProjectName = project.Title,
-                        Roles = normalizedRoles
+                        Roles = normalizedRoles,
+                        NotifyOnOwnScan = notifyOwn,
+                        NotifyOnOthersScan = notifyOthers,
+                        NotifyOnScheduledScan = notifyScheduled,
+                        NotifyOnSystemToggle = notifyToggle,
+                        NotifyOnHealthAlert = notifyHealth,
+                        EmailPdfOnSystemOff = emailPdf
                     });
                 }
             }
@@ -256,7 +265,7 @@ namespace BetterPlacemaking.Services
                     ["roles"] = roles,
                     ["authzVersion"] = currentVersion + 1,
                     ["updatedAt"] = Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc))
-                }).Wait();
+                }, SetOptions.MergeAll).Wait();
             }
 
             return true;
@@ -346,10 +355,93 @@ namespace BetterPlacemaking.Services
                 ["roles"] = new[] { normalizedRole },
                 ["authzVersion"] = currentVersion + 1,
                 ["updatedAt"] = Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc))
-            }).Wait();
+            }, SetOptions.MergeAll).Wait();
 
             return true;
         }
 
+        public bool UpdateProjectNotificationPrefs(string userId, string projectId, ProjectNotificationPrefsUpdateDto dto)
+        {
+            var memberDocRef = _db.Collection("projects")
+                .Document(projectId)
+                .Collection("members")
+                .Document(userId);
+
+            var snap = memberDocRef.GetSnapshotAsync().Result;
+            if (!snap.Exists) return false;
+
+            memberDocRef.UpdateAsync(new Dictionary<string, object>
+            {
+                ["notifyOnOwnScan"] = dto.NotifyOnOwnScan,
+                ["notifyOnOthersScan"] = dto.NotifyOnOthersScan,
+                ["notifyOnScheduledScan"] = dto.NotifyOnScheduledScan,
+                ["notifyOnSystemToggle"] = dto.NotifyOnSystemToggle,
+                ["notifyOnHealthAlert"] = dto.NotifyOnHealthAlert,
+                ["emailPdfOnSystemOff"] = dto.EmailPdfOnSystemOff,
+            }).Wait();
+            return true;
+        }
+
+        public List<ProjectMemberNotificationInfo> GetProjectMembersForNotification(string projectId)
+        {
+            var members = _db.Collection("projects")
+                .Document(projectId)
+                .Collection("members")
+                .GetSnapshotAsync()
+                .Result
+                .Documents;
+
+            var results = new List<ProjectMemberNotificationInfo>();
+
+            foreach (var member in members)
+            {
+                var userId = member.Id;
+                if (string.IsNullOrWhiteSpace(userId))
+                    continue;
+
+                var userSnap = _db.Collection(collectionName).Document(userId).GetSnapshotAsync().Result;
+                if (!userSnap.Exists)
+                    continue;
+
+                var user = userSnap.ConvertTo<User>();
+
+                member.TryGetValue("notifyOnOwnScan", out bool notifyOwn);
+                member.TryGetValue("notifyOnOthersScan", out bool notifyOthers);
+                member.TryGetValue("notifyOnScheduledScan", out bool notifyScheduled);
+                member.TryGetValue("notifyOnSystemToggle", out bool notifyToggle);
+                member.TryGetValue("notifyOnHealthAlert", out bool notifyHealth);
+                member.TryGetValue("emailPdfOnSystemOff", out bool emailPdf);
+
+                results.Add(new ProjectMemberNotificationInfo
+                {
+                    UserId = userId,
+                    Email = user.Email ?? "",
+                    EmailVerified = user.EmailVerified,
+                    EmailAlerts = user.EmailAlerts ?? true,
+                    NotifyOnOwnScan = notifyOwn,
+                    NotifyOnOthersScan = notifyOthers,
+                    NotifyOnScheduledScan = notifyScheduled,
+                    NotifyOnSystemToggle = notifyToggle,
+                    NotifyOnHealthAlert = notifyHealth,
+                    EmailPdfOnSystemOff = emailPdf,
+                });
+            }
+
+            return results;
+        }
+    }
+
+    public class ProjectMemberNotificationInfo
+    {
+        public string UserId { get; set; } = "";
+        public string Email { get; set; } = "";
+        public bool EmailVerified { get; set; }
+        public bool EmailAlerts { get; set; }
+        public bool NotifyOnOwnScan { get; set; }
+        public bool NotifyOnOthersScan { get; set; }
+        public bool NotifyOnScheduledScan { get; set; }
+        public bool NotifyOnSystemToggle { get; set; }
+        public bool NotifyOnHealthAlert { get; set; }
+        public bool EmailPdfOnSystemOff { get; set; }
     }
 }

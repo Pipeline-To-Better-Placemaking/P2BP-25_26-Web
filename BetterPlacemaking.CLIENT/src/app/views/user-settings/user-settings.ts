@@ -14,6 +14,8 @@ import { MessageModule } from 'primeng/message';
 import { ListboxModule } from 'primeng/listbox';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
+import { ToastModule } from 'primeng/toast';
+import { MessageService } from 'primeng/api';
 
 import { UserSettingsService } from '../../services/user-settings-service';
 import { PasswordService } from '../../services/password-service';
@@ -39,7 +41,9 @@ import { UsersService } from '../../services/users-service';
     ListboxModule,
     TableModule,
     TagModule,
+    ToastModule,
   ],
+  providers: [MessageService],
 })
 export class UserSettings implements OnInit {
   private static readonly PROFILE_DRAFT_KEY = 'user_settings_profile_draft';
@@ -48,7 +52,8 @@ export class UserSettings implements OnInit {
     private userSettingsService: UserSettingsService,
     private passwordService: PasswordService,
     private authService: AuthService,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private messageService: MessageService
   ) {}
 
   saving = false;
@@ -68,12 +73,6 @@ export class UserSettings implements OnInit {
     { label: 'System', value: 'system' },
   ];
 
-  notifications = {
-    emailAlerts: true,
-    scanCompletionAlerts: false,
-    changeDetectionAlerts: true,
-  };
-
   password = {
     current: '',
     new: '',
@@ -83,7 +82,17 @@ export class UserSettings implements OnInit {
   passwordError = '';
   passwordSuccess = false;
 
-  assignedProjects: { name: string; role: string }[] = [];
+  assignedProjects: {
+    projectId: string;
+    name: string;
+    role: string;
+    notifyOnOwnScan: boolean;
+    notifyOnOthersScan: boolean;
+    notifyOnScheduledScan: boolean;
+    notifyOnSystemToggle: boolean;
+    notifyOnHealthAlert: boolean;
+    emailPdfOnSystemOff: boolean;
+  }[] = [];
 
   ngOnInit(): void {
     this.clearPassword();
@@ -100,11 +109,6 @@ export class UserSettings implements OnInit {
       next: (settings) => {
         this.model.firstName = settings.FirstName ?? this.model.firstName;
         this.model.lastName = settings.LastName ?? this.model.lastName;
-        this.notifications.emailAlerts = settings.EmailAlerts ?? this.notifications.emailAlerts;
-        this.notifications.scanCompletionAlerts =
-          settings.ScanCompletionAlerts ?? this.notifications.scanCompletionAlerts;
-        this.notifications.changeDetectionAlerts =
-          settings.ChangeDetectionAlerts ?? this.notifications.changeDetectionAlerts;
         this.saveProfileDraft();
       },
       error: (err) => {
@@ -126,18 +130,9 @@ export class UserSettings implements OnInit {
     }
 
     this.saving = true;
-    const payload: {
-      FirstName: string;
-      LastName: string;
-      EmailAlerts: boolean;
-      ScanCompletionAlerts: boolean;
-      ChangeDetectionAlerts: boolean;
-    } = {
+    const payload = {
       FirstName: firstName,
       LastName: lastName,
-      EmailAlerts: this.notifications.emailAlerts,
-      ScanCompletionAlerts: this.notifications.scanCompletionAlerts,
-      ChangeDetectionAlerts: this.notifications.changeDetectionAlerts,
     };
 
     this.userSettingsService
@@ -157,13 +152,21 @@ export class UserSettings implements OnInit {
       });
   }
 
-  saveNotifications(): void {
-    this.userSettingsService.updateMySettings({
-      EmailAlerts: this.notifications.emailAlerts,
-      ScanCompletionAlerts: this.notifications.scanCompletionAlerts,
-      ChangeDetectionAlerts: this.notifications.changeDetectionAlerts,
+  onNotificationPrefChange(project: typeof this.assignedProjects[0]): void {
+    this.userSettingsService.updateProjectNotificationPrefs(project.projectId, {
+      NotifyOnOwnScan: project.notifyOnOwnScan,
+      NotifyOnOthersScan: project.notifyOnOthersScan,
+      NotifyOnScheduledScan: project.notifyOnScheduledScan,
+      NotifyOnSystemToggle: project.notifyOnSystemToggle,
+      NotifyOnHealthAlert: project.notifyOnHealthAlert,
+      EmailPdfOnSystemOff: project.emailPdfOnSystemOff,
     }).subscribe({
-      error: (err) => console.error('Failed to save notification settings', err),
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Notification preference updated.', life: 2000 });
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: "Couldn't save preference. Check your connection.", life: 4000 });
+      },
     });
   }
 
@@ -227,8 +230,15 @@ export class UserSettings implements OnInit {
         this.assignedProjects = mine.Assignments
           .filter((a) => a.Roles?.length > 0)
           .map((a) => ({
+            projectId: a.ProjectId || '',
             name: a.ProjectName || a.ProjectId || '(unknown)',
             role: a.Roles[0],
+            notifyOnOwnScan: a.NotifyOnOwnScan ?? false,
+            notifyOnOthersScan: a.NotifyOnOthersScan ?? false,
+            notifyOnScheduledScan: a.NotifyOnScheduledScan ?? false,
+            notifyOnSystemToggle: a.NotifyOnSystemToggle ?? false,
+            notifyOnHealthAlert: a.NotifyOnHealthAlert ?? false,
+            emailPdfOnSystemOff: a.EmailPdfOnSystemOff ?? false,
           }));
       },
       error: (err) => console.error('Failed to load assigned projects', err),

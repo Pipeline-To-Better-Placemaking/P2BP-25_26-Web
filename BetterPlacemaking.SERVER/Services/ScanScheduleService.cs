@@ -10,10 +10,11 @@ public class ScanScheduleService(FirestoreDb db)
     private CollectionReference GetCollection(string projectId) =>
         _db.Collection("projects").Document(projectId).Collection("scan_schedules");
 
-    public object CreateSchedule(string projectId, ScanSchedule schedule)
+    public object CreateSchedule(string projectId, ScanSchedule schedule, string? createdByUserId = null)
     {
         var collection = GetCollection(projectId);
         schedule.CreatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc));
+        schedule.CreatedByUserId = createdByUserId;
         var docRef = collection.Document();
         docRef.SetAsync(schedule).Wait();
         return new { Id = docRef.Id };

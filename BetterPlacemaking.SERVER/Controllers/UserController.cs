@@ -225,6 +225,24 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+		[HttpPatch("me/projects/{projectId}/notifications")]
+		public IActionResult UpdateProjectNotificationPrefs(string projectId, [FromBody] ProjectNotificationPrefsUpdateDto dto)
+		{
+			try
+			{
+				var userId = ResolveCurrentUserId();
+				if (string.IsNullOrWhiteSpace(userId))
+					return Unauthorized("Missing user id claim.");
+
+				var success = _userService.UpdateProjectNotificationPrefs(userId, projectId, dto);
+				return success ? NoContent() : NotFound();
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while updating notification preferences.");
+			}
+		}
+
 		private string? ResolveCurrentUserId()
 		{
 			return

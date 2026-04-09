@@ -5,6 +5,12 @@ namespace BetterPlacemaking.Models.Dtos
         public string? ProjectId { get; set; }
         public string? ProjectName { get; set; }
         public List<string> Roles { get; set; } = [];
+        public bool NotifyOnOwnScan { get; set; }
+        public bool NotifyOnOthersScan { get; set; }
+        public bool NotifyOnScheduledScan { get; set; }
+        public bool NotifyOnSystemToggle { get; set; }
+        public bool NotifyOnHealthAlert { get; set; }
+        public bool EmailPdfOnSystemOff { get; set; }
     }
 
     public class UserProjectRoleAssignmentsDto

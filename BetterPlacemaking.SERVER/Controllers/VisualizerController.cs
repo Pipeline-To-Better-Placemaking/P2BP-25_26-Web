@@ -596,7 +596,7 @@ public class VisualizerController : ControllerBase
         try
         {
             var userId = ResolveCurrentUserId();
-            if (string.IsNullOrWhiteSpace(userId))
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(projectId))
                 return;
 
             _notificationService.NotifyScanCompleted(userId, projectId, projectName);

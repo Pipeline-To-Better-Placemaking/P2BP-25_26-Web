@@ -1,4 +1,5 @@
 //scan history / per-project scan records, not the command queue
+using System.Security.Claims;
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,10 +11,12 @@ namespace BetterPlacemaking.Controllers
 	[Authorize(Policy = "UserJwt")]
 	public class ScanController(
 		ScanService scanService,
-		ScanCompleteVisualizerIngestService scanIngest) : ControllerBase
+		ScanCompleteVisualizerIngestService scanIngest,
+		NotificationService notificationService) : ControllerBase
 	{
 		private readonly ScanService _scanService = scanService;
 		private readonly ScanCompleteVisualizerIngestService _scanIngest = scanIngest;
+		private readonly NotificationService _notificationService = notificationService;
 
 		[HttpPost("{projectId}/{deviceId}")]
 		public IActionResult StartScan(string projectId, string deviceId)
@@ -23,7 +26,8 @@ namespace BetterPlacemaking.Controllers
 
 			try
 			{
-				var response = _scanService.CreateScan(projectId, deviceId);
+				var userId = ResolveCurrentUserId();
+				var response = _scanService.CreateScan(projectId, deviceId, userId);
 				return Ok(response);
 			}
 			catch (Exception)
@@ -99,12 +103,30 @@ namespace BetterPlacemaking.Controllers
 				var scan = _scanService.GetScan(projectId, deviceId, scanId);
 				await _scanIngest.TryIngestFromScanDocumentAsync(scan, cancellationToken).ConfigureAwait(false);
 
+				if (request.Status?.Trim().Equals("complete", StringComparison.OrdinalIgnoreCase) == true)
+				{
+					var initiatedBy = scan?.TryGetValue("InitiatedByUserId", out var uid) == true ? uid?.ToString() : null;
+					if (!string.IsNullOrWhiteSpace(initiatedBy))
+					{
+						_notificationService.NotifyScanCompleted(initiatedBy, projectId);
+					}
+				}
+
 				return NoContent();
 			}
 			catch (Exception)
 			{
 				return Problem("An unexpected error occurred while updating the scan status.");
 			}
+		}
+
+		private string? ResolveCurrentUserId()
+		{
+			return
+				User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+				User.FindFirstValue("userId") ??
+				User.FindFirstValue("uid") ??
+				User.FindFirstValue("id");
 		}
 	}
 
