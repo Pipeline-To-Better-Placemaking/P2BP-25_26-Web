@@ -28,19 +28,22 @@ export class ProjectService {
 
   public addProject(project: ProjectDto): Observable<ProjectDto> {
     return this.http
-      .post<ProjectDto>(`${environment.apiBaseUrl}/api/project/create`, project)
+      .post<ProjectDto>(`${environment.apiBaseUrl}/api/project`, project)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to add')));
   }
 
-  public updateProject(project: ProjectDto): Observable<ProjectDto> {
+  public updateProject(project: ProjectDto): Observable<void> {
+    if (!project?.Id)
+      throw new Error('Project id is required for update');
+
     return this.http
-      .put<ProjectDto>(`${environment.apiBaseUrl}/api/project/update`, project)
+      .put<void>(`${environment.apiBaseUrl}/api/project/${project.Id}`, project)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to update')));
   }
 
   public deleteProject(id: string): Observable<void> {
     return this.http
-      .delete<void>(`${environment.apiBaseUrl}/api/project/delete?id=${id}`)
+      .delete<void>(`${environment.apiBaseUrl}/api/project/${id}`)
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to delete')));
   }
 }

@@ -51,8 +51,8 @@ namespace BetterPlacemaking.Controllers
             return Ok(ToDto(project));
         }
 
-        [HttpPost("create")]
-        [Authorize(Roles = "Admin")]
+        [HttpPost]
+        [AllowAnonymous]
         public IActionResult CreateProject([FromBody] ProjectRequest request)
         {
             var project = new Project
@@ -67,29 +67,30 @@ namespace BetterPlacemaking.Controllers
             return Ok(ToDto(project));
         }
 
-        [HttpPut("update")]
-        [Authorize(Roles = "Admin")]
-        public IActionResult UpdateProject([FromBody] Project request)
+        [HttpPut("{id}")]
+        [AllowAnonymous]
+        public IActionResult UpdateProject(string id, [FromBody] Project request)
         {
+            if (request == null)
+                return BadRequest();
+
+            request.Id = id;
             var success = _projectService.Update(request);
 
             if (!success)
-            {
                 return NotFound();
-            }
 
             return Ok();
         }
 
-        [HttpDelete("delete")]
-        [Authorize(Roles = "Admin")]
+        [HttpDelete("{id}")]
+        [AllowAnonymous]
         public IActionResult DeleteProject(string id)
         {
             var success = _projectService.Delete(id);
 
-            if (!success){
+            if (!success)
                 return NotFound();
-            }
 
             return Ok();
         }
