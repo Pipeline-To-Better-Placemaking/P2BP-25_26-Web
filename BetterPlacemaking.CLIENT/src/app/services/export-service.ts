@@ -6,11 +6,10 @@ import { jsPDF } from 'jspdf';
 import { ProjectService } from './project-service';
 import { DeviceService } from './device-service';
 import { ScanService } from './scan-service';
-import { BoardService } from './board-service';
+import { VisualizerService, LidarPoint3D } from './visualizer-service';
 import { ProjectDto } from '../models/ProjectDto';
 import { DeviceDto } from '../models/DeviceDto';
 import { ScanScheduleDto } from './scan-service';
-import { BoardLibraryItem } from '../models/BoardLibrary';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
@@ -22,7 +21,7 @@ export class ExportService {
     private projectService: ProjectService,
     private deviceService: DeviceService,
     private scanService: ScanService,
-    private boardService: BoardService
+    private visualizerService: VisualizerService
   ) {}
 
   exportProjectPdf(projectId: string): void {
@@ -30,11 +29,11 @@ export class ExportService {
       project: this.projectService.getProject(projectId),
       devices: this.deviceService.getDevices(),
       schedules: this.scanService.getSchedules(projectId),
-      boards: this.boardService.getLibrary().pipe(catchError(() => of([] as BoardLibraryItem[]))),
+      points: this.visualizerService.getPoints().pipe(catchError(() => of([] as LidarPoint3D[]))),
     }).subscribe({
-      next: ({ project, devices, schedules, boards }) => {
+      next: ({ project, devices, schedules, points }) => {
         const projectDevices = devices.filter(d => d.ProjectId === projectId);
-        this.generatePdf(project, projectDevices, schedules, boards);
+        this.generatePdf(project, projectDevices, schedules, points);
       },
       error: () => {
         this.generatePdf({ Id: projectId, Title: 'Unknown', Description: '', Location: '' }, [], [], []);
@@ -42,7 +41,7 @@ export class ExportService {
     });
   }
 
-  private async generatePdf(project: ProjectDto, devices: DeviceDto[], schedules: ScanScheduleDto[], boards: BoardLibraryItem[]): Promise<void> {
+  private async generatePdf(project: ProjectDto, devices: DeviceDto[], schedules: ScanScheduleDto[], points: LidarPoint3D[]): Promise<void> {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -210,74 +209,39 @@ export class ExportService {
       }
     }
 
-    // --- Board Library ---
+    // --- Point Cloud ---
     checkPage(30);
     y += 10;
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('Board Library', margin, y);
+    doc.text('Point Cloud', margin, y);
     y += 4;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120, 120, 120);
-    doc.text(`${boards.length} board(s) saved`, margin, y);
+    doc.text(`${points.length.toLocaleString()} point(s)`, margin, y);
     doc.setTextColor(0, 0, 0);
     y += 8;
 
-    if (boards.length === 0) {
+    if (points.length === 0) {
       doc.setFontSize(11);
-      doc.text('No boards in library.', margin, y);
+      doc.text('No point cloud data available.', margin, y);
       y += 10;
     } else {
-      const boardImageWidth = 60;
-      const boardImageMaxHeight = 60;
+      const imgWidth = contentWidth;
+      const imgHeight = 100;
 
-      for (const board of boards) {
-        const label = board.Nickname || `${board.Type} board`;
-        const dictLabel = board.Dictionary;
-        const sizeLabel = board.Type === 'charuco'
-          ? `${board.Cols}x${board.Rows} squares, marker ${board.MarkerSizeMm}mm`
-          : `Marker #${board.MarkerId}, ${board.MarkerSizeMm}mm`;
-
-        let pngDataUrl: string | null = null;
-        if (board.PreviewSvg) {
-          try {
-            pngDataUrl = await this.renderSvgToPng(board.PreviewSvg, 480, 480);
-          } catch { /* skip image if render fails */ }
-        }
-
-        const blockHeight = pngDataUrl ? Math.max(boardImageMaxHeight + 10, 30) : 24;
-        checkPage(blockHeight);
-
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text(label, margin, y);
-        y += 6;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`${dictLabel}  •  ${sizeLabel}`, margin, y);
-        y += 6;
-
-        if (pngDataUrl) {
-          const aspectRatio = board.Type === 'charuco' && board.Cols && board.Rows
-            ? board.Cols / board.Rows
-            : 1;
-          let imgW = boardImageWidth;
-          let imgH = imgW / aspectRatio;
-          if (imgH > boardImageMaxHeight) {
-            imgH = boardImageMaxHeight;
-            imgW = imgH * aspectRatio;
-          }
-
-          checkPage(imgH + 6);
-          doc.addImage(pngDataUrl, 'PNG', margin, y, imgW, imgH);
-          y += imgH + 6;
-        }
-
-        doc.setDrawColor(230, 230, 230);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 6;
-      }
+      try {
+        const pngDataUrl = this.renderPointCloudTopDown(points, imgWidth * 4, imgHeight * 4);
+        checkPage(imgHeight + 6);
+        doc.addImage(pngDataUrl, 'PNG', margin, y, imgWidth, imgHeight);
+        y += imgHeight + 4;
+        doc.setFontSize(8);
+        doc.setTextColor(120, 120, 120);
+        doc.text('Top-down view (XY projection)', margin, y);
+        doc.setTextColor(0, 0, 0);
+        y += 8;
+      } catch { /* skip image if render fails */ }
     }
 
     // --- Footer ---
@@ -347,32 +311,52 @@ export class ExportService {
     return new Date(ms).toLocaleString();
   }
 
-  private renderSvgToPng(svg: string, width: number, height: number): Promise<string> {
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const objectUrl = URL.createObjectURL(svgBlob);
+  private renderPointCloudTopDown(points: LidarPoint3D[], width: number, height: number): string {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
 
-    return new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/png'));
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error('Failed to load SVG'));
-      };
-      img.src = objectUrl;
-    });
+    // Dark background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, width, height);
+
+    // Compute bounds
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of points) {
+      if (p.X < minX) minX = p.X;
+      if (p.X > maxX) maxX = p.X;
+      if (p.Y < minY) minY = p.Y;
+      if (p.Y > maxY) maxY = p.Y;
+    }
+
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const pad = 20;
+    const drawW = width - pad * 2;
+    const drawH = height - pad * 2;
+
+    // Uniform scale to preserve aspect ratio
+    const scale = Math.min(drawW / rangeX, drawH / rangeY);
+    const offsetX = pad + (drawW - rangeX * scale) / 2;
+    const offsetY = pad + (drawH - rangeY * scale) / 2;
+
+    // Draw points
+    const pointSize = Math.max(1, Math.min(3, 800 / Math.sqrt(points.length)));
+    for (const p of points) {
+      const px = offsetX + (p.X - minX) * scale;
+      const py = offsetY + (p.Y - minY) * scale;
+
+      if (p.Color) {
+        ctx.fillStyle = p.Color;
+      } else {
+        const brightness = Math.round(140 + (p.Intensity ?? 0.5) * 115);
+        ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+      }
+
+      ctx.fillRect(px, py, pointSize, pointSize);
+    }
+
+    return canvas.toDataURL('image/png');
   }
 }
