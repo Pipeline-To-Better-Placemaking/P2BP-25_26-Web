@@ -23,11 +23,28 @@ namespace BetterPlacemaking.Models.Homography
         [FirestoreProperty]
         public string? LocalHomographyHash { get; set; }
 
+        // Firestore does not support nested arrays; store 3x3 matrices flattened (9 elements).
         [FirestoreProperty]
-        public List<List<double>>? LocalHomographyMatrix { get; set; }
+        public List<double>? LocalHomographyMatrixFlat { get; set; }
+
+        public List<List<double>>? LocalHomographyMatrix
+        {
+            get => LocalHomographyMatrixFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => LocalHomographyMatrixFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => LocalHomographyMatrixFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
-        public List<List<double>>? HLocalCanvas { get; set; }
+        public List<double>? HLocalCanvasFlat { get; set; }
+
+        public List<List<double>>? HLocalCanvas
+        {
+            get => HLocalCanvasFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => HLocalCanvasFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => HLocalCanvasFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public List<int>? SourceFrameSize { get; set; }

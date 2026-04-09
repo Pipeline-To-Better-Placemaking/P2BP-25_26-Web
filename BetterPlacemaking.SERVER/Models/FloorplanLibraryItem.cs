@@ -45,8 +45,17 @@ namespace BetterPlacemaking.Models
     [FirestoreData]
     public sealed class FloorplanCalibrationRecord
     {
+        // Firestore does not support nested arrays; flatten to [x0,y0, x1,y1, ...] and reconstruct on read.
         [FirestoreProperty]
-        public List<List<double>>? ReferencePoints { get; set; }
+        public List<double>? ReferencePointsFlat { get; set; }
+
+        public List<List<double>>? ReferencePoints
+        {
+            get => ReferencePointsFlat is { Count: >= 2 } flat && flat.Count % 2 == 0
+                ? Enumerable.Range(0, flat.Count / 2).Select(i => flat.GetRange(i * 2, 2)).ToList()
+                : null;
+            set => ReferencePointsFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public double ReferenceDistanceMm { get; set; }

@@ -57,17 +57,42 @@ namespace BetterPlacemaking.Models.Homography
         [FirestoreProperty]
         public double Scale { get; set; }
 
+        // Firestore does not support nested arrays; store 3x3 matrices flattened (9 elements).
         [FirestoreProperty]
-        public List<List<double>>? HLocalCanvas { get; set; }
+        public List<double>? HLocalCanvasFlat { get; set; }
+
+        public List<List<double>>? HLocalCanvas
+        {
+            get => HLocalCanvasFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => HLocalCanvasFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => HLocalCanvasFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public List<int>? LocalCanvasSize { get; set; }
 
         [FirestoreProperty]
-        public List<List<double>>? GlobalHomographyFloorplan { get; set; }
+        public List<double>? GlobalHomographyFloorplanFlat { get; set; }
+
+        public List<List<double>>? GlobalHomographyFloorplan
+        {
+            get => GlobalHomographyFloorplanFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => GlobalHomographyFloorplanFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => GlobalHomographyFloorplanFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
-        public List<List<double>>? GlobalHomography { get; set; }
+        public List<double>? GlobalHomographyFlat { get; set; }
+
+        public List<List<double>>? GlobalHomography
+        {
+            get => GlobalHomographyFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => GlobalHomographyFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => GlobalHomographyFlat = value?.SelectMany(r => r).ToList();
+        }
     }
 
     [FirestoreData]

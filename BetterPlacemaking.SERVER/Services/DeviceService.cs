@@ -274,6 +274,26 @@ namespace BetterPlacemaking.Services
             return Convert.ToHexString(bytes)[..16];
         }
 
+        private static bool ShouldClearIntrinsicsBeginCalibration(HealthReport report)
+        {
+            if (report.IntrinsicsCalibration == null || report.IntrinsicsCalibration.Count == 0)
+                return false;
+
+            var statuses = report.IntrinsicsCalibration.Values
+                .Select(state => (state?.Status ?? string.Empty).Trim().ToLowerInvariant())
+                .Where(status => !string.IsNullOrWhiteSpace(status))
+                .ToList();
+
+            if (statuses.Count == 0)
+                return false;
+
+            var hasInProgress = statuses.Any(status => status is "collecting" or "computing" or "running" or "in_progress" or "in-progress");
+            if (hasInProgress)
+                return false;
+
+            return statuses.Any(status => status is "done" or "failed" or "error");
+        }
+
         public Config? UpdateDeviceHealthReport(Device device, HealthReport healthReport)
         {
             if (device == null || string.IsNullOrWhiteSpace(device.Id))
@@ -360,15 +380,18 @@ namespace BetterPlacemaking.Services
             }
 
             // Clear one-shot trigger flags on first delivery.
-            // Snapshot which flags are true before clearing so this response delivers them as true.
+            // Intrinsics is different: keep BeginCalibration=true while calibration is in progress,
+            // and only clear when the heartbeat reports a terminal status.
             bool charucoBeginScanning = device.Config.CharucoBoard?.BeginScanning == true;
             bool arucoBeginScanning = device.Config.ArucoLock?.BeginScanning == true;
             bool intrinsicsBeginCalibration = device.Config.Intrinsics?.BeginCalibration == true;
+            bool clearIntrinsicsBeginCalibration =
+                intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
 
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (intrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
+            if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
             {
@@ -377,7 +400,8 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
-                if (device.Config.Intrinsics != null) device.Config.Intrinsics.BeginCalibration = false;
+                if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
+                    device.Config.Intrinsics.BeginCalibration = false;
 
                 if (TryGetCacheSuffixFromHashBase64(device.ApiKeyHash ?? "", out var flagSuffix))
                 {
@@ -393,8 +417,6 @@ namespace BetterPlacemaking.Services
                     device.Config.CharucoBoard.BeginScanning = true;
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
-                if (intrinsicsBeginCalibration && device.Config.Intrinsics != null)
-                    device.Config.Intrinsics.BeginCalibration = true;
             }
 
             return device.Config;

@@ -20,8 +20,17 @@ namespace BetterPlacemaking.Models.Homography
         [FirestoreProperty]
         public bool IsPerUnit { get; set; }
 
+        // Firestore does not support nested arrays; store 3x3 matrix flattened (9 elements).
         [FirestoreProperty]
-        public List<List<double>>? CameraMatrix { get; set; }
+        public List<double>? CameraMatrixFlat { get; set; }
+
+        public List<List<double>>? CameraMatrix
+        {
+            get => CameraMatrixFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => CameraMatrixFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => CameraMatrixFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public List<double>? DistortionCoefficients { get; set; }

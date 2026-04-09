@@ -14,8 +14,18 @@ namespace BetterPlacemaking.Models.Homography
         [FirestoreProperty]
         public string? CameraMac { get; set; }
 
+        // Firestore does not support nested arrays, so we store the matrix flattened (9 elements)
+        // and expose it as a 3x3 nested list for application use.
         [FirestoreProperty]
-        public List<List<double>>? Matrix { get; set; }  // 3x3 row-major
+        public List<double>? MatrixFlat { get; set; }
+
+        public List<List<double>>? Matrix
+        {
+            get => MatrixFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => MatrixFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => MatrixFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public List<int>? FrameSize { get; set; }  // [width, height]
@@ -53,8 +63,17 @@ namespace BetterPlacemaking.Models.Homography
         [FirestoreProperty]
         public string? SnapshotPath { get; set; }
 
+        // Same flattening strategy as Matrix above.
         [FirestoreProperty]
-        public List<List<double>>? CameraMatrix { get; set; }  // 3x3
+        public List<double>? CameraMatrixFlat { get; set; }
+
+        public List<List<double>>? CameraMatrix
+        {
+            get => CameraMatrixFlat is { Count: 9 }
+                ? Enumerable.Range(0, 3).Select(i => CameraMatrixFlat.GetRange(i * 3, 3)).ToList()
+                : null;
+            set => CameraMatrixFlat = value?.SelectMany(r => r).ToList();
+        }
 
         [FirestoreProperty]
         public List<double>? DistortionCoefficients { get; set; }
