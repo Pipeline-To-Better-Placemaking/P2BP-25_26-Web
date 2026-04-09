@@ -76,8 +76,15 @@ namespace BetterPlacemaking.BackgroundServices
             var fromUnix = new DateTimeOffset(yesterday, TimeSpan.Zero).ToUnixTimeSeconds();
             var toUnix = new DateTimeOffset(today, TimeSpan.Zero).ToUnixTimeSeconds();
 
-            _logger.LogInformation("Hangfire: running scheduled fusion for {Date:yyyy-MM-dd}", yesterday);
-            _fusionService.TriggerFusion(fromUnix, toUnix, "scheduled");
+            var fusionConfig = _fusionService.GetConfig();
+            if (string.IsNullOrWhiteSpace(fusionConfig.ProjectId))
+            {
+                _logger.LogWarning("Hangfire: skipping scheduled fusion — ProjectId not set in fusion config. Set it via PUT /api/fusion/config.");
+                return;
+            }
+
+            _logger.LogInformation("Hangfire: running scheduled fusion for {Date:yyyy-MM-dd} (project={ProjectId})", yesterday, fusionConfig.ProjectId);
+            _fusionService.TriggerFusion(fromUnix, toUnix, "scheduled", fusionConfig.ProjectId);
         }
     }
 }

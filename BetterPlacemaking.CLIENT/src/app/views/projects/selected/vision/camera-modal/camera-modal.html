@@ -45,14 +45,14 @@
 
     <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
       <div class="text-xs text-muted-color mb-1">Homography</div>
-      <p-tag severity="secondary" value="N/A" styleClass="mb-2" />
-      <div class="text-xs text-muted-color mt-1">Not in health report</div>
+      <p-tag [severity]="homographySeverity" [value]="homographyStatusLabel" styleClass="mb-2" />
+      <div class="text-xs text-muted-color mt-1">{{ homographyStatusDetail }}</div>
     </div>
 
     <div class="rounded-lg p-3 bg-surface-200 dark:bg-surface-700">
       <div class="text-xs text-muted-color mb-1">ArUco Lock</div>
-      <p-tag severity="secondary" value="Device-level" styleClass="mb-2" />
-      <div class="text-xs text-muted-color mt-1">See device card</div>
+      <p-tag [severity]="arucoSeverity" [value]="arucoStatusLabel" styleClass="mb-2" />
+      <div class="text-xs text-muted-color mt-1">{{ arucoStatusDetail }}</div>
     </div>
   </div>
 

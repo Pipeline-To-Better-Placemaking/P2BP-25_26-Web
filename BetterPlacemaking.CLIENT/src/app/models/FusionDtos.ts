@@ -20,10 +20,12 @@ export interface FusionConfigDto {
 export interface TriggerFusionDto {
   fromDateUnix: number;
   toDateUnix: number;
+  projectId?: string;
 }
 
 export interface UpdateFusionConfigDto {
   scheduledHourUtc: number;
   scheduledMinuteUtc: number;
   enabled: boolean;
+  projectId?: string;
 }

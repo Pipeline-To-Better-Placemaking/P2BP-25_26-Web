@@ -41,6 +41,7 @@ export class CameraModal implements OnInit, OnDestroy {
   mac = '';
   camInfo: CameraInfo | null = null;
   intrinsics: IntrinsicsCalibrationState | null = null;
+  homographyReady = false;
   allDevices: DeviceDto[] = [];
 
   nickname = '';
@@ -77,12 +78,14 @@ export class CameraModal implements OnInit, OnDestroy {
       mac?: string;
       camInfo?: CameraInfo;
       intrinsics?: IntrinsicsCalibrationState | null;
+      homographyReady?: boolean;
       allDevices?: DeviceDto[];
     };
     this.device = data.device ?? null;
     this.mac = data.mac ?? '';
     this.camInfo = data.camInfo ?? null;
     this.intrinsics = data.intrinsics ?? null;
+    this.homographyReady = data.homographyReady ?? false;
     this.allDevices = data.allDevices ?? (this.device ? [this.device] : []);
     this.nickname = localStorage.getItem(`cam-nickname-${this.mac}`) ?? '';
 
@@ -196,6 +199,49 @@ export class CameraModal implements OnInit, OnDestroy {
 
   get canRunHomography(): boolean {
     return this.intrinsicsStatus === 'done' && !!this.selectedBoard;
+  }
+
+  get homographyStatusLabel(): string {
+    if (this.homographyReady) return 'Ready';
+    if (this.homographyLoading || this.homographyTriggered) return 'Scanning';
+    return 'Missing';
+  }
+
+  get homographySeverity(): 'success' | 'info' | 'secondary' {
+    if (this.homographyReady) return 'success';
+    if (this.homographyLoading || this.homographyTriggered) return 'info';
+    return 'secondary';
+  }
+
+  get homographyStatusDetail(): string {
+    if (this.homographyReady) return 'Local homography found for this camera.';
+    if (this.homographyLoading || this.homographyTriggered) return 'Homography scan in progress.';
+    return 'No local homography found for this camera yet.';
+  }
+
+  get arucoStatus(): string {
+    return (this.device?.Config?.ArucoLock?.Status ?? 'unlocked').toLowerCase();
+  }
+
+  get arucoStatusLabel(): string {
+    if (this.arucoStatus === 'locked') return 'Locked';
+    if (this.arucoStatus === 'scanning') return 'Scanning';
+    if (this.arucoStatus === 'failed' || this.arucoStatus === 'error') return 'Failed';
+    return 'Unlocked';
+  }
+
+  get arucoSeverity(): 'success' | 'warn' | 'danger' | 'secondary' {
+    if (this.arucoStatus === 'locked') return 'success';
+    if (this.arucoStatus === 'scanning') return 'warn';
+    if (this.arucoStatus === 'failed' || this.arucoStatus === 'error') return 'danger';
+    return 'secondary';
+  }
+
+  get arucoStatusDetail(): string {
+    if (this.arucoStatus === 'locked') return 'Device origin is established.';
+    if (this.arucoStatus === 'scanning') return 'ArUco lock scan is in progress on this device.';
+    if (this.arucoStatus === 'failed' || this.arucoStatus === 'error') return 'Last ArUco lock scan failed.';
+    return 'Run from the device card to establish origin.';
   }
 
   get lastUpdatedLabel(): string {

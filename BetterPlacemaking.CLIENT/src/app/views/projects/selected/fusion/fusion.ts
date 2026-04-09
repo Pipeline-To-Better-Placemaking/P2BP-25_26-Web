@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { PanelModule } from 'primeng/panel';
@@ -35,6 +36,8 @@ const POLL_INTERVAL_MS = 6_000;
   styleUrls: ['./fusion.scss'],
 })
 export class Fusion implements OnInit, OnDestroy {
+  projectId = '';
+
   history: FusionRunDto[] = [];
   historyLoading = true;
   historyError = false;
@@ -48,11 +51,14 @@ export class Fusion implements OnInit, OnDestroy {
   private modalRef: DynamicDialogRef | null = null;
 
   constructor(
+    private readonly route: ActivatedRoute,
     private readonly fusionService: FusionService,
     private readonly dialogService: DialogService,
   ) {}
 
   ngOnInit(): void {
+    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+
     interval(POLL_INTERVAL_MS)
       .pipe(
         startWith(0),
@@ -109,7 +115,7 @@ export class Fusion implements OnInit, OnDestroy {
       modal: true,
       dismissableMask: true,
       closable: true,
-      data: {},
+      data: { projectId: this.projectId },
     });
 
     if (!ref) return;

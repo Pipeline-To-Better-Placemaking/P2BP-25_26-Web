@@ -51,5 +51,11 @@ export interface PuzzlePieceDto {
 export interface PuzzleWorkspaceResponseDto {
   ProjectId: string;
   PuzzlePieces: PuzzlePieceDto[];
+  LocalHomographies?: LocalHomographyWorkspaceDto[];
+}
+
+export interface LocalHomographyWorkspaceDto {
+  DeviceId: string;
+  CameraMac: string;
 }
 

@@ -18,7 +18,6 @@ import { BoardDetailModal } from './board-detail-modal/board-detail-modal';
 import { BoardService } from '../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../models/BoardLibrary';
 import { HomographyService } from '../../../../services/homography-service';
-import { forkJoin, of } from 'rxjs';
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 
 
@@ -63,6 +62,7 @@ export class Vision implements OnInit {
   puzzleReady = false;
   puzzlePiecesTotal = 0;
   puzzlePiecesReady = 0;
+  private homographyCameraKeys = new Set<string>();
   floorplans: FloorplanItem[] = [];
   floorplansLoading = false;
   uploadingFloorplan = false;
@@ -106,23 +106,36 @@ export class Vision implements OnInit {
   private checkLocalHomographies(): void {
     if (this.devices.length === 0) {
       this.hasLocalHomographies = false;
+      this.homographyCameraKeys.clear();
+      this.puzzleReady = false;
+      this.puzzlePiecesTotal = 0;
+      this.puzzlePiecesReady = 0;
       return;
     }
-    const checks = this.devices
-      .filter((d) => d.Id)
-      .map((d) => this.homographyService.hasLocalHomography(d.Id));
-    forkJoin(checks.length ? checks : [of(false)]).subscribe({
-      next: (results) => { this.hasLocalHomographies = results.some(Boolean); },
-      error: () => { this.hasLocalHomographies = false; },
-    });
 
     this.homographyService.getPuzzleWorkspace(this.projectId).subscribe({
       next: (workspace) => {
         this.puzzlePiecesTotal = workspace.PuzzlePieces.length;
         this.puzzlePiecesReady = workspace.PuzzlePieces.filter((p) => p.Status === 'ready').length;
         this.puzzleReady = this.puzzlePiecesTotal > 0 && this.puzzlePiecesTotal === this.puzzlePiecesReady;
+
+        this.homographyCameraKeys = new Set(
+          (workspace.LocalHomographies ?? [])
+            .filter((h) => !!h.DeviceId && !!h.CameraMac)
+            .map((h) => this.buildCameraKey(h.DeviceId, h.CameraMac)),
+        );
+
+        this.hasLocalHomographies =
+          this.allCameras.length > 0 &&
+          this.statHomographiesDone === this.allCameras.length;
       },
-      error: () => { this.puzzleReady = false; },
+      error: () => {
+        this.puzzleReady = false;
+        this.puzzlePiecesTotal = 0;
+        this.puzzlePiecesReady = 0;
+        this.homographyCameraKeys.clear();
+        this.hasLocalHomographies = false;
+      },
     });
   }
 
@@ -218,7 +231,11 @@ export class Vision implements OnInit {
   }
 
   get statArUcoLocked(): boolean {
-    return this.devices.some((d) => d.Config?.ArucoLock?.Status === 'locked');
+    return this.devices.some((d) => this.getArucoStatus(d) === 'locked');
+  }
+
+  get statHomographiesDone(): number {
+    return this.allCameras.filter((cam) => this.hasHomography(cam)).length;
   }
 
   get camsNeedingAttention(): number {
@@ -268,6 +285,30 @@ export class Vision implements OnInit {
     return 'secondary';
   }
 
+  homographySeverity(cam: CameraEntry): 'success' | 'secondary' {
+    return this.hasHomography(cam) ? 'success' : 'secondary';
+  }
+
+  homographyTooltip(cam: CameraEntry): string {
+    return this.hasHomography(cam) ? 'Homography ready' : 'Homography missing';
+  }
+
+  arucoSeverity(cam: CameraEntry): 'success' | 'warn' | 'danger' | 'secondary' {
+    const status = this.getArucoStatus(cam.device);
+    if (status === 'locked') return 'success';
+    if (status === 'scanning') return 'warn';
+    if (status === 'failed' || status === 'error') return 'danger';
+    return 'secondary';
+  }
+
+  arucoTooltip(cam: CameraEntry): string {
+    const status = this.getArucoStatus(cam.device);
+    if (status === 'locked') return 'ArUco lock ready';
+    if (status === 'scanning') return 'ArUco lock scanning';
+    if (status === 'failed' || status === 'error') return 'ArUco lock failed';
+    return 'ArUco lock unlocked';
+  }
+
   isOnline(device: DeviceDto): boolean {
     return this.isHeartbeatFresh(device);
   }
@@ -315,6 +356,19 @@ export class Vision implements OnInit {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  private hasHomography(cam: CameraEntry): boolean {
+    if (!cam.device?.Id) return false;
+    return this.homographyCameraKeys.has(this.buildCameraKey(cam.device.Id, cam.mac));
+  }
+
+  private buildCameraKey(deviceId: string, mac: string): string {
+    return `${deviceId.trim().toLowerCase()}|${mac.trim().toLowerCase()}`;
+  }
+
+  private getArucoStatus(device: DeviceDto): string {
+    return (device.Config?.ArucoLock?.Status ?? 'unlocked').trim().toLowerCase();
+  }
+
   openCameraModal(cam: CameraEntry): void {
     const label = cam.nickname || `Camera ${cam.index}`;
     const ref = this.dialogService.open(CameraModal, {
@@ -323,7 +377,14 @@ export class Vision implements OnInit {
       modal: true,
       dismissableMask: true,
       closable: true,
-      data: { device: cam.device, mac: cam.mac, camInfo: cam.info, intrinsics: cam.intrinsics, allDevices: this.devices },
+      data: {
+        device: cam.device,
+        mac: cam.mac,
+        camInfo: cam.info,
+        intrinsics: cam.intrinsics,
+        allDevices: this.devices,
+        homographyReady: this.hasHomography(cam),
+      },
     });
     this.camRef = ref;
     ref?.onClose.subscribe(() => this.loadDevices());

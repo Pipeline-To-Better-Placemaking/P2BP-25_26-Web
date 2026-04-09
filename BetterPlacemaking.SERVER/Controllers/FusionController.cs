@@ -27,7 +27,7 @@ namespace BetterPlacemaking.Controllers
 
             try
             {
-                var run = _fusionService.TriggerFusion(dto.FromDateUnix, dto.ToDateUnix, "manual");
+                var run = _fusionService.TriggerFusion(dto.FromDateUnix, dto.ToDateUnix, "manual", dto.ProjectId);
                 return Ok(run);
             }
             catch (Exception)

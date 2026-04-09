@@ -119,6 +119,7 @@ namespace BetterPlacemaking.Controllers
 				if (config == null)
 					return NotFound("Device not found");
 
+				config.ProjectId = device.ProjectId;
 				return Ok(config);
 			}
 			catch (Exception)

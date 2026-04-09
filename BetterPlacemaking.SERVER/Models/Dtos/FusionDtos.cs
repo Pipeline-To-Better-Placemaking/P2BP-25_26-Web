@@ -10,23 +10,27 @@ namespace BetterPlacemaking.Models.Dtos.Fusion
         double? CompletedAtUnix,
         int? RecordsFused,
         string? ErrorMessage,
-        string? OutputGcsPath
+        string? OutputGcsPath = null,
+        string? ProjectId = null
     );
 
     public record FusionConfigDto(
         int ScheduledHourUtc,
         int ScheduledMinuteUtc,
-        bool Enabled
+        bool Enabled,
+        string? ProjectId = null
     );
 
     public record TriggerFusionDto(
         double FromDateUnix,
-        double ToDateUnix
+        double ToDateUnix,
+        string? ProjectId = null
     );
 
     public record UpdateFusionConfigDto(
         int ScheduledHourUtc,
         int ScheduledMinuteUtc,
-        bool Enabled
+        bool Enabled,
+        string? ProjectId = null
     );
 }

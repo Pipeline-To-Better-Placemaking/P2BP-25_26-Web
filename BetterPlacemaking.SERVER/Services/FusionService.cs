@@ -43,7 +43,8 @@ namespace BetterPlacemaking.Services
         public FusionRunDto TriggerFusion(
             double fromUnix,
             double toUnix,
-            string triggeredBy = "manual")
+            string triggeredBy = "manual",
+            string? projectId = null)
         {
             var run = new FusionRun
             {
@@ -52,6 +53,7 @@ namespace BetterPlacemaking.Services
                 FromDateUnix  = fromUnix,
                 ToDateUnix    = toUnix,
                 StartedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
+                ProjectId     = projectId,
             };
 
             var docRef = _db.Collection(ColFusionRuns).AddAsync(run).Result;
@@ -72,24 +74,26 @@ namespace BetterPlacemaking.Services
 
                     var result = await runner.RunAsync(new FusionRequest
                     {
-                        From = fromUtc,
-                        To   = toUtc,
+                        From                = fromUtc,
+                        To                  = toUtc,
+                        InputStorageFolder  = projectId != null ? $"vision/{projectId}/tracks-raw" : null,
+                        OutputStorageFolder = projectId != null ? $"vision/{projectId}/fused"      : null,
                     });
 
                     if (!result.Success)
                         throw new InvalidOperationException(result.Message);
 
-                    // Build the output GCS path the same way FusionRunner does
                     string fromStr   = fromUtc.Date.ToString("yyyyMMdd");
                     string toStr     = toUtc.Date.ToString("yyyyMMdd");
+                    string folder    = projectId != null ? $"vision/{projectId}/fused" : "vision/fused";
                     string outputKey = fromStr == toStr
-                        ? $"vision/fused/fused_tracks-{fromStr}.json"
-                        : $"vision/fused/fused_tracks-{fromStr}_{toStr}.json";
+                        ? $"{folder}/fused_tracks-{fromStr}.json"
+                        : $"{folder}/fused_tracks-{fromStr}_{toStr}.json";
 
                     await docRef.UpdateAsync(new Dictionary<string, object>
                     {
                         { "Status",          "success" },
-                        { "RecordsFused",    0 },          // FusionExporter doesn't return count yet
+                        { "RecordsFused",    0 },
                         { "OutputGcsPath",   outputKey },
                         { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                     });
@@ -138,7 +142,7 @@ namespace BetterPlacemaking.Services
                 return new FusionConfigDto(21, 0, true);
 
             var cfg = snap.ConvertTo<FusionConfig>();
-            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled);
+            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled, cfg.ProjectId);
         }
 
         public FusionConfigDto UpdateConfig(UpdateFusionConfigDto dto)
@@ -153,11 +157,16 @@ namespace BetterPlacemaking.Services
                 ScheduledHourUtc   = dto.ScheduledHourUtc,
                 ScheduledMinuteUtc = dto.ScheduledMinuteUtc,
                 Enabled            = dto.Enabled,
+                ProjectId          = dto.ProjectId,
                 UpdatedAtUnix      = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
             };
 
             _db.Collection(ColFusionConfig).Document(ConfigDocId).SetAsync(cfg).Wait();
-            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled);
+            _logger.LogInformation(
+                "Fusion config updated: {Hour:D2}:{Minute:D2} UTC enabled={Enabled} project={ProjectId}",
+                dto.ScheduledHourUtc, dto.ScheduledMinuteUtc, dto.Enabled, dto.ProjectId ?? "<none>");
+
+            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled, cfg.ProjectId);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -172,7 +181,8 @@ namespace BetterPlacemaking.Services
             r.CompletedAtUnix,
             r.RecordsFused,
             r.ErrorMessage,
-            r.OutputGcsPath
+            r.OutputGcsPath,
+            r.ProjectId
         );
     }
 }
