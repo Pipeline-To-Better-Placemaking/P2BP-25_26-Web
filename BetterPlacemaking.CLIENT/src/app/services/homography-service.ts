@@ -32,6 +32,15 @@ export class HomographyService {
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to save puzzle')));
   }
 
+  public getSnapshotUrl(deviceId: string, cameraMac: string): Observable<string | null> {
+    return this.http
+      .get<{ SnapshotUrl: string | null }>(`${environment.apiBaseUrl}/api/homography/snapshot-url/${deviceId}/${cameraMac}`)
+      .pipe(
+        map((r) => r.SnapshotUrl ?? null),
+        catchError(() => [null]),
+      );
+  }
+
 }
 
 export interface PuzzlePieceDto {

@@ -15,6 +15,7 @@ import { DeviceDto } from '../../../../../models/DeviceDto';
 import { CameraInfo, IntrinsicsCalibrationState } from '../../../../../models/jetson-dtos/HealthReport';
 import { BoardService } from '../../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../../models/BoardLibrary';
+import { HomographyService } from '../../../../../services/homography-service';
 
 /** Poll rate while the Jetson is actively collecting intrinsics sightings (matches its fast heartbeat). */
 const CALIBRATING_POLL_MS = 2_000;
@@ -56,6 +57,9 @@ export class CameraModal implements OnInit, OnDestroy {
   homographyTriggered = false;
   homographyError = false;
 
+  snapshotUrl: string | null = null;
+  snapshotLoading = true;
+
   boardLibrary: BoardLibraryItem[] = [];
   selectedBoard: BoardLibraryItem | null = null;
 
@@ -70,6 +74,7 @@ export class CameraModal implements OnInit, OnDestroy {
     private readonly ref: DynamicDialogRef,
     private readonly deviceService: DeviceService,
     private readonly boardService: BoardService,
+    private readonly homographyService: HomographyService,
   ) {}
 
   ngOnInit(): void {
@@ -93,6 +98,15 @@ export class CameraModal implements OnInit, OnDestroy {
       next: (items) => { this.boardLibrary = items; },
       error: () => { this.boardLibrary = []; },
     });
+
+    if (this.device?.Id && this.mac) {
+      this.homographyService.getSnapshotUrl(this.device.Id, this.mac).subscribe({
+        next: (url) => { this.snapshotUrl = url; this.snapshotLoading = false; },
+        error: () => { this.snapshotLoading = false; },
+      });
+    } else {
+      this.snapshotLoading = false;
+    }
 
     if (this.device?.Id) {
       this.normalPollMs = Math.max(MIN_POLL_INTERVAL_MS, (this.device.Config?.HeartbeatInterval ?? 30) * 1000);

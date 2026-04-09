@@ -56,6 +56,14 @@
     </div>
   </div>
 
+  <!-- Homography Snapshot -->
+  <div *ngIf="!snapshotLoading && snapshotUrl">
+    <div class="text-sm font-semibold mb-2">Homography Snapshot</div>
+    <img [src]="snapshotUrl" alt="Camera snapshot"
+         class="w-full rounded-lg border border-surface-200 dark:border-surface-700 object-contain max-h-48"
+         (error)="snapshotUrl = null" />
+  </div>
+
   <!-- Coverage grid -->
   <div *ngIf="coverageGrid.length > 0">
     <div class="flex items-center justify-between mb-2">
