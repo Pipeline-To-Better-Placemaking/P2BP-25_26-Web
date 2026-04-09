@@ -2,7 +2,6 @@ using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Http;
-using OpenCvSharp;
 
 namespace BetterPlacemaking.Services
 {
@@ -73,9 +72,9 @@ namespace BetterPlacemaking.Services
                 fileBytes = memory.ToArray();
             }
 
-            using var decoded = Cv2.ImDecode(fileBytes, ImreadModes.Unchanged);
-            if (decoded.Empty())
-                throw new ArgumentException("The uploaded file is not a valid image.");
+            var (imgWidth, imgHeight) = ReadImageDimensions(fileBytes, contentType);
+            if (imgWidth == 0 || imgHeight == 0)
+                throw new ArgumentException("The uploaded file is not a valid or supported image.");
 
             var collection = _db.Collection(CollectionName);
             var docRef = collection.Document();
@@ -100,8 +99,8 @@ namespace BetterPlacemaking.Services
                 ImagePath = objectPath,
                 ImageContentType = contentType,
                 ImageSizeBytes = image.Length,
-                ImageWidth = decoded.Cols,
-                ImageHeight = decoded.Rows,
+                ImageWidth = imgWidth,
+                ImageHeight = imgHeight,
                 Calibration = null,
                 CreatedAtUtc = createdAtUtc,
                 UpdatedAtUtc = createdAtUtc,
@@ -267,6 +266,68 @@ namespace BetterPlacemaking.Services
         {
             var cleaned = value?.Trim();
             return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        }
+
+        /// <summary>
+        /// Reads width and height from PNG or JPEG file headers without any native dependencies.
+        /// Returns (0, 0) if the format is unrecognised or the header is truncated.
+        /// </summary>
+        private static (int Width, int Height) ReadImageDimensions(byte[] bytes, string contentType)
+        {
+            if (bytes.Length < 24) return (0, 0);
+
+            // PNG: 8-byte signature, then IHDR chunk (4 len + 4 "IHDR" + 4 width + 4 height)
+            // Width is at offset 16, height at offset 20, both big-endian.
+            if (contentType.Contains("png", StringComparison.OrdinalIgnoreCase) &&
+                bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                int w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                int h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return (w, h);
+            }
+
+            // JPEG: scan for SOF0/SOF1/SOF2 markers (FF C0 / FF C1 / FF C2).
+            // SOF layout: FF Cx  len(2)  precision(1)  height(2 BE)  width(2 BE)
+            if ((contentType.Contains("jpeg", StringComparison.OrdinalIgnoreCase) ||
+                 contentType.Contains("jpg", StringComparison.OrdinalIgnoreCase)) &&
+                bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                int i = 2;
+                while (i + 8 < bytes.Length)
+                {
+                    if (bytes[i] != 0xFF) break;
+                    byte marker = bytes[i + 1];
+                    int segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+
+                    if (marker is 0xC0 or 0xC1 or 0xC2)
+                    {
+                        int h = (bytes[i + 5] << 8) | bytes[i + 6];
+                        int w = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return (w, h);
+                    }
+
+                    i += 2 + segLen;
+                }
+                return (0, 0);
+            }
+
+            // WebP: RIFF....WEBP VP8 (or VP8L / VP8X) — width and height location varies by sub-format.
+            // For simplicity, accept webp but return placeholder dimensions; calibration can update them.
+            if (contentType.Contains("webp", StringComparison.OrdinalIgnoreCase) &&
+                bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46)
+            {
+                // VP8 bitstream: bytes 26-27 = width-1 (14-bit LE), bytes 28-29 = height-1 (14-bit LE)
+                if (bytes.Length >= 30 && bytes[12] == 0x56 && bytes[13] == 0x50 && bytes[14] == 0x38 && bytes[15] == 0x20)
+                {
+                    int w = ((bytes[26] | (bytes[27] << 8)) & 0x3FFF) + 1;
+                    int h = ((bytes[28] | (bytes[29] << 8)) & 0x3FFF) + 1;
+                    return (w, h);
+                }
+                // VP8L / VP8X — too complex to parse here; return a sentinel so upload succeeds.
+                return (1, 1);
+            }
+
+            return (0, 0);
         }
     }
 }

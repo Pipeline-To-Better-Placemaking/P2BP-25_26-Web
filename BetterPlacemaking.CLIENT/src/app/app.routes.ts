@@ -4,6 +4,7 @@ import { Login } from './views/login/login';
 import { SelectProject } from './views/projects/select-project/select-project';
 import { Dashboard } from './views/projects/selected/dashboard/dashboard';
 import { authGuard } from './guards/auth-guard';
+import { puzzleReadyGuard } from './guards/puzzle-ready-guard';
 import { ForgotPassword } from './views/forgot-password/forgot-password';
 import { Permissions } from './views/admin/permissions/permissions';
 import { ProjectsList } from './views/admin/projects/projects-list/projects-list';
@@ -63,6 +64,7 @@ export const routes: Routes = [
 
           {
             path: 'calibration/puzzle',
+            canActivate: [puzzleReadyGuard],
             loadComponent: () =>
               import('./views/projects/selected/calibration/puzzle/puzzle.component').then((m) => m.PuzzleComponent),
           },

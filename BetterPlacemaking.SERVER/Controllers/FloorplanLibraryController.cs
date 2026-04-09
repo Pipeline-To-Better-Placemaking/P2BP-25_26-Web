@@ -12,10 +12,12 @@ namespace BetterPlacemaking.Controllers
     [Authorize(Policy = "UserJwt")]
     public sealed class FloorplanLibraryController(
         FloorplanLibraryService floorplanLibraryService,
-        CloudStorageService cloudStorageService) : ControllerBase
+        CloudStorageService cloudStorageService,
+        ILogger<FloorplanLibraryController> logger) : ControllerBase
     {
         private readonly FloorplanLibraryService _floorplanLibraryService = floorplanLibraryService;
         private readonly CloudStorageService _cloudStorageService = cloudStorageService;
+        private readonly ILogger<FloorplanLibraryController> _logger = logger;
 
         [HttpGet]
         public async Task<IActionResult> GetMine([FromQuery] string? projectId, CancellationToken ct)
@@ -31,8 +33,9 @@ namespace BetterPlacemaking.Controllers
                 var dtos = await Task.WhenAll(dtoTasks);
                 return Ok(dtos);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error loading floorplans for user {UserId}", userId);
                 return Problem("An unexpected error occurred while loading floorplans.");
             }
         }
@@ -88,8 +91,9 @@ namespace BetterPlacemaking.Controllers
             {
                 return BadRequest(ex.Message);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error uploading floorplan for user {UserId}", userId);
                 return Problem("An unexpected error occurred while uploading the floorplan.");
             }
         }
@@ -118,8 +122,9 @@ namespace BetterPlacemaking.Controllers
             {
                 return NotFound("Floorplan not found.");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error updating floorplan {Id} for user {UserId}", id, userId);
                 return Problem("An unexpected error occurred while updating the floorplan.");
             }
         }
@@ -141,8 +146,9 @@ namespace BetterPlacemaking.Controllers
 
                 return NoContent();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error deleting floorplan {Id} for user {UserId}", id, userId);
                 return Problem("An unexpected error occurred while deleting the floorplan.");
             }
         }
@@ -152,9 +158,19 @@ namespace BetterPlacemaking.Controllers
             DownloadUrlResponseDto? download = null;
             if (!string.IsNullOrWhiteSpace(item.ImagePath))
             {
-                download = await _cloudStorageService.CreateSignedDownloadUrlAsync(
-                    new RequestDownloadUrlDto(item.ImagePath),
-                    ct);
+                try
+                {
+                    download = await _cloudStorageService.CreateSignedDownloadUrlAsync(
+                        new RequestDownloadUrlDto(item.ImagePath),
+                        ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not generate signed download URL for floorplan {Id} (path: {Path}). " +
+                        "This may be a credential issue in local dev — check that GOOGLE_APPLICATION_CREDENTIALS " +
+                        "is set to a service account JSON with iam.serviceAccounts.signBlob permission.",
+                        item.Id, item.ImagePath);
+                }
             }
 
             var calibration = item.Calibration == null
