@@ -11,20 +11,13 @@ import { FusionRunDto } from '../../../../../models/FusionDtos';
 @Component({
   selector: 'app-fusion-modal',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    ButtonModule,
-    MessageModule,
-    DatePickerModule,
-  ],
+  imports: [CommonModule, FormsModule, ButtonModule, MessageModule, DatePickerModule],
   templateUrl: './fusion-modal.html',
 })
 export class FusionModal implements OnInit {
   fromDate: Date | null = null;
   toDate: Date | null = null;
   maxDate = new Date();
-
   submitting = false;
   error: string | null = null;
 
@@ -54,15 +47,13 @@ export class FusionModal implements OnInit {
 
   submit(): void {
     if (!this.fromDate || !this.toDate || !this.dateRangeValid) return;
-
     this.submitting = true;
     this.error = null;
 
-    const fromUnix = Math.floor(this.fromDate.getTime() / 1000);
-    const toUnix = Math.floor(this.toDate.getTime() / 1000);
+    const FromDateUnix = this.fromDate.getTime() / 1000;
+    const ToDateUnix   = this.toDate.getTime()   / 1000;
 
-    const projectId: string | undefined = this.config.data?.projectId || undefined;
-    this.fusionService.triggerFusion({ fromDateUnix: fromUnix, toDateUnix: toUnix, projectId }).subscribe({
+    this.fusionService.triggerFusion({ FromDateUnix, ToDateUnix }).subscribe({
       next: (run: FusionRunDto) => {
         this.submitting = false;
         this.ref.close({ triggered: true, run });

@@ -1,10 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
-import { PanelModule } from 'primeng/panel';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { TooltipModule } from 'primeng/tooltip';
@@ -26,7 +24,6 @@ const POLL_INTERVAL_MS = 6_000;
     FormsModule,
     ButtonModule,
     CardModule,
-    PanelModule,
     TagModule,
     MessageModule,
     TooltipModule,
@@ -36,14 +33,10 @@ const POLL_INTERVAL_MS = 6_000;
   styleUrls: ['./fusion.scss'],
 })
 export class Fusion implements OnInit, OnDestroy {
-  projectId = '';
-
   history: FusionRunDto[] = [];
   historyLoading = true;
   historyError = false;
-
   config: FusionConfigDto | null = null;
-
   deletingRunId: string | null = null;
   downloadingRunId: string | null = null;
 
@@ -51,14 +44,11 @@ export class Fusion implements OnInit, OnDestroy {
   private modalRef: DynamicDialogRef | null = null;
 
   constructor(
-    private readonly route: ActivatedRoute,
     private readonly fusionService: FusionService,
     private readonly dialogService: DialogService,
   ) {}
 
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
-
     interval(POLL_INTERVAL_MS)
       .pipe(
         startWith(0),
@@ -88,10 +78,8 @@ export class Fusion implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // ── Computed ──────────────────────────────────────────────────────────────
-
   get hasRunningFusion(): boolean {
-    return this.history.some((r) => r.status === 'running');
+    return this.history.some((r) => r.Status === 'running');
   }
 
   get lastRun(): FusionRunDto | null {
@@ -99,14 +87,12 @@ export class Fusion implements OnInit, OnDestroy {
   }
 
   get successCount(): number {
-    return this.history.filter((r) => r.status === 'success').length;
+    return this.history.filter((r) => r.Status === 'success').length;
   }
 
   get failedCount(): number {
-    return this.history.filter((r) => r.status === 'failed').length;
+    return this.history.filter((r) => r.Status === 'failed').length;
   }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
 
   openFusionModal(): void {
     const ref = this.dialogService.open(FusionModal, {
@@ -115,28 +101,26 @@ export class Fusion implements OnInit, OnDestroy {
       modal: true,
       dismissableMask: true,
       closable: true,
-      data: { projectId: this.projectId },
+      data: {},
     });
-
     if (!ref) return;
     this.modalRef = ref;
-
-  ref.onClose.subscribe((result?: { triggered?: boolean; run?: FusionRunDto }) => {
-      if (result?.triggered && result.run) {
-        // INSTANTLY show the new run at the top
-        this.history = [result.run, ...this.history];
+    ref.onClose.subscribe((result?: { triggered?: boolean }) => {
+      if (result?.triggered) {
+        this.fusionService.getHistory().subscribe({
+          next: (runs: FusionRunDto[]) => (this.history = runs),
+        });
       }
-  });
-}
+    });
+  }
 
   deleteRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
-    if (run.status === 'running') return;
-
-    this.deletingRunId = run.id;
-    this.fusionService.deleteRun(run.id).subscribe({
+    if (run.Status === 'running') return;
+    this.deletingRunId = run.Id;
+    this.fusionService.deleteRun(run.Id).subscribe({
       next: () => {
-        this.history = this.history.filter((r) => r.id !== run.id);
+        this.history = this.history.filter((r) => r.Id !== run.Id);
         this.deletingRunId = null;
       },
       error: () => (this.deletingRunId = null),
@@ -145,10 +129,9 @@ export class Fusion implements OnInit, OnDestroy {
 
   downloadRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
-    if (!run.outputGcsPath) return;
-
-    this.downloadingRunId = run.id;
-    this.fusionService.getDownloadUrl(run.id).subscribe({
+    if (!run.OutputGcsPath) return;
+    this.downloadingRunId = run.Id;
+    this.fusionService.getDownloadUrl(run.Id).subscribe({
       next: (res) => {
         window.open(res.url, '_blank');
         this.downloadingRunId = null;
@@ -156,8 +139,6 @@ export class Fusion implements OnInit, OnDestroy {
       error: () => (this.downloadingRunId = null),
     });
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'secondary' {
     if (status === 'success') return 'success';
@@ -180,16 +161,16 @@ export class Fusion implements OnInit, OnDestroy {
   }
 
   formatDuration(run: FusionRunDto): string {
-    if (!run.startedAtUnix || !run.completedAtUnix) return '—';
-    const secs = Math.round(run.completedAtUnix - run.startedAtUnix);
+    if (!run.StartedAtUnix || !run.CompletedAtUnix) return '—';
+    const secs = Math.round(run.CompletedAtUnix - run.StartedAtUnix);
     if (secs < 60) return `${secs}s`;
     return `${Math.floor(secs / 60)}m ${secs % 60}s`;
   }
 
   formatDateRange(run: FusionRunDto): string {
-    if (!run.fromDateUnix || !run.toDateUnix) return '—';
-    const from = new Date(run.fromDateUnix * 1000).toLocaleDateString();
-    const to   = new Date(run.toDateUnix   * 1000).toLocaleDateString();
+    if (!run.FromDateUnix || !run.ToDateUnix) return '—';
+    const from = new Date(run.FromDateUnix * 1000).toLocaleDateString();
+    const to   = new Date(run.ToDateUnix   * 1000).toLocaleDateString();
     return from === to ? from : `${from} – ${to}`;
   }
 }

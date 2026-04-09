@@ -1,31 +1,33 @@
 export interface FusionRunDto {
-  id: string;
-  status: 'running' | 'success' | 'failed' | 'unknown';
-  triggeredBy: 'manual' | 'scheduled' | 'unknown';
-  fromDateUnix?: number;
-  toDateUnix?: number;
-  startedAtUnix?: number;
-  completedAtUnix?: number;
-  recordsFused?: number;
-  errorMessage?: string;
-  outputGcsPath?: string;
+  Id: string;
+  Status: 'running' | 'success' | 'failed' | 'unknown';
+  TriggeredBy: 'manual' | 'scheduled' | 'unknown';
+  FromDateUnix?: number;
+  ToDateUnix?: number;
+  StartedAtUnix?: number;
+  CompletedAtUnix?: number;
+  RecordsFused?: number;
+  ErrorMessage?: string;
+  OutputGcsPath?: string;
+  ProjectId?: string;
 }
 
 export interface FusionConfigDto {
-  scheduledHourUtc: number;
-  scheduledMinuteUtc: number;
-  enabled: boolean;
+  ScheduledHourUtc: number;
+  ScheduledMinuteUtc: number;
+  Enabled: boolean;
+  ProjectId?: string;
 }
 
 export interface TriggerFusionDto {
-  fromDateUnix: number;
-  toDateUnix: number;
-  projectId?: string;
+  FromDateUnix: number;
+  ToDateUnix: number;
+  ProjectId?: string;
 }
 
 export interface UpdateFusionConfigDto {
-  scheduledHourUtc: number;
-  scheduledMinuteUtc: number;
-  enabled: boolean;
-  projectId?: string;
+  ScheduledHourUtc: number;
+  ScheduledMinuteUtc: number;
+  Enabled: boolean;
+  ProjectId?: string;
 }

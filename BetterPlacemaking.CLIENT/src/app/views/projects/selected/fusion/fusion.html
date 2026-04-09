@@ -1,84 +1,75 @@
 <div class="fusion-page">
 
-  <!-- ── Header row ──────────────────────────────────────────────────── -->
   <div class="fusion-header">
     <div>
-      <h1 class="fusion-title">ID Fusion</h1>
-      <p class="fusion-subtitle">Here you can apply ID fusion to your collected tracking data. Select between two timeframes and fuse that data.</p>
+      <h1 class="fusion-title">Data Fusion</h1>
+      <p class="fusion-subtitle">Merge multi-camera tracking data into unified pedestrian identities</p>
     </div>
     <p-button
-      class="fusion-button"
       label="Run Manual Fusion"
       icon="pi pi-play"
       (onClick)="openFusionModal()"
       [loading]="hasRunningFusion"
-      pTooltip="Select a time range and run the fusion script!"
+      pTooltip="Select a date range and run the fusion pipeline"
       tooltipPosition="left" />
   </div>
 
-  <!-- ── Active run banner ────────────────────────────────────────────── -->
   <p-message
     *ngIf="hasRunningFusion"
     severity="info"
     text="Fusion is running — this may take a few minutes. Results will appear below automatically."
     styleClass="w-full" />
 
-  <!-- ── Stat cards ────────────────────────────────────────────────────── -->
   <div class="fusion-stats">
-
     <div class="fusion-stat-card">
       <div class="fusion-stat-label">Last Run</div>
       <div class="fusion-stat-value"
-           [class.fusion-stat-success]="lastRun?.status === 'success'"
-           [class.fusion-stat-danger]="lastRun?.status === 'failed'"
-           [class.fusion-stat-info]="lastRun?.status === 'running'">
-        {{ lastRun ? (lastRun.status | titlecase) : '—' }}
+           [class.fusion-stat-success]="lastRun?.Status === 'success'"
+           [class.fusion-stat-danger]="lastRun?.Status === 'failed'"
+           [class.fusion-stat-info]="lastRun?.Status === 'running'">
+        {{ lastRun ? (lastRun.Status | titlecase) : '—' }}
       </div>
-      <div class="fusion-stat-meta">{{ lastRun ? formatUnix(lastRun.startedAtUnix) : 'No runs yet' }}</div>
+      <div class="fusion-stat-meta">{{ lastRun ? formatUnix(lastRun.StartedAtUnix) : 'No runs yet' }}</div>
     </div>
 
     <div class="fusion-stat-card">
       <div class="fusion-stat-label">Successful</div>
-      <div class="fusion-stat-value" [class.fusion-stat-success]="successCount > 0">
-        {{ successCount }}
-      </div>
+      <div class="fusion-stat-value" [class.fusion-stat-success]="successCount > 0">{{ successCount }}</div>
       <div class="fusion-stat-meta">of {{ history.length }} total</div>
     </div>
 
     <div class="fusion-stat-card">
+      <div class="fusion-stat-label">Failed</div>
+      <div class="fusion-stat-value" [class.fusion-stat-danger]="failedCount > 0">{{ failedCount }}</div>
+      <div class="fusion-stat-meta">errors</div>
+    </div>
+
+    <div class="fusion-stat-card">
       <div class="fusion-stat-label">Auto-Run</div>
-      <div class="fusion-stat-value" [class.fusion-stat-success]="config?.enabled" [class.fusion-stat-danger]="config?.enabled === false">
-        {{ config?.enabled ? 'Enabled' : (config ? 'Disabled' : '—') }}
+      <div class="fusion-stat-value"
+           [class.fusion-stat-success]="config?.Enabled"
+           [class.fusion-stat-danger]="config?.Enabled === false">
+        {{ config?.Enabled ? 'Enabled' : (config ? 'Disabled' : '—') }}
       </div>
       <div class="fusion-stat-meta">nightly schedule</div>
     </div>
-
   </div>
 
-  <!-- ── Fusion History ────────────────────────────────────────────────── -->
   <div class="fusion-history-card">
 
     <div class="fusion-history-header">
-      <div>
-        <span class="fusion-history-title">Fusion History</span>
-        <span class="fusion-history-subtitle">Refreshes every 6 seconds</span>
-      </div>
+      <span class="fusion-history-title">Fusion History</span>
+      <span class="fusion-history-subtitle">Refreshes every 6 seconds</span>
     </div>
 
-    <!-- Loading -->
     <div *ngIf="historyLoading" class="fusion-empty">
       <i class="pi pi-spin pi-spinner fusion-empty-icon"></i>
       <div>Loading runs...</div>
     </div>
 
-    <!-- Error -->
-    <p-message
-      *ngIf="historyError"
-      severity="error"
-      text="Failed to load fusion history. Is the server running?"
-      styleClass="w-full" />
+    <p-message *ngIf="historyError" severity="error"
+      text="Failed to load fusion history." styleClass="w-full" />
 
-    <!-- Empty -->
     <div *ngIf="!historyLoading && !historyError && history.length === 0" class="fusion-empty">
       <i class="pi pi-database fusion-empty-icon"></i>
       <div class="fusion-empty-title">No fusion runs yet</div>
@@ -86,54 +77,49 @@
       <p-button label="Run Manual Fusion" icon="pi pi-play" severity="secondary" (onClick)="openFusionModal()" />
     </div>
 
-    <!-- Run list -->
     <div *ngIf="!historyLoading && history.length > 0" class="fusion-run-list">
       <div
         *ngFor="let run of history"
         class="fusion-run-row"
-        [class.fusion-run-success]="run.status === 'success'"
-        [class.fusion-run-failed]="run.status === 'failed'"
-        [class.fusion-run-running]="run.status === 'running'">
+        [class.fusion-run-success]="run.Status === 'success'"
+        [class.fusion-run-failed]="run.Status === 'failed'"
+        [class.fusion-run-running]="run.Status === 'running'">
 
-        <!-- Left: status icon + date range -->
         <div class="fusion-run-left">
-          <i [class]="runStatusIcon(run.status)" class="fusion-run-icon"></i>
+          <i [class]="runStatusIcon(run.Status)" class="fusion-run-icon"></i>
           <div>
             <div class="fusion-run-range">{{ formatDateRange(run) }}</div>
             <div class="fusion-run-meta">
-              Started {{ formatUnix(run.startedAtUnix) }}
-              <span *ngIf="run.status !== 'running'"> · {{ formatDuration(run) }}</span>
+              Started {{ formatUnix(run.StartedAtUnix) }}
+              <span *ngIf="run.Status !== 'running'"> · {{ formatDuration(run) }}</span>
             </div>
-            <div *ngIf="run.errorMessage" class="fusion-run-error" [title]="run.errorMessage">
-              {{ run.errorMessage }}
+            <div *ngIf="run.ErrorMessage" class="fusion-run-error" [title]="run.ErrorMessage">
+              {{ run.ErrorMessage }}
             </div>
           </div>
         </div>
 
-        <!-- Right: badges + actions -->
         <div class="fusion-run-right">
-          <p-tag [severity]="runStatusSeverity(run.status)" [value]="run.status | titlecase" />
-          <p-tag severity="secondary" [value]="run.triggeredBy | titlecase" />
+          <p-tag [severity]="runStatusSeverity(run.Status)" [value]="run.Status | titlecase" />
+          <p-tag severity="secondary" [value]="run.TriggeredBy | titlecase" />
 
-          <!-- Download button (only when output exists) -->
           <p-button
-            *ngIf="run.status === 'success' && run.outputGcsPath"
+            *ngIf="run.Status === 'success' && run.OutputGcsPath"
             icon="pi pi-download"
             severity="secondary"
             size="small"
-            [loading]="downloadingRunId === run.id"
+            [loading]="downloadingRunId === run.Id"
             pTooltip="Download fused data (JSON)"
             tooltipPosition="top"
             [text]="true"
             (onClick)="downloadRun(run, $event)" />
 
-          <!-- Delete button -->
           <p-button
-            *ngIf="run.status !== 'running'"
+            *ngIf="run.Status !== 'running'"
             icon="pi pi-trash"
             severity="danger"
             size="small"
-            [loading]="deletingRunId === run.id"
+            [loading]="deletingRunId === run.Id"
             pTooltip="Delete this run"
             tooltipPosition="top"
             [text]="true"

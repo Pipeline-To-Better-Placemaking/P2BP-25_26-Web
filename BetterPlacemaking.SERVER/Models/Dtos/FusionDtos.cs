@@ -10,8 +10,8 @@ namespace BetterPlacemaking.Models.Dtos.Fusion
         double? CompletedAtUnix,
         int? RecordsFused,
         string? ErrorMessage,
-        string? OutputGcsPath = null,
-        string? ProjectId = null
+        string? OutputGcsPath,
+        string? ProjectId
     );
 
     public record FusionConfigDto(

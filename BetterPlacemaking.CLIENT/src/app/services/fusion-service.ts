@@ -32,7 +32,7 @@ export class FusionService {
   deleteRun(runId: string): Observable<void> {
     return this.http
       .delete<void>(`${environment.apiBaseUrl}/api/fusion/${runId}`)
-      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to delete fusion run')));
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to delete run')));
   }
 
   getDownloadUrl(runId: string): Observable<{ url: string }> {
