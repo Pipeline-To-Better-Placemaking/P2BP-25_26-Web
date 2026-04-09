@@ -47,6 +47,8 @@ export const routes: Routes = [
         path: ':projectId',
         children: [
           { path: '', component: Dashboard },
+          { path: 'projects', component: SelectProject },
+          { path: 'user-settings', component: UserSettings },
           { path: 'admin/permissions', component: ProjectPermissions },
           { path: 'admin', children: admin },
           { path: 'model', component: Scanner },

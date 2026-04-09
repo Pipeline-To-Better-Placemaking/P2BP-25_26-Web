@@ -66,13 +66,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.buildFooterItems();
-
-    this.userMenuItems = [
-      { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings(), routerLink: '/user-settings' },
-      { label: 'Logout', icon: 'pi pi-sign-out', command: () => this.logout() },
-    ];
-
-    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: '/projects' }];
+    this.buildUserMenuItems();
+    this.buildProjectSelectorNav();
 
     // Listen for navigation end events and rebuild menus when project id changes
     this.routerSub = this.router.events
@@ -82,6 +77,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
         const changed = newId !== this.projectId;
         this.projectId = newId;
         this.buildNavMenus(this.projectId);
+        this.buildUserMenuItems(this.projectId);
+        this.buildProjectSelectorNav(this.projectId);
 
         if (newId && changed) {
           this.projectService.getProject(newId).subscribe({
@@ -157,6 +154,19 @@ export class DefaultLayout implements OnInit, OnDestroy {
         },
       ];
     }
+  }
+
+  private buildProjectSelectorNav(projectId?: string): void {
+    const link = projectId ? `/${projectId}/projects` : '/projects';
+    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: link }];
+  }
+
+  private buildUserMenuItems(projectId?: string): void {
+    const settingsLink = projectId ? `/${projectId}/user-settings` : '/user-settings';
+    this.userMenuItems = [
+      { label: 'Settings', icon: 'pi pi-cog', command: () => this.openSettings(), routerLink: settingsLink },
+      { label: 'Logout', icon: 'pi pi-sign-out', command: () => this.logout() },
+    ];
   }
 
   private exportProjectData(): void {
