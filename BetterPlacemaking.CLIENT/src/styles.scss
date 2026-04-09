@@ -24,6 +24,10 @@ body {
 	color: var(--content-foreground);
 }
 
+.p-dialog .p-dialog-content {
+  overflow: visible !important;
+}
+
 .surface-ground {
 	background-color: var(--surface-ground);
 }

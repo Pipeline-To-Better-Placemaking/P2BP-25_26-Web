@@ -97,10 +97,18 @@ export class Fusion implements OnInit, OnDestroy {
   openFusionModal(): void {
     const ref = this.dialogService.open(FusionModal, {
       header: 'Run Manual Fusion',
-      width: '520px',
+      width: '900px',
+      height: 'auto',
       modal: true,
       dismissableMask: true,
       closable: true,
+      contentStyle: {
+        'max-height': '900vh',    
+        'overflow': 'auto'
+      },
+      style: {
+        'min-height': '600px'    
+      },
       data: {},
     });
     if (!ref) return;
@@ -126,7 +134,7 @@ export class Fusion implements OnInit, OnDestroy {
       error: () => (this.deletingRunId = null),
     });
   }
-
+  
   downloadRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
     if (!run.OutputGcsPath) return;
