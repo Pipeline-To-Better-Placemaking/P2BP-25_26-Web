@@ -1,37 +1,43 @@
-<div class="flex flex-col gap-5 p-1">
+<div class="flex flex-col gap-4 p-1">
 
   <div class="text-sm text-muted-color">
     Select the date range to fuse. All sensor data captured between the two timestamps will be processed.
   </div>
 
-  <!-- Date range -->
-  <div class="grid grid-cols-2 gap-4">
-    <div class="flex flex-col gap-1">
+  <!-- Date range — inline pickers side by side -->
+  <div class="grid grid-cols-2 gap-6">
+
+    <div class="flex flex-col gap-2">
       <label class="text-sm font-semibold">From</label>
       <p-datepicker
         [(ngModel)]="fromDate"
+        [inline]="true"
         [maxDate]="maxDate"
         [showTime]="true"
         hourFormat="12"
-        dateFormat="mm/dd/yy"
-        placeholder="Start date & time"
-        styleClass="w-full" />
+        dateFormat="mm/dd/yy" />
+      <div class="text-xs text-muted-color text-center">
+        {{ fromDate ? (fromDate | date:'medium') : 'Not selected' }}
+      </div>
     </div>
 
-    <div class="flex flex-col gap-1">
+    <div class="flex flex-col gap-2">
       <label class="text-sm font-semibold">To</label>
       <p-datepicker
         [(ngModel)]="toDate"
+        [inline]="true"
         [maxDate]="maxDate"
         [showTime]="true"
         hourFormat="12"
-        dateFormat="mm/dd/yy"
-        placeholder="End date & time"
-        styleClass="w-full" />
+        dateFormat="mm/dd/yy" />
+      <div class="text-xs text-muted-color text-center">
+        {{ toDate ? (toDate | date:'medium') : 'Not selected' }}
+      </div>
     </div>
+
   </div>
 
-  <!-- Validation hint -->
+  <!-- Validation -->
   <p-message
     *ngIf="!dateRangeValid"
     severity="warn"
@@ -45,15 +51,8 @@
     [text]="error"
     styleClass="w-full" />
 
-  <!-- Summary -->
-  <div *ngIf="fromDate && toDate && dateRangeValid"
-       class="rounded-lg p-3 bg-surface-100 dark:bg-surface-800 text-sm text-muted-color">
-    Fusing data from <span class="font-semibold text-color">{{ fromDate | date:'medium' }}</span>
-    to <span class="font-semibold text-color">{{ toDate | date:'medium' }}</span>
-  </div>
-
   <!-- Actions -->
-  <div class="flex justify-end gap-2 border-t border-surface-200 dark:border-surface-700 pt-4">
+  <div class="flex justify-end gap-2 border-t border-surface-200 dark:border-surface-700 pt-3">
     <p-button
       label="Cancel"
       severity="secondary"
