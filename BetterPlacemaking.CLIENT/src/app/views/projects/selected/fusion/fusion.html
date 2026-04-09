@@ -3,15 +3,16 @@
   <!-- ── Header row ──────────────────────────────────────────────────── -->
   <div class="fusion-header">
     <div>
-      <h1 class="fusion-title">Data Fusion</h1>
-      <p class="fusion-subtitle">Merge multi-camera tracking data into unified pedestrian identities</p>
+      <h1 class="fusion-title">ID Fusion</h1>
+      <p class="fusion-subtitle">Here you can apply ID fusion to your collected tracking data. Select between two timeframes and fuse that data.</p>
     </div>
     <p-button
+      class="fusion-button"
       label="Run Manual Fusion"
       icon="pi pi-play"
       (onClick)="openFusionModal()"
       [loading]="hasRunningFusion"
-      pTooltip="Select a date range and run the fusion pipeline"
+      pTooltip="Select a time range and run the fusion script!"
       tooltipPosition="left" />
   </div>
 
@@ -42,14 +43,6 @@
         {{ successCount }}
       </div>
       <div class="fusion-stat-meta">of {{ history.length }} total</div>
-    </div>
-
-    <div class="fusion-stat-card">
-      <div class="fusion-stat-label">Failed</div>
-      <div class="fusion-stat-value" [class.fusion-stat-danger]="failedCount > 0">
-        {{ failedCount }}
-      </div>
-      <div class="fusion-stat-meta">errors</div>
     </div>
 
     <div class="fusion-stat-card">
