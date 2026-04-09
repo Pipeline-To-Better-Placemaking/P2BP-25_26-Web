@@ -124,8 +124,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
             { label: '3D Model', faIcon: faCube, routerLink: `/${base}/model` },
             { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision` },
             { label: 'Fusion', faIcon: faCodeMerge, routerLink: `/${base}/fusion` },
-            { label: 'Edit Room', faIcon: faPenToSquare, routerLink: `/${base}/edit` },
             { label: 'Permissions', faIcon: faUserShield, routerLink: `/${base}/admin/permissions` },
+            { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/devices` },
             { label: 'Export Data', faIcon: faDownload, command: () => this.exportProjectData() },
           ],
         },
@@ -136,7 +136,6 @@ export class DefaultLayout implements OnInit, OnDestroy {
           items: [
             { label: 'Users', faIcon: faUserShield, routerLink: `/${base}/admin/users` },
             { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `/${base}/admin/projects` },
-            { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/admin/devices` },
           ],
         },
       ];
@@ -149,7 +148,6 @@ export class DefaultLayout implements OnInit, OnDestroy {
           items: [
             { label: 'Users', faIcon: faUserShield, routerLink: '/admin/users' },
             { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: '/admin/projects' },
-            { label: 'Devices', faIcon: faMicrochip, routerLink: '/admin/devices' },
           ],
         },
       ];

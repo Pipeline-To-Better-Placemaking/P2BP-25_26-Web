@@ -31,6 +31,25 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
+		[HttpGet("project/{projectId}")]
+		[Authorize(Policy = "UserJwt")]
+		public IActionResult GetDevicesByProject([FromRoute] string projectId)
+		{
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest();
+
+			try
+			{
+				List<Device> devices = _deviceService.GetDevicesByProjectId(projectId);
+				var dtos = devices.Select(ToDto).ToList();
+				return Ok(dtos);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving project devices.");
+			}
+		}
+
         [HttpGet("{id}")]
 		[Authorize(Policy = "UserJwt")]
         public IActionResult GetDevice(string id)

@@ -23,10 +23,6 @@ const admin: Routes = [
     path: 'projects',
     component: ProjectsList,
   },
-  {
-    path: 'devices',
-    component: DevicesList,
-  },
 ];
 
 export const routes: Routes = [
@@ -53,6 +49,7 @@ export const routes: Routes = [
           { path: 'admin', children: admin },
           { path: 'model', component: Scanner },
           { path: 'dashboard', component: Dashboard },
+          { path: 'devices', component: DevicesList },
           {
             path: 'vision',
             loadComponent: () => import('./views/projects/selected/vision/vision').then((m) => m.Vision),

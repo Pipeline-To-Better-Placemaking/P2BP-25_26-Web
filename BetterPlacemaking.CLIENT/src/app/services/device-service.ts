@@ -20,6 +20,12 @@ export class DeviceService {
     .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load devices')));
   }
 
+  public getDevicesByProject(projectId: string): Observable<DeviceDto[]> {
+    return this.http
+      .get<DeviceDto[]>(`${environment.apiBaseUrl}/api/device/project/${projectId}`)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load project devices')));
+  }
+
   public getDevice(id: string): Observable<DeviceDto> {
   return this.http
     .get<DeviceDto>(`${environment.apiBaseUrl}/api/device/${id}`)

@@ -71,6 +71,22 @@ namespace BetterPlacemaking.Services
             return response;
         }
 
+        public List<Device> GetDevicesByProjectId(string projectId)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return [];
+
+            var response = _db.Collection(collectionName)
+                .WhereEqualTo(nameof(Device.ProjectId), projectId)
+                .GetSnapshotAsync()
+                .Result
+                .Documents
+                .Select(doc => doc.ConvertTo<Device>())
+                .ToList();
+
+            return response;
+        }
+
         public Device? GetDevice(string id)
         {
             var device = _db.Collection(collectionName).Document(id).GetSnapshotAsync().Result

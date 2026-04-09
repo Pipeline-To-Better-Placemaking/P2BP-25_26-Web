@@ -1,45 +1,13 @@
 <div class="w-full flex flex-col content-background rounded-lg">
-  <p-table [value]="filteredDevices" class="rounded-lg overflow-hidden">
+  <p-table [value]="devices" class="rounded-lg overflow-hidden">
     <ng-template #caption>
       <div class="w-full flex flex-col gap-3">
         <div class="flex justify-between items-center">
           <div class="flex items-center gap-3">
             <span class="font-semibold text-xl">Devices</span>
-            <span class="text-muted-color text-xl">{{ filteredDevices.length || 0 }}</span>
+            <span class="text-muted-color text-xl">{{ devices.length || 0 }}</span>
           </div>
           <p-button label="Add" icon="pi pi-plus" (onClick)="addDevice()"> </p-button>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <p-select
-            [options]="projectFilterOptions"
-            [(ngModel)]="filterProject"
-            (ngModelChange)="onFilterChange()"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="All projects"
-            [showClear]="true"
-            class="w-48">
-          </p-select>
-
-          <p-toggleButton
-            [(ngModel)]="showUnassignedOnly"
-            (onChange)="onFilterChange()"
-            [onLabel]="'Unassigned'"
-            [offLabel]="'Unassigned'"
-            [onIcon]="'pi pi-check'"
-            [offIcon]="'pi pi-filter'"
-            styleClass="text-sm">
-          </p-toggleButton>
-
-          <p-button
-            *ngIf="hasActiveFilters"
-            label="Clear"
-            icon="pi pi-times"
-            severity="secondary"
-            [text]="true"
-            (onClick)="clearFilters()">
-          </p-button>
         </div>
       </div>
     </ng-template>

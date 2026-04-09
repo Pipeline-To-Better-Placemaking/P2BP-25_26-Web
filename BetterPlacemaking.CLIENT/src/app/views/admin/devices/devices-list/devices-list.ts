@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { NgIf } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { MenuModule, Menu } from 'primeng/menu';
-import { SelectModule } from 'primeng/select';
-import { ToggleButtonModule } from 'primeng/togglebutton';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { DeviceService } from '../../../../services/device-service';
 import { ProjectService } from '../../../../services/project-service';
@@ -14,21 +10,19 @@ import { DeviceForm } from '../device-form/device-form';
 import { MenuItem } from 'primeng/api';
 import { DeviceApiInfo } from '../device-api-info/device-api-info';
 import { DeviceHealthReport } from '../device-health-report/device-health-report';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   selector: 'app-devices-list',
-  imports: [TableModule, ButtonModule, MenuModule, NgIf, FormsModule, SelectModule, ToggleButtonModule],
+  imports: [TableModule, ButtonModule, MenuModule],
   providers: [DialogService],
   templateUrl: './devices-list.html',
   styleUrl: './devices-list.scss',
 })
 export class DevicesList implements OnInit {
   public devices: DeviceDto[] = [];
-  public filteredDevices: DeviceDto[] = [];
+  public scopedProjectId: string | null = null;
   public projectNameMap = new Map<string, string>();
-  public projectFilterOptions: { label: string; value: string }[] = [];
-  public filterProject: string | null = null;
-  public showUnassignedOnly = false;
 
   public rowMenuItems: MenuItem[] = [];
   private selectedDevice: DeviceDto | null = null;
@@ -40,10 +34,13 @@ export class DevicesList implements OnInit {
   public constructor(
     private readonly deviceService: DeviceService,
     private readonly dialogService: DialogService,
-    private readonly projectService: ProjectService
+    private readonly projectService: ProjectService,
+    private readonly route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
+    this.scopedProjectId = this.route.snapshot.paramMap.get('projectId');
+
     this.loadDevices();
     this.buildDrowndownMenu();
     this.projectService.getProjects().subscribe({
@@ -51,10 +48,6 @@ export class DevicesList implements OnInit {
         for (const p of projects) {
           if (p.Id) this.projectNameMap.set(p.Id, p.Title || p.Id);
         }
-        this.projectFilterOptions = projects
-          .filter(p => !!p.Id)
-          .map(p => ({ label: p.Title || p.Id, value: p.Id }));
-        this.applyFilters();
       },
     });
   }
@@ -79,37 +72,19 @@ export class DevicesList implements OnInit {
   }
 
   private loadDevices(): void {
-    this.deviceService.getDevices().subscribe({
+    if (!this.scopedProjectId) {
+      this.devices = [];
+      return;
+    }
+
+    this.deviceService.getDevicesByProject(this.scopedProjectId).subscribe({
       next: (devices) => {
         this.devices = devices;
-        this.applyFilters();
       },
       error: (err) => {
         console.error('Error loading devices:', err);
       },
     });
-  }
-
-  public applyFilters(): void {
-    this.filteredDevices = this.devices.filter((device) => {
-      if (this.filterProject && device.ProjectId !== this.filterProject) return false;
-      if (this.showUnassignedOnly && !!device.ProjectId) return false;
-      return true;
-    });
-  }
-
-  public onFilterChange(): void {
-    this.applyFilters();
-  }
-
-  public clearFilters(): void {
-    this.filterProject = null;
-    this.showUnassignedOnly = false;
-    this.applyFilters();
-  }
-
-  get hasActiveFilters(): boolean {
-    return !!this.filterProject || this.showUnassignedOnly;
   }
 
   public buildDrowndownMenu(): void {
@@ -184,6 +159,7 @@ export class DevicesList implements OnInit {
       header: 'Select a Device',
       width: '50vw',
       modal: true,
+      data: this.scopedProjectId ? ({ ProjectId: this.scopedProjectId } as Partial<DeviceDto>) : undefined,
       breakpoints: {
         '960px': '75vw',
         '640px': '90vw',
@@ -193,6 +169,10 @@ export class DevicesList implements OnInit {
 
     this.formRef?.onClose.subscribe((device: DeviceDto | undefined) => {
       if (!device) return;
+
+      if (this.scopedProjectId) {
+        device.ProjectId = this.scopedProjectId;
+      }
 
       this.deviceService.addDevice(device).subscribe({
         next: () => this.loadDevices(),
@@ -222,6 +202,10 @@ export class DevicesList implements OnInit {
 
     this.formRef?.onClose.subscribe((device: DeviceDto | undefined) => {
       if (!device) return;
+
+      if (this.scopedProjectId) {
+        device.ProjectId = this.scopedProjectId;
+      }
 
       this.deviceService.updateDevice(device.Id, device).subscribe({
         next: () => this.loadDevices(),

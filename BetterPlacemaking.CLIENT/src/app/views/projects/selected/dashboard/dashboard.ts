@@ -223,7 +223,7 @@ export class Dashboard implements OnInit {
 
     forkJoin({
       project: this.projectService.getProject(this.projectId).pipe(catchError(() => of(null))),
-      devices: this.deviceService.getDevices().pipe(catchError(() => of([] as DeviceDto[])))
+      devices: this.deviceService.getDevicesByProject(this.projectId).pipe(catchError(() => of([] as DeviceDto[])))
     }).subscribe({
       next: ({ project, devices }) => {
         this.devices = devices ?? [];
@@ -486,7 +486,7 @@ public onProjectProgressClick(): void {
 
 public goToDevicesPage(): void {
   if (!this.projectId) return;
-  this.router.navigate(['/', this.projectId, 'admin', 'devices']);
+  this.router.navigate(['/', this.projectId, 'devices']);
 }
 
 public goTo3DModelPage(): void {
