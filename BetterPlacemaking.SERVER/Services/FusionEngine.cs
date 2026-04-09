@@ -406,8 +406,23 @@ public class FusionFirestoreLoader
             return result;
         }
 
+        // Index model-level docs (IsPerUnit == false, no CameraMac) by their doc ID (= ModelId)
+        // so we can fall back to them for MACs whose per-unit doc is missing.
+        var modelDocs = new Dictionary<string, DocumentSnapshot>(StringComparer.OrdinalIgnoreCase);
+
+        // First pass: per-unit docs matched by CameraMac field or {deviceId}_{mac} doc ID.
         foreach (var doc in snapshot.Documents)
         {
+            bool hasCameraMac = doc.TryGetValue("CameraMac", out string? storedMac)
+                                && !string.IsNullOrWhiteSpace(storedMac);
+            bool isPerUnit = !doc.TryGetValue("IsPerUnit", out bool pu) || pu;
+
+            if (!hasCameraMac && !isPerUnit)
+            {
+                modelDocs[doc.Id] = doc;
+                continue;
+            }
+
             if (!TryGetMac(doc, out string mac)) continue;
             if (!cameraMacs.Contains(mac))        continue;
 
@@ -423,7 +438,52 @@ public class FusionFirestoreLoader
             }
         }
 
+        // Second pass: for any MAC still unresolved, detect its model from the MAC prefix
+        // and look up the corresponding model-level doc.
+        var unresolved = cameraMacs.Where(m => !result.ContainsKey(m)).ToList();
+        if (unresolved.Count > 0 && modelDocs.Count > 0)
+        {
+            foreach (var mac in unresolved)
+            {
+                var modelId = DetectModelFromMac(mac);
+                if (modelId == null || !modelDocs.TryGetValue(modelId, out var modelDoc))
+                {
+                    Console.WriteLine($"[WARN] cam={mac}: no per-unit intrinsics and no matching model-level doc — undistortion skipped.");
+                    continue;
+                }
+
+                var intrinsics = ParseIntrinsicsDoc(modelDoc, mac);
+                if (intrinsics != null)
+                {
+                    result[mac] = intrinsics;
+                    Console.WriteLine($"[INFO] Intrinsics for cam={mac} resolved from model-level doc '{modelId}'.");
+                }
+                else
+                {
+                    Console.WriteLine($"[WARN] cam={mac}: model-level doc '{modelId}' could not be parsed — undistortion skipped.");
+                }
+            }
+        }
+
         return result;
+    }
+
+    /// <summary>
+    /// Maps MAC address prefixes to camera model IDs.
+    /// Must be kept in sync with MAC_PREFIX_TO_MODEL in camera_onboard.py.
+    /// </summary>
+    private static readonly Dictionary<string, string> MacPrefixToModel = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "d0:3b:f4", "ANNKE" },
+    };
+
+    private static string? DetectModelFromMac(string mac)
+    {
+        var normalized = mac.Trim().ToLowerInvariant();
+        foreach (var (prefix, model) in MacPrefixToModel)
+            if (normalized.StartsWith(prefix))
+                return model;
+        return null;
     }
 
     private static bool TryGetMac(DocumentSnapshot doc, out string mac)
@@ -466,7 +526,7 @@ public class FusionFirestoreLoader
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
     {
-        if (!TryParseMatrix3x3Flat(doc, "CameraMatrix", mac, out var cameraMatrix))
+        if (!TryParseMatrix3x3Flat(doc, "CameraMatrixFlat", mac, out var cameraMatrix))
             return null;
 
         if (!doc.TryGetValue("DistortionCoefficients", out IReadOnlyList<object> distRaw))
