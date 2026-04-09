@@ -259,22 +259,101 @@
         <div class="vision-map-copy">
           <div class="vision-map-title">Puzzle Assembly Workspace</div>
           <div class="vision-map-text">
-            Launch the calibration puzzle to align BEV layers on the floorplan and produce global homographies.
+            Align BEV camera layers on the floorplan to produce global homographies.
           </div>
         </div>
         <p-button
           label="Open Puzzle"
           icon="pi pi-map"
           severity="contrast"
+          [disabled]="!puzzleReady"
+          [pTooltip]="!puzzleReady ? 'All camera BEV images must be ready before opening the puzzle' : ''"
+          tooltipPosition="left"
           (onClick)="openPuzzleWorkspace()" />
       </div>
 
-      <div class="border-2 border-dashed rounded-lg p-10 text-center text-muted-color mt-4">
-        <i class="pi pi-map text-4xl opacity-30 block mb-3"></i>
-        <div class="font-semibold opacity-70">Ready for Puzzle Assembly</div>
-        <div class="text-xs opacity-50 mt-1">Use the workspace to place camera tiles and save floorplan alignment.</div>
+      <!-- Not started: no local homographies at all -->
+      <div *ngIf="puzzlePiecesTotal === 0"
+           class="flex items-start gap-3 mt-4 rounded-lg border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800 p-4">
+        <i class="pi pi-times-circle text-red-500 text-xl flex-shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold text-red-700 dark:text-red-400 text-sm">No camera scans found</div>
+          <div class="text-xs text-red-600 dark:text-red-500 mt-1">Run a ChArUco homography scan on each camera from the camera modal above. All cameras must submit a BEV image before the puzzle can open.</div>
+        </div>
+      </div>
+
+      <!-- In progress: some pieces ready, some not -->
+      <div *ngIf="puzzlePiecesTotal > 0 && !puzzleReady"
+           class="flex items-start gap-3 mt-4 rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800 p-4">
+        <i class="pi pi-exclamation-triangle text-yellow-500 text-xl flex-shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold text-yellow-700 dark:text-yellow-400 text-sm">
+            {{ puzzlePiecesReady }} / {{ puzzlePiecesTotal }} cameras ready
+          </div>
+          <div class="text-xs text-yellow-600 dark:text-yellow-500 mt-1">Some cameras are still missing BEV images. Run a ChArUco scan on the remaining cameras to unlock the puzzle workspace.</div>
+        </div>
+      </div>
+
+      <!-- All ready -->
+      <div *ngIf="puzzleReady"
+           class="flex items-start gap-3 mt-4 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-800 p-4">
+        <i class="pi pi-check-circle text-green-500 text-xl flex-shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold text-green-700 dark:text-green-400 text-sm">All {{ puzzlePiecesTotal }} cameras ready</div>
+          <div class="text-xs text-green-600 dark:text-green-500 mt-1">All BEV images are generated. Open the puzzle workspace to align camera layers on the floorplan.</div>
+        </div>
       </div>
     </p-panel>
   </div>
+
+  <!-- Floorplan Library -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+  <p-panel header="Floorplan Library" [toggleable]="true">
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-muted-color">Upload a floorplan image to use in the puzzle workspace.</div>
+        <label class="cursor-pointer">
+          <p-button
+            label="Upload Floorplan"
+            icon="pi pi-upload"
+            severity="secondary"
+            [loading]="uploadingFloorplan"
+            (onClick)="floorplanInput.click()" />
+          <input #floorplanInput type="file" accept="image/*" class="hidden"
+                 (change)="onFloorplanFileSelected($event)" />
+        </label>
+      </div>
+
+      <div *ngIf="floorplansLoading" class="text-muted-color text-sm py-3 text-center">
+        Loading floorplans...
+      </div>
+
+      <div *ngIf="!floorplansLoading && floorplans.length === 0"
+           class="text-muted-color text-sm py-4 text-center">
+        No floorplans uploaded yet.
+      </div>
+
+      <div *ngIf="!floorplansLoading && floorplans.length > 0"
+           class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div *ngFor="let fp of floorplans"
+             class="flex flex-col border rounded-lg overflow-hidden bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700">
+          <div class="h-24 bg-surface-200 dark:bg-surface-700 flex items-center justify-center overflow-hidden">
+            <img *ngIf="fp.ImageDownloadUrl" [src]="fp.ImageDownloadUrl"
+                 class="w-full h-full object-cover" />
+            <i *ngIf="!fp.ImageDownloadUrl" class="pi pi-image text-2xl opacity-30"></i>
+          </div>
+          <div class="p-2 flex items-center gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-xs truncate">{{ fp.Nickname }}</div>
+              <div class="text-xs text-muted-color">{{ fp.ImageWidth }} × {{ fp.ImageHeight }}</div>
+            </div>
+            <p-button icon="pi pi-trash" severity="danger" [text]="true" size="small"
+                      pTooltip="Delete" tooltipPosition="left"
+                      (onClick)="deleteFloorplan(fp.Id)" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </p-panel>
 
 </div>

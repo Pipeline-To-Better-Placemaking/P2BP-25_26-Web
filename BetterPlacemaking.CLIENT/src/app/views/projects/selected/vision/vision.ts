@@ -19,6 +19,7 @@ import { BoardService } from '../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../models/BoardLibrary';
 import { HomographyService } from '../../../../services/homography-service';
 import { forkJoin, of } from 'rxjs';
+import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
@@ -59,6 +60,13 @@ export class Vision implements OnInit {
   boardLibraryLoading = false;
   boardLibraryError = false;
   hasLocalHomographies = false;
+  puzzleReady = false;
+  puzzlePiecesTotal = 0;
+  puzzlePiecesReady = 0;
+  floorplans: FloorplanItem[] = [];
+  floorplansLoading = false;
+  uploadingFloorplan = false;
+
 
 
   private camRef: DynamicDialogRef | null = null;
@@ -73,12 +81,15 @@ export class Vision implements OnInit {
     private readonly boardService: BoardService,
     private readonly dialogService: DialogService,
     private readonly homographyService: HomographyService,
+    private readonly floorplanService: FloorplanService,  // ← add this
   ) {}
+
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
     this.loadDevices();
     this.loadBoardLibrary();
+    this.loadFloorplans();
   }
 
   private loadDevices(): void {
@@ -104,7 +115,50 @@ export class Vision implements OnInit {
       next: (results) => { this.hasLocalHomographies = results.some(Boolean); },
       error: () => { this.hasLocalHomographies = false; },
     });
+
+    this.homographyService.getPuzzleWorkspace(this.projectId).subscribe({
+      next: (workspace) => {
+        this.puzzlePiecesTotal = workspace.PuzzlePieces.length;
+        this.puzzlePiecesReady = workspace.PuzzlePieces.filter((p) => p.Status === 'ready').length;
+        this.puzzleReady = this.puzzlePiecesTotal > 0 && this.puzzlePiecesTotal === this.puzzlePiecesReady;
+      },
+      error: () => { this.puzzleReady = false; },
+    });
   }
+
+  private loadFloorplans(): void {
+    this.floorplansLoading = true;
+    this.floorplanService.getLibrary(this.projectId).subscribe({
+      next: (items) => {
+        this.floorplans = items;
+        this.floorplansLoading = false;
+      },
+      error: () => { this.floorplansLoading = false; },
+    });
+  }
+
+  onFloorplanFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const nickname = file.name.replace(/\.[^.]+$/, ''); // strip extension for default name
+    this.uploadingFloorplan = true;
+    this.floorplanService.upload(file, nickname, this.projectId).subscribe({
+      next: () => {
+        this.uploadingFloorplan = false;
+        this.loadFloorplans();
+      },
+      error: () => { this.uploadingFloorplan = false; },
+    });
+  }
+
+  deleteFloorplan(id: string): void {
+    this.floorplanService.delete(id).subscribe({
+      next: () => this.loadFloorplans(),
+    });
+  }
+
 
 
   get allCameras(): CameraEntry[] {
@@ -340,7 +394,10 @@ export class Vision implements OnInit {
   }
 
   openPuzzleWorkspace(): void {
-    void this.router.navigate([this.projectId, 'calibration', 'puzzle']);
+    const floorplan = this.floorplans[0] ?? null;
+    void this.router.navigate([this.projectId, 'calibration', 'puzzle'], {
+      queryParams: floorplan ? { floorplanUrl: floorplan.ImageDownloadUrl } : {},
+    });
   }
 
   openBoardDetailModal(board: BoardLibraryItem): void {

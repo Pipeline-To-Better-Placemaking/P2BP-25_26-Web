@@ -3,8 +3,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
+import { ActivatedRoute } from '@angular/router';
+import { HomographyService, PuzzlePieceDto } from '../../../../../services/homography-service';
+
 
 interface LayerState {
+  puzzlePieceId: string;
+  deviceId: string;
+  cameraMac: string;
   macTag: string;
   bevImage: HTMLImageElement;
   hLocalCanvas: number[][];
@@ -13,6 +19,7 @@ interface LayerState {
   scale: number;
   loaded: boolean;
 }
+
 
 @Component({
   selector: 'app-puzzle',
@@ -53,99 +60,79 @@ export class PuzzleComponent implements AfterViewInit {
   showTrackPoints = false;
   trackPoints: { mac: string; x: number; y: number }[] = [];
 
+  loading = false;
+  error: string | null = null;
+
+  constructor(
+    private readonly route: ActivatedRoute,
+    private readonly homographyService: HomographyService,
+  ) {}
+
+
   ngAfterViewInit() {
-    this.loadData();
+    const projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+    this.loadWorkspace(projectId);
   }
 
-  async loadData() {
-    // Load test data from public folder
-    const resp = await fetch('test-puzzle/puzzle-data.json');
-    const data = await resp.json();
-
-    // Load floorplan
-    this.floorplanImg.src = 'test-puzzle/floorplan.png';
-    await new Promise(resolve => this.floorplanImg.onload = resolve);
-    this.fpW = this.floorplanImg.naturalWidth;
-    this.fpH = this.floorplanImg.naturalHeight;
-    this.dscale = Math.min(1, this.maxDisplayDim / Math.max(this.fpW, this.fpH));
-    this.originFp = [0, this.fpH - 1]; // default: bottom-left
-
-    // Size the canvas
-    const canvas = this.canvasRef.nativeElement;
-    canvas.width = Math.round(this.fpW * this.dscale);
-    canvas.height = Math.round(this.fpH * this.dscale);
-
-    // Load each camera BEV image
-    for (const cam of data.cameras) {
-      const img = new Image();
-      img.src = cam.bevImage;
-      const layer: LayerState = {
-        macTag: cam.macTag.toLowerCase().replace(/:/g, '_'),
-        bevImage: img,
-        hLocalCanvas: cam.hLocalCanvas,
-        centerFp: [this.fpW / 2, this.fpH / 2],
-        angleDeg: 0,
-        scale: 1,
-        loaded: false,
-      };
-
-      const rawH = cam.hLocalCanvas;
-      img.onload = () => {
-        // Convert black background to transparent
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = img.naturalWidth;
-        tempCanvas.height = img.naturalHeight;
-        const tempCtx = tempCanvas.getContext('2d')!;
-        tempCtx.drawImage(img, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        const d = imageData.data;
-        for (let px = 0; px < d.length; px += 4) {
-          if (d[px] < 10 && d[px + 1] < 10 && d[px + 2] < 10) {
-            d[px + 3] = 0;
-          }
+  private loadWorkspace(projectId: string): void {
+    this.loading = true;
+    this.homographyService.getPuzzleWorkspace(projectId).subscribe({
+      next: (workspace) => {
+        this.loading = false;
+        this.initCanvas();
+        const ready = workspace.PuzzlePieces.filter(
+          (p) => p.Status === 'ready' && p.PuzzlePieceDownloadUrl && p.Metadata
+        );
+        if (ready.length === 0) {
+          this.error = 'No puzzle pieces ready. Ensure ChArUco homography scans have completed.';
+          return;
         }
-        tempCtx.putImageData(imageData, 0, 0);
-        const cleanImg = new Image();
-        cleanImg.onload = () => {
-          layer.bevImage = cleanImg;
-          layer.loaded = true;
-          // Compute fitted homography using actual image dimensions
-          if (rawH) {
-            layer.hLocalCanvas = this.fitHomographyToCanvas(
-              rawH, 3072, 1728, cleanImg.naturalWidth, cleanImg.naturalHeight
-            );
-          }
-          this.draw();
-        };
-        cleanImg.src = tempCanvas.toDataURL('image/png');
-      };
-
-      this.layers.push(layer);
-    }
-
-    // Load test track points if available
-    try {
-      const trackResp = await fetch('test-puzzle/test-points.jsonl');
-      if (trackResp.ok) {
-        const text = await trackResp.text();
-        this.trackPoints = text.trim().split('\n')
-          .map(line => { try { return JSON.parse(line); } catch { return null; } })
-          .filter(obj => obj && obj.type === 'track')
-          .map(obj => ({
-            mac: obj.mac.toLowerCase().replace(/:/g, '_'),
-            x: obj.x,
-            y: obj.y,
-          }));
-        console.log(`Loaded ${this.trackPoints.length} test points`);
-      }
-    } catch (e) {
-      // No test points file, that's fine
-    }
-
-    this.draw();
-    // Focus the container so keyboard events work
-    this.canvasRef.nativeElement.parentElement?.focus();
+        ready.forEach((piece) => this.loadPiece(piece));
+      },
+      error: () => { this.loading = false; },
+    });
   }
+
+  private initCanvas(): void {
+    const floorplanUrl = this.route.snapshot.queryParamMap.get('floorplanUrl')
+      ?? 'test-puzzle/floorplan.png';
+    this.floorplanImg.crossOrigin = 'anonymous';
+    this.floorplanImg.src = floorplanUrl;
+    this.floorplanImg.onload = () => {
+      this.fpW = this.floorplanImg.naturalWidth;
+      this.fpH = this.floorplanImg.naturalHeight;
+      this.dscale = Math.min(1, this.maxDisplayDim / Math.max(this.fpW, this.fpH));
+      this.originFp = [0, this.fpH - 1];
+      const canvas = this.canvasRef.nativeElement;
+      canvas.width = Math.round(this.fpW * this.dscale);
+      canvas.height = Math.round(this.fpH * this.dscale);
+      this.draw();
+    };
+  }
+
+  private loadPiece(piece: PuzzlePieceDto): void {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // required for images loaded from signed GCS URLs
+    const layer: LayerState = {
+      puzzlePieceId: piece.PuzzlePieceId,
+      deviceId: piece.DeviceId,
+      cameraMac: piece.CameraMac,
+      macTag: piece.CameraMac.replace(/:/g, '_'),
+      bevImage: img,
+      hLocalCanvas: piece.Metadata!.HLocalCanvas,
+      centerFp: [this.fpW / 2, this.fpH / 2],
+      angleDeg: 0,
+      scale: 1,
+      loaded: false,
+    };
+    img.onload = () => {
+      layer.loaded = true;
+      this.draw();
+    };
+    img.src = piece.PuzzlePieceDownloadUrl!;
+    this.layers.push(layer);
+  }
+
 
   draw() {
     const canvas = this.canvasRef.nativeElement;
