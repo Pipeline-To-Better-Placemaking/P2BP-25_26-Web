@@ -18,7 +18,7 @@ using BetterPlacemaking.Services;
 public static class FusionEngineConfig
 {
     public const string InputStorageFolder  = "vision/tracks-raw";   // folder containing JSONL files
-    public const string OutputStorageFolder = "vision/fused";
+    public const string OutputStorageFolder = "vision/tracks-fused";
 
     public const double SimThreshold   = 0.75;
     public const double MaxSpeedPxPerS = 4000.0;

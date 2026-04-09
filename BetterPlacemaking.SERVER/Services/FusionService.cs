@@ -76,8 +76,8 @@ namespace BetterPlacemaking.Services
                     {
                         From                = fromUtc,
                         To                  = toUtc,
-                        InputStorageFolder  = projectId != null ? $"vision/{projectId}/tracks-raw" : null,
-                        OutputStorageFolder = projectId != null ? $"vision/{projectId}/fused"      : null,
+                        InputStorageFolder  = projectId != null ? $"vision/tracks-raw/{projectId}"   : null,
+                        OutputStorageFolder = projectId != null ? $"vision/tracks-fused/{projectId}" : null,
                     });
 
                     if (!result.Success)
@@ -85,7 +85,7 @@ namespace BetterPlacemaking.Services
 
                     string fromStr   = fromUtc.Date.ToString("yyyyMMdd");
                     string toStr     = toUtc.Date.ToString("yyyyMMdd");
-                    string folder    = projectId != null ? $"vision/{projectId}/fused" : "vision/fused";
+                    string folder = projectId != null ? $"vision/tracks-fused/{projectId}" : "vision/tracks-fused";
                     string outputKey = fromStr == toStr
                         ? $"{folder}/fused_tracks-{fromStr}.json"
                         : $"{folder}/fused_tracks-{fromStr}_{toStr}.json";
