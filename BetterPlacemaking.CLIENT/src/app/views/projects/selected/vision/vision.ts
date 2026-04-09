@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CardModule } from 'primeng/card';
@@ -17,11 +17,14 @@ import { BoardGenerateModal } from './board-generate-modal/board-generate-modal'
 import { BoardDetailModal } from './board-detail-modal/board-detail-modal';
 import { BoardService } from '../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../models/BoardLibrary';
-import { HomographyService } from '../../../../services/homography-service';
+import { HomographyService, GlobalHomographySetDto } from '../../../../services/homography-service';
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
+import { interval, Subject } from 'rxjs';
+import { takeUntil, startWith } from 'rxjs/operators';
 
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
+const POLL_INTERVAL_MS = 30_000;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
 const MIN_ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
@@ -51,7 +54,7 @@ export interface CameraEntry {
   templateUrl: './vision.html',
   styleUrls: ['./vision.scss'],
 })
-export class Vision implements OnInit {
+export class Vision implements OnInit, OnDestroy {
   projectId = '';
   devices: DeviceDto[] = [];
   loading = true;
@@ -63,11 +66,15 @@ export class Vision implements OnInit {
   puzzlePiecesTotal = 0;
   puzzlePiecesReady = 0;
   private homographyCameraKeys = new Set<string>();
+  globalHomographies: GlobalHomographySetDto | null = null;
   floorplans: FloorplanItem[] = [];
   floorplansLoading = false;
   uploadingFloorplan = false;
+  selectedFloorplanId: string | null = null;
 
 
+
+  private readonly destroy$ = new Subject<void>();
 
   private camRef: DynamicDialogRef | null = null;
   private deviceRef: DynamicDialogRef | null = null;
@@ -87,9 +94,19 @@ export class Vision implements OnInit {
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
-    this.loadDevices();
+
+    interval(POLL_INTERVAL_MS).pipe(
+      startWith(0),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadDevices());
+
     this.loadBoardLibrary();
     this.loadFloorplans();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   private loadDevices(): void {
@@ -128,6 +145,8 @@ export class Vision implements OnInit {
         this.hasLocalHomographies =
           this.allCameras.length > 0 &&
           this.statHomographiesDone === this.allCameras.length;
+
+        this.globalHomographies = workspace.GlobalHomographies ?? null;
       },
       error: () => {
         this.puzzleReady = false;
@@ -135,6 +154,7 @@ export class Vision implements OnInit {
         this.puzzlePiecesReady = 0;
         this.homographyCameraKeys.clear();
         this.hasLocalHomographies = false;
+        this.globalHomographies = null;
       },
     });
   }
@@ -145,10 +165,40 @@ export class Vision implements OnInit {
       next: (items) => {
         this.floorplans = items;
         this.floorplansLoading = false;
+        // Auto-select the first one if nothing is selected yet
+        if (!this.selectedFloorplanId && items.length > 0) {
+          this.selectedFloorplanId = items[0].Id;
+        }
+        // Clear selection if the selected floorplan was deleted
+        if (this.selectedFloorplanId && !items.find((f) => f.Id === this.selectedFloorplanId)) {
+          this.selectedFloorplanId = items[0]?.Id ?? null;
+        }
       },
       error: () => { this.floorplansLoading = false; },
     });
   }
+
+  selectFloorplan(id: string): void {
+    this.selectedFloorplanId = id;
+  }
+
+  get selectedFloorplan(): FloorplanItem | null {
+    return this.floorplans.find((f) => f.Id === this.selectedFloorplanId) ?? null;
+  }
+
+  get globalSavedAt(): string | null {
+    if (!this.globalHomographies?.SavedAt) return null;
+    const date = new Date(this.globalHomographies.SavedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const diffMs = Date.now() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  }
+
 
   onFloorplanFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -455,9 +505,11 @@ export class Vision implements OnInit {
   }
 
   openPuzzleWorkspace(): void {
-    const floorplan = this.floorplans[0] ?? null;
+    const floorplan = this.selectedFloorplan;
     void this.router.navigate([this.projectId, 'calibration', 'puzzle'], {
-      queryParams: floorplan ? { floorplanUrl: floorplan.ImageDownloadUrl } : {},
+      queryParams: floorplan
+        ? { floorplanUrl: floorplan.ImageDownloadUrl, floorplanId: floorplan.Id }
+        : {},
     });
   }
 

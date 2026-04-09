@@ -57,10 +57,33 @@ export interface PuzzlePieceDto {
   Error: string | null;
 }
 
+export interface GlobalHomographyPlacementDto {
+  PuzzlePieceId: string;
+  DeviceId: string;
+  CameraMac: string;
+  CenterFp: number[];
+  AngleDeg: number;
+  Scale: number;
+  HLocalCanvas: number[][];
+  LocalCanvasSize: number[];
+}
+
+export interface GlobalHomographySetDto {
+  ProjectId: string;
+  FloorplanId: string | null;
+  MmPerFpPx: number;
+  OriginFp: number[];
+  FloorplanSize: number[];
+  Placements: GlobalHomographyPlacementDto[];
+  SavedAt: string;
+  SavedByUserId: string | null;
+}
+
 export interface PuzzleWorkspaceResponseDto {
   ProjectId: string;
   PuzzlePieces: PuzzlePieceDto[];
   LocalHomographies?: LocalHomographyWorkspaceDto[];
+  GlobalHomographies?: GlobalHomographySetDto | null;
 }
 
 export interface LocalHomographyWorkspaceDto {

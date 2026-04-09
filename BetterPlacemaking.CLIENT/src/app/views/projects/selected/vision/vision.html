@@ -268,15 +268,32 @@
           <div class="vision-map-text">
             Align BEV camera layers on the floorplan to produce global homographies.
           </div>
+          <div *ngIf="selectedFloorplan" class="text-xs text-muted-color mt-1">
+            <i class="pi pi-map-marker mr-1"></i>{{ selectedFloorplan.Nickname }}
+          </div>
+          <div *ngIf="!selectedFloorplan && floorplans.length === 0" class="text-xs text-orange-500 mt-1">
+            Upload a floorplan below to enable the puzzle.
+          </div>
         </div>
         <p-button
           label="Open Puzzle"
           icon="pi pi-map"
           severity="contrast"
-          [disabled]="!puzzleReady"
-          [pTooltip]="!puzzleReady ? 'All camera BEV images must be ready before opening the puzzle' : ''"
+          [disabled]="!puzzleReady || !selectedFloorplan"
+          [pTooltip]="!puzzleReady ? 'All camera BEV images must be ready before opening the puzzle' : !selectedFloorplan ? 'Select a floorplan from the Floorplan Library below' : ''"
           tooltipPosition="left"
           (onClick)="openPuzzleWorkspace()" />
+      </div>
+
+      <!-- Last saved -->
+      <div *ngIf="globalHomographies"
+           class="flex items-center gap-3 mt-4 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 p-3">
+        <i class="pi pi-check-circle text-green-500 text-lg flex-shrink-0"></i>
+        <div class="text-sm">
+          <span class="font-semibold">Puzzle saved</span>
+          <span class="text-muted-color ml-2">{{ globalSavedAt }}</span>
+          <span class="text-muted-color ml-2">· {{ globalHomographies.Placements.length }} camera{{ globalHomographies.Placements.length !== 1 ? 's' : '' }} placed</span>
+        </div>
       </div>
 
       <!-- Not started: no local homographies at all -->
@@ -318,7 +335,7 @@
   <p-panel header="Floorplan Library" [toggleable]="true">
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
-        <div class="text-sm text-muted-color">Upload a floorplan image to use in the puzzle workspace.</div>
+        <div class="text-sm text-muted-color">Click a floorplan to select it for the puzzle workspace.</div>
         <label class="cursor-pointer">
           <p-button
             label="Upload Floorplan"
@@ -343,11 +360,25 @@
       <div *ngIf="!floorplansLoading && floorplans.length > 0"
            class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
         <div *ngFor="let fp of floorplans"
-             class="flex flex-col border rounded-lg overflow-hidden bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700">
-          <div class="h-24 bg-surface-200 dark:bg-surface-700 flex items-center justify-center overflow-hidden">
+             class="flex flex-col rounded-lg overflow-hidden cursor-pointer transition-all"
+             [class.ring-2]="fp.Id === selectedFloorplanId"
+             [class.ring-primary-500]="fp.Id === selectedFloorplanId"
+             [class.border]="fp.Id !== selectedFloorplanId"
+             [class.border-surface-200]="fp.Id !== selectedFloorplanId"
+             [class.dark:border-surface-700]="fp.Id !== selectedFloorplanId"
+             [class.bg-surface-100]="fp.Id !== selectedFloorplanId"
+             [class.dark:bg-surface-800]="fp.Id !== selectedFloorplanId"
+             [class.bg-primary-50]="fp.Id === selectedFloorplanId"
+             [class.dark:bg-primary-950]="fp.Id === selectedFloorplanId"
+             (click)="selectFloorplan(fp.Id)">
+          <div class="relative h-24 bg-surface-200 dark:bg-surface-700 flex items-center justify-center overflow-hidden">
             <img *ngIf="fp.ImageDownloadUrl" [src]="fp.ImageDownloadUrl"
                  class="w-full h-full object-cover" />
             <i *ngIf="!fp.ImageDownloadUrl" class="pi pi-image text-2xl opacity-30"></i>
+            <div *ngIf="fp.Id === selectedFloorplanId"
+                 class="absolute top-1 right-1 bg-primary-500 rounded-full w-5 h-5 flex items-center justify-center">
+              <i class="pi pi-check text-white text-xs"></i>
+            </div>
           </div>
           <div class="p-2 flex items-center gap-2">
             <div class="flex-1 min-w-0">
@@ -356,7 +387,7 @@
             </div>
             <p-button icon="pi pi-trash" severity="danger" [text]="true" size="small"
                       pTooltip="Delete" tooltipPosition="left"
-                      (onClick)="deleteFloorplan(fp.Id)" />
+                      (onClick)="deleteFloorplan(fp.Id); $event.stopPropagation()" />
           </div>
         </div>
       </div>
