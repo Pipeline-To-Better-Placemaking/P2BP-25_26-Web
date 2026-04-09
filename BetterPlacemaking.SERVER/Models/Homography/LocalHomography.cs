@@ -77,5 +77,8 @@ namespace BetterPlacemaking.Models.Homography
 
         [FirestoreProperty]
         public List<double>? DistortionCoefficients { get; set; }
+
+        [FirestoreProperty]
+        public bool? UsedUndistortedImage { get; set; }
     }
 }

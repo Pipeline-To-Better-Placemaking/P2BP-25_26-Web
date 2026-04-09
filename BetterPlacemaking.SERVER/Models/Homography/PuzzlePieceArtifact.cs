@@ -56,7 +56,25 @@ namespace BetterPlacemaking.Models.Homography
         public string? SourceSnapshotPath { get; set; }
 
         [FirestoreProperty]
+        public bool UsedUndistortedImage { get; set; }
+
+        [FirestoreProperty]
+        public string? UndistortMode { get; set; }
+
+        [FirestoreProperty]
+        public double BboxTrimPct { get; set; }
+
+        [FirestoreProperty]
+        public string? HomographyFile { get; set; }
+
+        [FirestoreProperty]
         public string? PuzzlePiecePath { get; set; }
+
+        [FirestoreProperty]
+        public string? MetadataPath { get; set; }
+
+        [FirestoreProperty]
+        public int GenerationVersion { get; set; }
 
         [FirestoreProperty]
         public Timestamp GeneratedAt { get; set; }

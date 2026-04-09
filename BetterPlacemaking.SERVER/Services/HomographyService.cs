@@ -7,6 +7,7 @@ using BetterPlacemaking.Models.Homography;
 using Google.Cloud.Firestore;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
+using YamlDotNet.Serialization;
 
 namespace BetterPlacemaking.Services
 {
@@ -23,6 +24,7 @@ namespace BetterPlacemaking.Services
         private const string ColPuzzlePieces = "puzzle_pieces";
         private const string ColGlobalHomographies = "global_homographies";
         private const string ColDevices = "devices";
+        private const int PuzzlePieceGenerationVersion = 2;
 
         public LocalHomographyResponseDto SubmitLocalHomography(string deviceId, SubmitLocalHomographyDto dto)
         {
@@ -49,6 +51,7 @@ namespace BetterPlacemaking.Services
                 SnapshotPath = dto.SnapshotPath,
                 CameraMatrix = dto.CameraMatrix,
                 DistortionCoefficients = dto.DistortionCoefficients,
+                UsedUndistortedImage = dto.UsedUndistortedImage,
             };
 
             docRef.SetAsync(record).Wait();
@@ -413,7 +416,15 @@ namespace BetterPlacemaking.Services
             );
         }
 
-        public async Task<PuzzleWorkspaceResponseDto> GetPuzzleWorkspaceAsync(string projectId, CancellationToken ct)
+        public Task<PuzzleWorkspaceResponseDto> RefreshPuzzlePiecesAsync(string projectId, CancellationToken ct)
+        {
+            return GetPuzzleWorkspaceAsync(projectId, ct, forcePuzzlePieceRegeneration: true);
+        }
+
+        public async Task<PuzzleWorkspaceResponseDto> GetPuzzleWorkspaceAsync(
+            string projectId,
+            CancellationToken ct,
+            bool forcePuzzlePieceRegeneration = false)
         {
             if (string.IsNullOrWhiteSpace(projectId))
                 throw new ArgumentException("projectId is required.");
@@ -472,7 +483,13 @@ namespace BetterPlacemaking.Services
                 PuzzlePieceDto pieceDto;
                 try
                 {
-                    pieceDto = await ResolvePuzzlePieceAsync(projectId, local, localHash, artifactsByKey, ct);
+                    pieceDto = await ResolvePuzzlePieceAsync(
+                        projectId,
+                        local,
+                        localHash,
+                        artifactsByKey,
+                        ct,
+                        forcePuzzlePieceRegeneration);
                 }
                 catch (Exception ex)
                 {
@@ -514,6 +531,64 @@ namespace BetterPlacemaking.Services
                 LocalHomographies: localDtos,
                 GlobalHomographies: globalDto,
                 LockedGroups: globalDto?.LockedGroups ?? []);
+        }
+
+        public async Task<PuzzlePieceDto> GetPuzzlePieceAsync(
+            string projectId,
+            string deviceId,
+            string cameraMac,
+            bool forceRegeneration,
+            CancellationToken ct)
+        {
+            ValidateRequired(projectId, nameof(projectId));
+            ValidateRequired(deviceId, nameof(deviceId));
+            ValidateRequired(cameraMac, nameof(cameraMac));
+
+            var projectDeviceSnap = _db.Collection(ColDevices).Document(deviceId).GetSnapshotAsync().Result;
+            if (!projectDeviceSnap.Exists)
+                throw new KeyNotFoundException($"Device '{deviceId}' was not found.");
+
+            var device = projectDeviceSnap.ConvertTo<Device>();
+            if (!string.Equals(device?.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+                throw new KeyNotFoundException($"Device '{deviceId}' does not belong to project '{projectId}'.");
+
+            var normalizedMac = NormalizeMac(cameraMac);
+            var localSnap = _db.Collection(ColLocalHomographies)
+                .Document($"{deviceId}_{normalizedMac}")
+                .GetSnapshotAsync()
+                .Result;
+
+            if (!localSnap.Exists)
+                throw new KeyNotFoundException($"No local homography was found for device '{deviceId}' camera '{normalizedMac}'.");
+
+            var local = localSnap.ConvertTo<LocalHomography>();
+            if (local == null || local.Matrix == null)
+                throw new KeyNotFoundException($"Local homography for device '{deviceId}' camera '{normalizedMac}' is incomplete.");
+
+            local.DeviceId ??= deviceId;
+            local.CameraMac = normalizedMac;
+
+            var localHash = ComputeHomographyHash(local.Matrix);
+            var artifactSnap = _db.Collection(ColPuzzlePieces)
+                .Document(BuildPuzzlePieceDocumentId(projectId, deviceId, normalizedMac))
+                .GetSnapshotAsync()
+                .Result;
+
+            var artifactsByKey = new Dictionary<string, PuzzlePieceArtifact>(StringComparer.OrdinalIgnoreCase);
+            if (artifactSnap.Exists)
+            {
+                var artifact = artifactSnap.ConvertTo<PuzzlePieceArtifact>();
+                if (artifact != null && !string.IsNullOrWhiteSpace(artifact.DeviceId) && !string.IsNullOrWhiteSpace(artifact.CameraMac))
+                    artifactsByKey[BuildCameraKey(artifact.DeviceId!, artifact.CameraMac!)] = artifact;
+            }
+
+            return await ResolvePuzzlePieceAsync(
+                projectId,
+                local,
+                localHash,
+                artifactsByKey,
+                ct,
+                forceRegeneration);
         }
 
         public SaveGlobalHomographiesResponseDto SaveGlobalHomographies(
@@ -608,7 +683,8 @@ namespace BetterPlacemaking.Services
             LocalHomography local,
             string localHash,
             Dictionary<string, PuzzlePieceArtifact> artifactsByKey,
-            CancellationToken ct)
+            CancellationToken ct,
+            bool forceRegeneration = false)
         {
             var deviceId = local.DeviceId!;
             var cameraMac = NormalizeMac(local.CameraMac);
@@ -618,7 +694,7 @@ namespace BetterPlacemaking.Services
                 ? cached
                 : null;
 
-            if (artifact == null || !IsUsablePuzzlePieceArtifact(artifact, localHash))
+            if (forceRegeneration || artifact == null || !IsUsablePuzzlePieceArtifact(artifact, localHash))
             {
                 if (string.IsNullOrWhiteSpace(local.SnapshotPath))
                 {
@@ -646,7 +722,15 @@ namespace BetterPlacemaking.Services
                     ct);
             }
 
-            var metadata = ToPuzzlePieceMetadataDto(artifact);
+            DownloadUrlResponseDto? metadataDownload = null;
+            if (!string.IsNullOrWhiteSpace(artifact.MetadataPath))
+            {
+                metadataDownload = await _cloudStorage.CreateSignedDownloadUrlAsync(
+                    new RequestDownloadUrlDto(artifact.MetadataPath),
+                    ct);
+            }
+
+            var metadata = ToPuzzlePieceMetadataDto(artifact, metadataDownload);
             return new PuzzlePieceDto(
                 PuzzlePieceId: artifact.Id ?? BuildPuzzlePieceDocumentId(projectId, deviceId, cameraMac),
                 DeviceId: deviceId,
@@ -682,42 +766,34 @@ namespace BetterPlacemaking.Services
                 throw new InvalidOperationException("The stored snapshot could not be decoded.");
 
             using var source = EnsureBgra(decoded);
+            int sourceWidth = source.Cols;
+            int sourceHeight = source.Rows;
 
-            int frameWidth = source.Cols;
-            int frameHeight = source.Rows;
-            if (local.FrameSize is { Count: >= 2 } &&
-                local.FrameSize[0] > 0 &&
-                local.FrameSize[1] > 0)
-            {
-                frameWidth = local.FrameSize[0];
-                frameHeight = local.FrameSize[1];
-            }
+            var referenceSize = NormalizeOutputSize(local.FrameSize, sourceWidth, sourceHeight);
+            var useUndistortedImage = ResolveUsedUndistortedImage(local);
 
-            using var resized = source.Cols == frameWidth && source.Rows == frameHeight
-                ? source.Clone()
-                : new Mat();
-            if (source.Cols != frameWidth || source.Rows != frameHeight)
-                Cv2.Resize(source, resized, new OpenCvSharp.Size(frameWidth, frameHeight), 0, 0, InterpolationFlags.Linear);
+            using var prepared = useUndistortedImage
+                ? UndistortImage(source, local, referenceSize)
+                : source.Clone();
 
-            var hLocalCanvas = FitHomographyToOutput(
-                ToMatrix3x3(local.Matrix),
-                frameWidth,
-                frameHeight,
-                frameWidth,
-                frameHeight);
+            var hLocalCanvasRaw = FitHomographyToOutput(
+                BuildEffectiveHomography(ToMatrix3x3(local.Matrix), referenceSize, sourceWidth, sourceHeight),
+                sourceWidth,
+                sourceHeight,
+                referenceSize.Width,
+                referenceSize.Height);
 
-            using var transform = ToCvMat(hLocalCanvas);
-            using var warped = new Mat();
-            Cv2.WarpPerspective(
-                resized,
-                warped,
-                transform,
-                new OpenCvSharp.Size(frameWidth, frameHeight),
-                InterpolationFlags.Linear,
-                BorderTypes.Constant,
-                new Scalar(0, 0, 0, 0));
+            using var warped = WarpBgra(
+                prepared,
+                hLocalCanvasRaw,
+                referenceSize.Width,
+                referenceSize.Height,
+                InterpolationFlags.Lanczos4);
 
-            Cv2.ImEncode(".png", warped, out var pngBytes);
+            using var trimmed = TrimTransparentBorder(warped, out var trimTransform, out var bboxTrimPct);
+            var hLocalCanvas = MatMul3x3(trimTransform, hLocalCanvasRaw);
+
+            Cv2.ImEncode(".png", trimmed, out var pngBytes);
 
             var objectPath = _cloudStorage.BuildObjectPath(
                 $"projects/{projectId}/puzzle-pieces",
@@ -726,6 +802,24 @@ namespace BetterPlacemaking.Services
 
             using var uploadStream = new MemoryStream(pngBytes);
             await _cloudStorage.UploadFromStreamAsync(objectPath, "image/png", uploadStream, ct);
+
+            var metadataPath = _cloudStorage.BuildObjectPath(
+                $"projects/{projectId}/puzzle-pieces",
+                $"{local.DeviceId}_{cameraMac}_{localHash[..8]}_meta",
+                ".yml");
+
+            var metadataYaml = BuildPuzzlePieceMetadataYaml(
+                cameraMac,
+                sourceWidth,
+                sourceHeight,
+                trimmed.Cols,
+                trimmed.Rows,
+                hLocalCanvas,
+                useUndistortedImage,
+                bboxTrimPct);
+
+            using var metadataStream = new MemoryStream(Encoding.UTF8.GetBytes(metadataYaml));
+            await _cloudStorage.UploadFromStreamAsync(metadataPath, "application/x-yaml", metadataStream, ct);
 
             var artifact = new PuzzlePieceArtifact
             {
@@ -737,10 +831,16 @@ namespace BetterPlacemaking.Services
                 LocalHomographyHash = localHash,
                 LocalHomographyMatrix = local.Matrix,
                 HLocalCanvas = FromMatrix3x3(hLocalCanvas),
-                SourceFrameSize = [frameWidth, frameHeight],
-                PuzzlePieceSize = [frameWidth, frameHeight],
+                SourceFrameSize = [sourceWidth, sourceHeight],
+                PuzzlePieceSize = [trimmed.Cols, trimmed.Rows],
                 SourceSnapshotPath = local.SnapshotPath,
+                UsedUndistortedImage = useUndistortedImage,
+                UndistortMode = useUndistortedImage ? "standard" : "none",
+                BboxTrimPct = bboxTrimPct,
+                HomographyFile = $"{cameraMac.Replace(':', '_')}_homography.yml",
                 PuzzlePiecePath = objectPath,
+                MetadataPath = metadataPath,
+                GenerationVersion = PuzzlePieceGenerationVersion,
                 GeneratedAt = Timestamp.GetCurrentTimestamp(),
             };
 
@@ -751,7 +851,9 @@ namespace BetterPlacemaking.Services
         private static bool IsUsablePuzzlePieceArtifact(PuzzlePieceArtifact artifact, string localHash)
         {
             return string.Equals(artifact.LocalHomographyHash, localHash, StringComparison.OrdinalIgnoreCase)
+                && artifact.GenerationVersion >= PuzzlePieceGenerationVersion
                 && !string.IsNullOrWhiteSpace(artifact.PuzzlePiecePath)
+                && !string.IsNullOrWhiteSpace(artifact.MetadataPath)
                 && artifact.HLocalCanvas is { Count: 3 }
                 && artifact.SourceFrameSize is { Count: >= 2 }
                 && artifact.PuzzlePieceSize is { Count: >= 2 };
@@ -767,10 +869,13 @@ namespace BetterPlacemaking.Services
                 FrameSize: local.FrameSize ?? [],
                 TimestampUnix: local.TimestampUnix,
                 SnapshotPath: local.SnapshotPath,
+                UsedUndistortedImage: local.UsedUndistortedImage,
                 LocalHomographyHash: localHash);
         }
 
-        private static PuzzlePieceMetadataDto ToPuzzlePieceMetadataDto(PuzzlePieceArtifact artifact)
+        private static PuzzlePieceMetadataDto ToPuzzlePieceMetadataDto(
+            PuzzlePieceArtifact artifact,
+            DownloadUrlResponseDto? metadataDownload)
         {
             return new PuzzlePieceMetadataDto(
                 PuzzlePieceId: artifact.Id ?? string.Empty,
@@ -782,6 +887,13 @@ namespace BetterPlacemaking.Services
                 SourceFrameSize: artifact.SourceFrameSize ?? [],
                 PuzzlePieceSize: artifact.PuzzlePieceSize ?? [],
                 SourceSnapshotPath: artifact.SourceSnapshotPath,
+                UsedUndistortedImage: artifact.UsedUndistortedImage,
+                UndistortMode: artifact.UndistortMode ?? "none",
+                BboxTrimPct: artifact.BboxTrimPct,
+                HomographyFile: artifact.HomographyFile ?? $"{NormalizeMac(artifact.CameraMac).Replace(':', '_')}_homography.yml",
+                MetadataPath: artifact.MetadataPath,
+                MetadataDownloadUrl: metadataDownload?.SignedUrl,
+                MetadataDownloadUrlExpiresAt: metadataDownload?.ExpiresAt,
                 GeneratedAt: artifact.GeneratedAt.ToDateTime().ToUniversalTime().ToString("o"));
         }
 
@@ -820,6 +932,219 @@ namespace BetterPlacemaking.Services
                 LockedGroups: lockedGroups,
                 SavedAt: record.SavedAt.ToDateTime().ToUniversalTime().ToString("o"),
                 SavedByUserId: record.SavedByUserId);
+        }
+
+        private static OpenCvSharp.Size NormalizeOutputSize(List<int>? frameSize, int fallbackWidth, int fallbackHeight)
+        {
+            if (frameSize is { Count: >= 2 } && frameSize[0] > 0 && frameSize[1] > 0)
+                return new OpenCvSharp.Size(frameSize[0], frameSize[1]);
+
+            return new OpenCvSharp.Size(fallbackWidth, fallbackHeight);
+        }
+
+        private static bool ResolveUsedUndistortedImage(LocalHomography local)
+        {
+            if (local.UsedUndistortedImage.HasValue)
+                return local.UsedUndistortedImage.Value;
+
+            return local.CameraMatrix != null && local.DistortionCoefficients is { Count: >= 4 };
+        }
+
+        private static double[,] BuildEffectiveHomography(
+            double[,] homography,
+            OpenCvSharp.Size referenceSize,
+            int imageWidth,
+            int imageHeight)
+        {
+            double sx = referenceSize.Width / (double)imageWidth;
+            double sy = referenceSize.Height / (double)imageHeight;
+
+            return MatMul3x3(
+                homography,
+                new double[,]
+                {
+                    { sx, 0, 0 },
+                    { 0, sy, 0 },
+                    { 0, 0, 1 },
+                });
+        }
+
+        private static double[,] ScaleCameraMatrix(
+            double[,] cameraMatrix,
+            OpenCvSharp.Size srcSize,
+            OpenCvSharp.Size dstSize)
+        {
+            double sx = dstSize.Width / (double)srcSize.Width;
+            double sy = dstSize.Height / (double)srcSize.Height;
+            var scaled = (double[,])cameraMatrix.Clone();
+            scaled[0, 0] *= sx;
+            scaled[1, 1] *= sy;
+            scaled[0, 2] *= sx;
+            scaled[1, 2] *= sy;
+            scaled[0, 1] *= sx;
+            return scaled;
+        }
+
+        private static Mat UndistortImage(
+            Mat sourceBgra,
+            LocalHomography local,
+            OpenCvSharp.Size referenceSize)
+        {
+            if (local.CameraMatrix == null || local.DistortionCoefficients is not { Count: >= 4 })
+                throw new InvalidOperationException("Camera intrinsics are required to generate an undistorted BEV image.");
+
+            using var sourceBgr = EnsureBgr(sourceBgra);
+            using var scaledCameraMatrix = ToCvMat(
+                ScaleCameraMatrix(
+                    ToMatrix3x3(local.CameraMatrix),
+                    referenceSize,
+                    new OpenCvSharp.Size(sourceBgr.Cols, sourceBgr.Rows)));
+            using var distortion = ToCvDistortion(local.DistortionCoefficients);
+
+            using var undistortedBgr = new Mat();
+            Cv2.Undistort(sourceBgr, undistortedBgr, scaledCameraMatrix, distortion);
+
+            using var sourceMask = new Mat(sourceBgr.Rows, sourceBgr.Cols, MatType.CV_8UC1, Scalar.All(255));
+            using var undistortedMask = new Mat();
+            Cv2.Undistort(sourceMask, undistortedMask, scaledCameraMatrix, distortion);
+
+            var undistortedBgra = new Mat();
+            Cv2.CvtColor(undistortedBgr, undistortedBgra, ColorConversionCodes.BGR2BGRA);
+            var channels = Cv2.Split(undistortedBgra);
+            try
+            {
+                channels[3].Dispose();
+                channels[3] = undistortedMask.Clone();
+                Cv2.Merge(channels, undistortedBgra);
+            }
+            finally
+            {
+                foreach (var channel in channels)
+                    channel.Dispose();
+            }
+
+            return undistortedBgra;
+        }
+
+        private static Mat WarpBgra(
+            Mat sourceBgra,
+            double[,] homography,
+            int outWidth,
+            int outHeight,
+            InterpolationFlags interpolation)
+        {
+            using var transform = ToCvMat(homography);
+            var warped = new Mat();
+            Cv2.WarpPerspective(
+                sourceBgra,
+                warped,
+                transform,
+                new OpenCvSharp.Size(outWidth, outHeight),
+                interpolation,
+                BorderTypes.Constant,
+                new Scalar(0, 0, 0, 0));
+
+            using var alpha = new Mat();
+            Cv2.ExtractChannel(sourceBgra, alpha, 3);
+            using var warpedAlpha = new Mat();
+            Cv2.WarpPerspective(
+                alpha,
+                warpedAlpha,
+                transform,
+                new OpenCvSharp.Size(outWidth, outHeight),
+                interpolation,
+                BorderTypes.Constant,
+                Scalar.All(0));
+
+            var channels = Cv2.Split(warped);
+            try
+            {
+                channels[3].Dispose();
+                channels[3] = warpedAlpha.Clone();
+                Cv2.Merge(channels, warped);
+            }
+            finally
+            {
+                foreach (var channel in channels)
+                    channel.Dispose();
+            }
+
+            return warped;
+        }
+
+        private static Mat TrimTransparentBorder(
+            Mat sourceBgra,
+            out double[,] trimTransform,
+            out double bboxTrimPct)
+        {
+            trimTransform = Identity3x3();
+            bboxTrimPct = 0.0;
+
+            if (sourceBgra.Empty())
+                return sourceBgra.Clone();
+
+            int minX = sourceBgra.Cols;
+            int minY = sourceBgra.Rows;
+            int maxX = -1;
+            int maxY = -1;
+
+            var indexer = sourceBgra.GetGenericIndexer<Vec4b>();
+            for (int y = 0; y < sourceBgra.Rows; y++)
+            {
+                for (int x = 0; x < sourceBgra.Cols; x++)
+                {
+                    if (indexer[y, x].Item3 <= 4)
+                        continue;
+
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (maxX < 0 || maxY < 0)
+                return sourceBgra.Clone();
+
+            int width = maxX - minX + 1;
+            int height = maxY - minY + 1;
+            if (minX == 0 && minY == 0 && width == sourceBgra.Cols && height == sourceBgra.Rows)
+                return sourceBgra.Clone();
+
+            bboxTrimPct = 100.0 * (1.0 - ((double)width * height) / (sourceBgra.Cols * sourceBgra.Rows));
+            trimTransform = new double[,]
+            {
+                { 1, 0, -minX },
+                { 0, 1, -minY },
+                { 0, 0, 1 },
+            };
+
+            return new Mat(sourceBgra, new Rect(minX, minY, width, height)).Clone();
+        }
+
+        private static string BuildPuzzlePieceMetadataYaml(
+            string cameraMac,
+            int sourceWidth,
+            int sourceHeight,
+            int bevWidth,
+            int bevHeight,
+            double[,] compositeMatrix,
+            bool usedUndistortedImage,
+            double bboxTrimPct = 0.0)
+        {
+            var serializer = new SerializerBuilder().Build();
+            var metadata = new Dictionary<string, object>
+            {
+                ["bbox_trim_pct"] = bboxTrimPct,
+                ["bev_size"] = new[] { bevWidth, bevHeight },
+                ["composite_matrix"] = FromMatrix3x3(compositeMatrix),
+                ["homography_file"] = $"{cameraMac.Replace(':', '_')}_homography.yml",
+                ["source_image_size"] = new[] { sourceWidth, sourceHeight },
+                ["undistort_mode"] = usedUndistortedImage ? "standard" : "none",
+                ["used_undistorted_image"] = usedUndistortedImage ? 1 : 0,
+            };
+
+            return serializer.Serialize(metadata);
         }
 
         private static double[,] FitHomographyToOutput(
@@ -918,12 +1243,36 @@ namespace BetterPlacemaking.Services
             return converted;
         }
 
+        private static Mat EnsureBgr(Mat source)
+        {
+            if (source.Channels() == 3)
+                return source.Clone();
+
+            var converted = new Mat();
+            if (source.Channels() == 4)
+                Cv2.CvtColor(source, converted, ColorConversionCodes.BGRA2BGR);
+            else if (source.Channels() == 1)
+                Cv2.CvtColor(source, converted, ColorConversionCodes.GRAY2BGR);
+            else
+                throw new InvalidOperationException("Unsupported snapshot image format.");
+
+            return converted;
+        }
+
         private static Mat ToCvMat(double[,] matrix)
         {
             var cv = new Mat(3, 3, MatType.CV_64FC1);
             for (int i = 0; i < 3; i++)
                 for (int j = 0; j < 3; j++)
                     cv.Set(i, j, matrix[i, j]);
+            return cv;
+        }
+
+        private static Mat ToCvDistortion(IReadOnlyList<double> distortion)
+        {
+            var cv = new Mat(1, distortion.Count, MatType.CV_64FC1);
+            for (int i = 0; i < distortion.Count; i++)
+                cv.Set(0, i, distortion[i]);
             return cv;
         }
 

@@ -16,7 +16,8 @@ namespace BetterPlacemaking.Models.Dtos
         double TimestampUnix,
         string? SnapshotPath = null,
         List<List<double>>? CameraMatrix = null,
-        List<double>? DistortionCoefficients = null
+        List<double>? DistortionCoefficients = null,
+        bool? UsedUndistortedImage = null
     );
 
     public sealed record LocalHomographyResponseDto(
@@ -117,6 +118,13 @@ namespace BetterPlacemaking.Models.Dtos
         List<int> SourceFrameSize,
         List<int> PuzzlePieceSize,
         string? SourceSnapshotPath,
+        bool UsedUndistortedImage,
+        string UndistortMode,
+        double BboxTrimPct,
+        string HomographyFile,
+        string? MetadataPath,
+        string? MetadataDownloadUrl,
+        DateTimeOffset? MetadataDownloadUrlExpiresAt,
         string GeneratedAt
     );
 
@@ -140,6 +148,7 @@ namespace BetterPlacemaking.Models.Dtos
         List<int> FrameSize,
         double TimestampUnix,
         string? SnapshotPath,
+        bool? UsedUndistortedImage,
         string LocalHomographyHash
     );
 

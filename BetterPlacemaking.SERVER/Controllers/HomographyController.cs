@@ -156,6 +156,61 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
+        [HttpPost("workspace/{projectId}/puzzle-pieces/refresh")]
+        [Authorize(Policy = "UserJwt")]
+        public async Task<IActionResult> RefreshPuzzlePieces(string projectId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return BadRequest("projectId is required.");
+
+            try
+            {
+                var response = await _homographyService.RefreshPuzzlePiecesAsync(projectId, ct);
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred while regenerating puzzle pieces.");
+            }
+        }
+
+        [HttpGet("workspace/{projectId}/puzzle-pieces/{deviceId}/{cameraMac}")]
+        [Authorize(Policy = "UserJwt")]
+        public async Task<IActionResult> GetPuzzlePiece(
+            string projectId,
+            string deviceId,
+            string cameraMac,
+            [FromQuery] bool force,
+            CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return BadRequest("projectId is required.");
+            if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(cameraMac))
+                return BadRequest("deviceId and cameraMac are required.");
+
+            try
+            {
+                var response = await _homographyService.GetPuzzlePieceAsync(projectId, deviceId, cameraMac, force, ct);
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (Exception)
+            {
+                return Problem("An unexpected error occurred while loading the puzzle piece.");
+            }
+        }
+
         [HttpPost("workspace/{projectId}/global-homographies")]
         [Authorize(Policy = "UserJwt")]
         public IActionResult SaveGlobalHomographies(string projectId, [FromBody] SaveGlobalHomographiesDto dto)
