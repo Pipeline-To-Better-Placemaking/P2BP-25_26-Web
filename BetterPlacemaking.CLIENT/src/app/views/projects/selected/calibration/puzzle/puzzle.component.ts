@@ -67,6 +67,20 @@ export class PuzzleComponent implements AfterViewInit {
   saveError: string | null = null;
   error: string | null = null;
 
+  // ── Dev flag: set to true to use local test images instead of the API ──
+  private readonly HARDCODE_PIECES = true;
+
+  private static readonly HARDCODED_CAMERAS = [
+    { mac: 'd0:3b:f4:01:52:9a', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_01_52_9a.jpg', hLocalCanvas: [[478.67059918109902, 93.72391283749289, -776099.94435480505], [-59.532010441440306, 746.25038739208344, -706116.16342598724], [-0.0075507867073095992, 0.11294200201598935, 1.0]] },
+    { mac: 'd0:3b:f4:01:52:79', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_01_52_79.jpg', hLocalCanvas: [[10.187341554896124, -13.216440197794686, 2664.9565203487869], [12.517588140314425, 14.585128792798074, -31875.339206640292], [6.8474148621029351e-05, 0.003165424636317036, 1.0]] },
+    { mac: 'd0:3b:f4:01:52:91', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_01_52_91.jpg', hLocalCanvas: [[24.692741382496273, 3.5021653163134205, -37471.798385837486], [-1.8112859685224374, 32.902511044434327, -34372.366038374887], [-0.00023027490343334098, 0.0052858896913279586, 1.0]] },
+    { mac: 'd0:3b:f4:01:52:f1', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_01_52_f1.jpg', hLocalCanvas: [[12.393868945811136, 0.42293506877994574, -17499.133727320324], [0.55567686063031441, 15.810112182648471, -17013.782111363336], [4.5377735995530908e-05, 0.0023112295496079045, 0.99999999999999989]] },
+    { mac: 'd0:3b:f4:02:44:84', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_02_44_84.jpg', hLocalCanvas: [[1.5407599010689346, -3.428882774540277, 13147.852373035557], [6.2519886718965942, 16.41486546041817, -2601.1331305760923], [-5.6373942607233279e-05, 0.0014192032848097187, 1.0]] },
+    { mac: 'd0:3b:f4:02:44:85', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_02_44_85.jpg', hLocalCanvas: [[14.948226477594419, 3.0578753984632412, -24070.046259558043], [-2.9735241456379788, 22.447668981301263, -17634.867530003179], [-0.00045912539444331054, 0.0032539794052085539, 1.0]] },
+    { mac: 'd0:3b:f4:02:44:87', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_02_44_87.jpg', hLocalCanvas: [[40.894152918165425, 5.7345388584038401, -59455.115363930512], [-1.9619594523715058, 58.261762850609912, -60323.951670044917], [-0.00078790506478346298, 0.009410378593881585, 0.99999999999999989]] },
+    { mac: 'd0:3b:f4:02:44:e2', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_02_44_e2.jpg', hLocalCanvas: [[59.721969268461272, 8.9656492262286083, -87034.400273248204], [-4.7349897237544001, 94.959396720834491, -90943.707866467172], [-0.001763042991715867, 0.014486015099557889, 1.0]] },
+  ];
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly homographyService: HomographyService,
@@ -81,10 +95,17 @@ export class PuzzleComponent implements AfterViewInit {
 
   private loadWorkspace(projectId: string): void {
     this.loading = true;
+    this.initCanvas();
+
+    if (this.HARDCODE_PIECES) {
+      this.loading = false;
+      this.loadHardcodedPieces();
+      return;
+    }
+
     this.homographyService.getPuzzleWorkspace(projectId).subscribe({
       next: (workspace) => {
         this.loading = false;
-        this.initCanvas();
         const ready = workspace.PuzzlePieces.filter(
           (p) => p.Status === 'ready' && p.PuzzlePieceDownloadUrl && p.Metadata
         );
@@ -96,6 +117,74 @@ export class PuzzleComponent implements AfterViewInit {
       },
       error: () => { this.loading = false; },
     });
+  }
+
+  private loadHardcodedPieces(): void {
+    PuzzleComponent.HARDCODED_CAMERAS.forEach((cam) => {
+      const img = new Image();
+      const layer: LayerState = {
+        puzzlePieceId: `hardcoded-${cam.mac}`,
+        deviceId: cam.deviceId,
+        cameraMac: cam.mac,
+        macTag: cam.mac.replace(/:/g, '_'),
+        bevImage: img,
+        hLocalCanvas: cam.hLocalCanvas,
+        centerFp: [this.fpW / 2, this.fpH / 2],
+        angleDeg: 0,
+        scale: 1,
+        loaded: false,
+      };
+      img.onload = () => {
+        const cropped = this.trimWhiteBorder(img);
+        layer.bevImage = cropped;
+        if (this.fpW > 0 && cropped.naturalWidth > 0) {
+          layer.scale = (this.fpW * 0.5) / cropped.naturalWidth;
+        }
+        layer.loaded = true;
+        this.draw();
+      };
+      img.src = cam.img;
+      this.layers.push(layer);
+    });
+  }
+
+  /** Crops white/near-white border pixels from an image and returns a new HTMLImageElement. */
+  private trimWhiteBorder(src: HTMLImageElement, threshold = 240): HTMLImageElement {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = src.naturalWidth;
+    offscreen.height = src.naturalHeight;
+    const ctx = offscreen.getContext('2d')!;
+    ctx.drawImage(src, 0, 0);
+
+    const { data, width, height } = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+    let top = height, bottom = 0, left = width, right = 0;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        if (a > 10 && !(r >= threshold && g >= threshold && b >= threshold)) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+
+    // If nothing found (fully white image), return original
+    if (top > bottom || left > right) return src;
+
+    const cropW = right - left + 1;
+    const cropH = bottom - top + 1;
+    const cropped = document.createElement('canvas');
+    cropped.width = cropW;
+    cropped.height = cropH;
+    cropped.getContext('2d')!.drawImage(offscreen, left, top, cropW, cropH, 0, 0, cropW, cropH);
+
+    const result = new Image();
+    result.src = cropped.toDataURL('image/png');
+    return result;
   }
 
   private initCanvas(): void {
@@ -110,6 +199,12 @@ export class PuzzleComponent implements AfterViewInit {
       const canvas = this.canvasRef.nativeElement;
       canvas.width = Math.round(this.fpW * this.dscale);
       canvas.height = Math.round(this.fpH * this.dscale);
+      // Centre any already-loaded hardcoded layers now that floorplan dimensions are known
+      for (const layer of this.layers) {
+        if (layer.centerFp[0] === 0 && layer.centerFp[1] === 0) {
+          layer.centerFp = [this.fpW / 2, this.fpH / 2];
+        }
+      }
       this.draw();
     };
   }
@@ -129,6 +224,9 @@ export class PuzzleComponent implements AfterViewInit {
       loaded: false,
     };
     img.onload = () => {
+      if (this.fpW > 0 && img.naturalWidth > 0) {
+        layer.scale = (this.fpW * 0.2) / img.naturalWidth;
+      }
       layer.loaded = true;
       this.draw();
     };
@@ -180,7 +278,7 @@ export class PuzzleComponent implements AfterViewInit {
       ctx.globalAlpha = this.opacity;
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.scale(layer.scale, layer.scale);
+      ctx.scale(layer.scale * this.dscale, layer.scale * this.dscale);
       ctx.drawImage(layer.bevImage, -imgW / 2, -imgH / 2);
       ctx.restore();
     }
