@@ -68,14 +68,23 @@ public class FusedIdentity
 
 public class FusionRequest
 {
-
+    /// <summary>GCS folder containing raw JSONL track files. Defaults to FusionEngineConfig.InputStorageFolder.</summary>
     public string? InputStorageFolder { get; set; }
 
-    /// <summary>GCS folder to write the fused output JSON. Defaults to FusionConfig.OutputStorageFolder.</summary>
+    /// <summary>GCS folder to write the fused output JSON. Defaults to FusionEngineConfig.OutputStorageFolder.</summary>
     public string? OutputStorageFolder { get; set; }
 
+    /// <summary>
+    /// Start of the date range (inclusive) selected by the user in the UI calendar.
+    /// Required — fusion will throw if not provided.
+    /// </summary>
     public DateTime? From { get; set; }
-    public DateTime? To   { get; set; }
+
+    /// <summary>
+    /// End of the date range (inclusive) selected by the user in the UI calendar.
+    /// Required — fusion will throw if not provided.
+    /// </summary>
+    public DateTime? To { get; set; }
 }
 
 public class FusionResult
@@ -86,7 +95,7 @@ public class FusionResult
 }
 
 // ─────────────────────────────────────────────
-// MATH HELPERS 
+// MATH HELPERS
 // ─────────────────────────────────────────────
 public static class VectorMath
 {
@@ -134,7 +143,7 @@ public static class VectorMath
 }
 
 // ─────────────────────────────────────────────
-// KALMAN FILTER 2D 
+// KALMAN FILTER 2D
 // ─────────────────────────────────────────────
 public class Kalman2D
 {
@@ -286,7 +295,7 @@ public class FusionCameraIntrinsics
 }
 
 // ─────────────────────────────────────────────
-// LENS UNDISTORTION 
+// LENS UNDISTORTION
 // ─────────────────────────────────────────────
 public static class LensUndistort
 {
@@ -322,7 +331,7 @@ public static class LensUndistort
 }
 
 // ─────────────────────────────────────────────
-// HOMOGRAPHY ENTRY 
+// HOMOGRAPHY ENTRY
 // ─────────────────────────────────────────────
 public class HomographyEntry
 {
@@ -330,6 +339,9 @@ public class HomographyEntry
     public bool      UsedUndistortedImage { get; set; }
 }
 
+// ─────────────────────────────────────────────
+// FIRESTORE CONFIG LOADER
+// ─────────────────────────────────────────────
 // ─────────────────────────────────────────────
 // FIRESTORE CONFIG LOADER
 // ─────────────────────────────────────────────
@@ -427,34 +439,26 @@ public class FusionFirestoreLoader
         return true;
     }
 
-    private static bool TryParseMatrix3x3(DocumentSnapshot doc, string field, string mac,
+    private static bool TryParseMatrix3x3Flat(DocumentSnapshot doc, string field, string mac,
         out double[,] matrix)
     {
         matrix = new double[3, 3];
 
-        if (!doc.TryGetValue(field, out IReadOnlyList<object> rows) || rows.Count != 3)
+        if (!doc.TryGetValue(field, out IReadOnlyList<object> flat) || flat.Count != 9)
         {
-            Console.WriteLine($"[WARN] cam={mac}: '{field}' missing or not 3 rows.");
+            Console.WriteLine($"[WARN] cam={mac}: '{field}' missing or not a 9-element flat array.");
             return false;
         }
 
-        for (int r = 0; r < 3; r++)
-        {
-            if (rows[r] is not IReadOnlyList<object> cols || cols.Count != 3)
-            {
-                Console.WriteLine($"[WARN] cam={mac}: '{field}' row {r} is not a 3-element list.");
-                return false;
-            }
-            for (int c = 0; c < 3; c++)
-                matrix[r, c] = Convert.ToDouble(cols[c]);
-        }
+        for (int i = 0; i < 9; i++)
+            matrix[i / 3, i % 3] = Convert.ToDouble(flat[i]);
 
         return true;
     }
 
     private static HomographyEntry? ParseHomographyDoc(DocumentSnapshot doc, string mac)
     {
-        if (!TryParseMatrix3x3(doc, "Matrix", mac, out var matrix))
+        if (!TryParseMatrix3x3Flat(doc, "MatrixFlat", mac, out var matrix))
             return null;
 
         return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = false };
@@ -462,7 +466,7 @@ public class FusionFirestoreLoader
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
     {
-        if (!TryParseMatrix3x3(doc, "CameraMatrix", mac, out var cameraMatrix))
+        if (!TryParseMatrix3x3Flat(doc, "CameraMatrix", mac, out var cameraMatrix))
             return null;
 
         if (!doc.TryGetValue("DistortionCoefficients", out IReadOnlyList<object> distRaw))
@@ -480,7 +484,7 @@ public class FusionFirestoreLoader
 }
 
 // ─────────────────────────────────────────────
-// JSONL LOADER 
+// JSONL LOADER
 // ─────────────────────────────────────────────
 public static class JsonlLoader
 {
@@ -526,7 +530,7 @@ public static class JsonlLoader
 }
 
 // ─────────────────────────────────────────────
-// TRACK BUILDER  
+// TRACK BUILDER
 // ─────────────────────────────────────────────
 public static class TrackBuilder
 {
@@ -561,7 +565,7 @@ public static class TrackBuilder
 }
 
 // ─────────────────────────────────────────────
-// HOMOGRAPHY TRANSFORM 
+// HOMOGRAPHY TRANSFORM
 // ─────────────────────────────────────────────
 public static class WorldTransform
 {
@@ -628,7 +632,7 @@ public static class WorldTransform
 }
 
 // ─────────────────────────────────────────────
-// FUSION ENGINE 
+// FUSION ENGINE
 // ─────────────────────────────────────────────
 public class FusionEngine
 {
@@ -749,7 +753,7 @@ public class FusionEngine
 }
 
 // ─────────────────────────────────────────────
-// TRACK CLEANING 
+// TRACK CLEANING
 // ─────────────────────────────────────────────
 public static class TrackCleaner
 {
@@ -816,7 +820,7 @@ public static class TrackCleaner
 }
 
 // ─────────────────────────────────────────────
-// EXPORTER 
+// EXPORTER
 // ─────────────────────────────────────────────
 public static class FusionExporter
 {
@@ -867,52 +871,77 @@ public class FusionRunner
     public async Task<FusionResult> RunAsync(
         FusionRequest request, bool debug = false, CancellationToken ct = default)
     {
+        // ── Validate required date range (set by the UI calendar picker) ──
+        if (!request.From.HasValue || !request.To.HasValue)
+            return new FusionResult
+            {
+                Success = false,
+                Message = "FusionRequest.From and FusionRequest.To are required. " +
+                          "Supply the date range selected in the calendar."
+            };
+
+        DateTime rangeFrom = request.From.Value.ToUniversalTime().Date;          // inclusive start (UTC date)
+        DateTime rangeTo   = request.To.Value.ToUniversalTime().Date.AddDays(1); // exclusive end  (start of next day)
+
+        if (rangeFrom >= rangeTo)
+            return new FusionResult
+            {
+                Success = false,
+                Message = $"From ({rangeFrom:yyyy-MM-dd}) must be before To ({rangeTo.AddDays(-1):yyyy-MM-dd})."
+            };
+
         string tempDir = Path.Combine(Path.GetTempPath(), $"fusion_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
-            // ── 1. Discover, download, and merge all of today's JSONL files ──
-            // CHANGED: was a single DownloadFileAsync keyed on a hardcoded file path.
+            // ── 1. Discover, download, and merge JSONL files in the date range ──
             string inputFolder    = (request.InputStorageFolder ?? FusionEngineConfig.InputStorageFolder).TrimEnd('/');
             string localInputPath = Path.Combine(tempDir, "tracks-raw.jsonl");
 
-            await DownloadAndMergeTodayTracksAsync(inputFolder, localInputPath, ct);
+            await DownloadAndMergeTracksForRangeAsync(
+                inputFolder, localInputPath, rangeFrom, rangeTo, ct);
 
-            // Optional time-range filter (unchanged)
-            if (request.From.HasValue && request.To.HasValue)
-                localInputPath = FilterByTime(localInputPath, tempDir, request.From.Value, request.To.Value);
+            // ── 2. Fine-grained millisecond filter over the merged JSONL ────────
+            // Always applied when a range is provided so partial-day selections
+            // at the boundary are handled precisely.
+            localInputPath = FilterByTime(
+                localInputPath, tempDir,
+                request.From.Value, request.To.Value.Date.AddDays(1).AddMilliseconds(-1));
 
-            // ── 2. Load + build tracks ────────────────────────────────────
+            // ── 3. Load + build tracks ──────────────────────────────────────────
             var (vectors, tracks) = JsonlLoader.Load(localInputPath);
             var trackObjs         = TrackBuilder.Build(vectors, tracks);
 
-            // ── 3. Collect the unique camera MACs present in this batch ───
+            // ── 4. Collect the unique camera MACs present in this batch ─────────
             var activeMacs = trackObjs
                 .Select(t => t.Cam.ToLower())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             Console.WriteLine($"[INFO] Active cameras: {string.Join(", ", activeMacs)}");
 
-            // ── 4. Fetch homographies + intrinsics from Firestore ─────────
+            // ── 5. Fetch homographies + intrinsics from Firestore ────────────────
             var homographies   = await _firestoreLoader.LoadHomographiesAsync(activeMacs, ct);
             var intrinsicsDict = await _firestoreLoader.LoadIntrinsicsAsync(activeMacs, ct);
 
-            // ── 5. World transform (undistortion + homography + Kalman) ───
+            // ── 6. World transform (undistortion + homography + Kalman) ─────────
             WorldTransform.Apply(trackObjs, homographies, intrinsicsDict);
 
-            // ── 6. Fuse identities ────────────────────────────────────────
+            // ── 7. Fuse identities ───────────────────────────────────────────────
             var engine = new FusionEngine(debug);
             var gids   = engine.Run(trackObjs);
 
-            // ── 7. Serialize + upload result to GCS ──────────────────────
-            // CHANGED: output name is now fused_tracks-YYYYMMDD.json (one stable file per day).
+            // ── 8. Serialize + upload result to GCS ─────────────────────────────
+            // Output file name encodes the full range: fused_tracks-20250405_20250408.json
             string localOutputPath = Path.Combine(tempDir, "fused_tracks.json");
             FusionExporter.Export(gids, localOutputPath);
 
+            string fromStr           = rangeFrom.ToString("yyyyMMdd");
+            string toStr             = rangeTo.AddDays(-1).ToString("yyyyMMdd");  // back to inclusive
             string outputFolder      = (request.OutputStorageFolder ?? FusionEngineConfig.OutputStorageFolder).TrimEnd('/');
-            string dateSuffix        = DateTime.UtcNow.ToString("yyyyMMdd");
-            string outputStoragePath = $"{outputFolder}/fused_tracks-{dateSuffix}.json";
+            string outputStoragePath = fromStr == toStr
+                ? $"{outputFolder}/fused_tracks-{fromStr}.json"
+                : $"{outputFolder}/fused_tracks-{fromStr}_{toStr}.json";
 
             Console.WriteLine($"[INFO] Uploading result to: {outputStoragePath}");
             await UploadFileAsync(localOutputPath, outputStoragePath, "application/json", ct);
@@ -936,20 +965,23 @@ public class FusionRunner
         }
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────
+    // ── Private helpers ──────────────────────────────────────────────────────
 
-    private async Task DownloadAndMergeTodayTracksAsync(
-        string folder, string mergedLocalPath, CancellationToken ct)
+    /// <summary>
+    /// Downloads every JSONL file in <paramref name="folder"/> whose timestamp falls
+    /// within [<paramref name="fromUtc"/>, <paramref name="toUtcExclusive"/>) and
+    /// concatenates them in chronological order into <paramref name="mergedLocalPath"/>.
+    /// </summary>
+    private async Task DownloadAndMergeTracksForRangeAsync(
+        string folder, string mergedLocalPath,
+        DateTime fromUtc, DateTime toUtcExclusive,
+        CancellationToken ct)
     {
-        // GcsFileInfo lives in CloudStorageService.cs (BetterPlacemaking.Services namespace),
-        // which is already imported via "using BetterPlacemaking.Services" at the top.
         IReadOnlyList<GcsFileInfo> allFiles = await _gcs.ListFilesAsync(folder, ct);
 
         if (allFiles.Count == 0)
             throw new InvalidOperationException(
                 $"No track files found in GCS folder '{folder}'.");
-
-        string today = DateTime.UtcNow.ToString("yyyyMMdd");
 
         static DateTime? ParseTimestampFromName(string storagePath)
         {
@@ -966,22 +998,25 @@ public class FusionRunner
                 : null;
         }
 
-        var todayFiles = allFiles
+        var rangeFiles = allFiles
             .Select(f => new
             {
                 File      = f,
                 Timestamp = ParseTimestampFromName(f.StoragePath) ?? f.LastModified.UtcDateTime
             })
-            .Where(x => x.Timestamp.ToString("yyyyMMdd") == today)
+            .Where(x => x.Timestamp >= fromUtc && x.Timestamp < toUtcExclusive)
             .OrderBy(x => x.Timestamp)
             .ToList();
 
-        if (todayFiles.Count == 0)
+        if (rangeFiles.Count == 0)
             throw new InvalidOperationException(
-                $"No track files for today ({today}) found in '{folder}'.");
+                $"No track files found in '{folder}' between " +
+                $"{fromUtc:yyyy-MM-dd} and {toUtcExclusive.AddDays(-1):yyyy-MM-dd} (inclusive).");
 
-        Console.WriteLine($"[INFO] Found {todayFiles.Count} track file(s) for {today}:");
-        foreach (var f in todayFiles)
+        Console.WriteLine(
+            $"[INFO] Found {rangeFiles.Count} track file(s) between " +
+            $"{fromUtc:yyyy-MM-dd} and {toUtcExclusive.AddDays(-1):yyyy-MM-dd}:");
+        foreach (var f in rangeFiles)
             Console.WriteLine($"       {f.File.StoragePath}  ({f.Timestamp:O})");
 
         // Download all parts in parallel (max 4 concurrent)
@@ -989,7 +1024,7 @@ public class FusionRunner
         Directory.CreateDirectory(partsDir);
 
         await Parallel.ForEachAsync(
-            todayFiles,
+            rangeFiles,
             new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
             async (item, innerCt) =>
             {
@@ -1002,7 +1037,7 @@ public class FusionRunner
         await using var outStream = File.Create(mergedLocalPath);
         await using var writer    = new StreamWriter(outStream);
 
-        foreach (var item in todayFiles)
+        foreach (var item in rangeFiles)
         {
             string safeName  = item.File.StoragePath.Replace('/', '_').Replace(':', '-');
             string localPart = Path.Combine(partsDir, safeName);
@@ -1014,10 +1049,9 @@ public class FusionRunner
             }
         }
 
-        Console.WriteLine($"[INFO] Merged {todayFiles.Count} file(s) → {mergedLocalPath}");
+        Console.WriteLine($"[INFO] Merged {rangeFiles.Count} file(s) → {mergedLocalPath}");
     }
 
-    
     private static async IAsyncEnumerable<string> ReadLinesAsync(
         string path,
         [EnumeratorCancellation] CancellationToken ct)
@@ -1047,8 +1081,8 @@ public class FusionRunner
 
     private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
     {
-        long fromMs = new DateTimeOffset(from).ToUnixTimeMilliseconds();
-        long toMs   = new DateTimeOffset(to).ToUnixTimeMilliseconds();
+        long fromMs = new DateTimeOffset(from.ToUniversalTime()).ToUnixTimeMilliseconds();
+        long toMs   = new DateTimeOffset(to.ToUniversalTime()).ToUnixTimeMilliseconds();
 
         var filtered = File.ReadLines(path)
             .Where(line =>
