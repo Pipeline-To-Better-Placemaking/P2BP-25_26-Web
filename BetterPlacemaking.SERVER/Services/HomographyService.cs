@@ -762,8 +762,18 @@ namespace BetterPlacemaking.Services
             var cameraMac = NormalizeMac(local.CameraMac);
             var sourceBytes = await _cloudStorage.DownloadBytesAsync(local.SnapshotPath, ct);
 
-            // Resolve camera intrinsics, falling back to the camera_intrinsics collection
-            // if they were not embedded in the local homography record.
+            using var decoded = Cv2.ImDecode(sourceBytes, ImreadModes.Unchanged);
+            if (decoded.Empty())
+                throw new InvalidOperationException("The stored snapshot could not be decoded.");
+
+            using var source = EnsureBgra(decoded);
+            int sourceWidth = source.Cols;
+            int sourceHeight = source.Rows;
+
+            var referenceSize = NormalizeOutputSize(local.FrameSize, sourceWidth, sourceHeight);
+            var useUndistortedImage = local.UsedUndistortedImage ?? false;
+
+            // Resolve camera intrinsics for lens undistortion.
             var effectiveCameraMatrix = local.CameraMatrix;
             var effectiveDistortion = local.DistortionCoefficients;
             if (effectiveCameraMatrix == null || effectiveDistortion is not { Count: >= 4 })
@@ -779,39 +789,38 @@ namespace BetterPlacemaking.Services
                 }
             }
 
-            using var decoded = Cv2.ImDecode(sourceBytes, ImreadModes.Unchanged);
-            if (decoded.Empty())
-                throw new InvalidOperationException("The stored snapshot could not be decoded.");
-
-            using var source = EnsureBgra(decoded);
-            int sourceWidth = source.Cols;
-            int sourceHeight = source.Rows;
-
-            var referenceSize = NormalizeOutputSize(local.FrameSize, sourceWidth, sourceHeight);
-            var useUndistortedImage = local.UsedUndistortedImage ?? (effectiveCameraMatrix != null && effectiveDistortion is { Count: >= 4 });
-
-            using var prepared = useUndistortedImage
-                ? UndistortImage(source, effectiveCameraMatrix!, effectiveDistortion!, referenceSize)
+            // Step 1: Undistort the raw snapshot using getOptimalNewCameraMatrix + remap (matches warp_images.py).
+            using var undistorted = (effectiveCameraMatrix != null && effectiveDistortion is { Count: >= 4 })
+                ? UndistortImageOptimal(source, effectiveCameraMatrix, effectiveDistortion, referenceSize)
                 : source.Clone();
 
-            var hLocalCanvasRaw = FitHomographyToOutput(
-                BuildEffectiveHomography(ToMatrix3x3(local.Matrix), referenceSize, sourceWidth, sourceHeight),
-                sourceWidth,
-                sourceHeight,
-                referenceSize.Width,
-                referenceSize.Height);
+            // Step 2: Compute effective homography — scales H from the reference frame_size to actual image size.
+            var hEff = BuildEffectiveHomography(ToMatrix3x3(local.Matrix), referenceSize, sourceWidth, sourceHeight);
 
-            using var warped = WarpBgra(
-                prepared,
-                hLocalCanvasRaw,
-                referenceSize.Width,
-                referenceSize.Height,
-                InterpolationFlags.Lanczos4);
+            // Step 3: Compute BEV bounding box by sampling source edges + percentile trim (matches warp_images.py).
+            const double BboxTrimPct = 14.0;
+            const int MaxBevDim = 6000;
+            var (minX, minY, maxX, maxY) = ComputeWarpedBbox(hEff, sourceWidth, sourceHeight, BboxTrimPct);
 
-            using var trimmed = TrimTransparentBorder(warped, out var trimTransform, out var bboxTrimPct);
-            var hLocalCanvas = MatMul3x3(trimTransform, hLocalCanvasRaw);
+            // Step 4: Auto-size output and build composite matrix m = scale_out @ translate @ H_eff.
+            int outW = (int)Math.Ceiling(maxX - minX) + 1;
+            int outH = (int)Math.Ceiling(maxY - minY) + 1;
+            double bevScale = 1.0;
+            int currentMax = Math.Max(outW, outH);
+            if (currentMax > MaxBevDim)
+            {
+                bevScale = MaxBevDim / (double)currentMax;
+                outW = Math.Max(1, (int)Math.Ceiling(outW * bevScale));
+                outH = Math.Max(1, (int)Math.Ceiling(outH * bevScale));
+            }
+            var translate = new double[,] { { 1, 0, -minX }, { 0, 1, -minY }, { 0, 0, 1 } };
+            var scaleOut = new double[,] { { bevScale, 0, 0 }, { 0, bevScale, 0 }, { 0, 0, 1 } };
+            var hLocalCanvas = MatMul3x3(scaleOut, MatMul3x3(translate, hEff));
 
-            Cv2.ImEncode(".png", trimmed, out var pngBytes);
+            // Step 5: Warp undistorted image to BEV.
+            using var warped = WarpBgra(undistorted, hLocalCanvas, outW, outH, InterpolationFlags.Linear);
+
+            Cv2.ImEncode(".png", warped, out var pngBytes);
 
             var objectPath = _cloudStorage.BuildObjectPath(
                 $"vision/puzzle-pieces/{projectId}",
@@ -830,11 +839,11 @@ namespace BetterPlacemaking.Services
                 cameraMac,
                 sourceWidth,
                 sourceHeight,
-                trimmed.Cols,
-                trimmed.Rows,
+                warped.Cols,
+                warped.Rows,
                 hLocalCanvas,
                 useUndistortedImage,
-                bboxTrimPct);
+                BboxTrimPct);
 
             using var metadataStream = new MemoryStream(Encoding.UTF8.GetBytes(metadataYaml));
             await _cloudStorage.UploadFromStreamAsync(metadataPath, "application/x-yaml", metadataStream, ct);
@@ -850,11 +859,11 @@ namespace BetterPlacemaking.Services
                 LocalHomographyMatrix = local.Matrix,
                 HLocalCanvas = FromMatrix3x3(hLocalCanvas),
                 SourceFrameSize = [sourceWidth, sourceHeight],
-                PuzzlePieceSize = [trimmed.Cols, trimmed.Rows],
+                PuzzlePieceSize = [warped.Cols, warped.Rows],
                 SourceSnapshotPath = local.SnapshotPath,
                 UsedUndistortedImage = useUndistortedImage,
-                UndistortMode = useUndistortedImage ? "standard" : "none",
-                BboxTrimPct = bboxTrimPct,
+                UndistortMode = useUndistortedImage ? "optimal" : "none",
+                BboxTrimPct = BboxTrimPct,
                 HomographyFile = $"{cameraMac.Replace(':', '_')}_homography.yml",
                 PuzzlePiecePath = objectPath,
                 MetadataPath = metadataPath,
@@ -995,26 +1004,38 @@ namespace BetterPlacemaking.Services
             return scaled;
         }
 
-        private static Mat UndistortImage(
+        /// <summary>
+        /// Undistorts a raw snapshot using getOptimalNewCameraMatrix (alpha=1.0) + initUndistortRectifyMap + remap.
+        /// This exactly matches warp_images.py's undistort_image with undistort_mode="optimal".
+        /// Returns a BGRA mat where alpha=0 marks pixels outside the valid undistorted region.
+        /// </summary>
+        private static Mat UndistortImageOptimal(
             Mat sourceBgra,
             List<List<double>> cameraMatrix,
             List<double> distortionCoefficients,
             OpenCvSharp.Size referenceSize)
         {
             using var sourceBgr = EnsureBgr(sourceBgra);
-            using var scaledCameraMatrix = ToCvMat(
-                ScaleCameraMatrix(
-                    ToMatrix3x3(cameraMatrix),
-                    referenceSize,
-                    new OpenCvSharp.Size(sourceBgr.Cols, sourceBgr.Rows)));
-            using var distortion = ToCvDistortion(distortionCoefficients);
+            var imageSize = new OpenCvSharp.Size(sourceBgr.Cols, sourceBgr.Rows);
+            using var kMat = ToCvMat(ScaleCameraMatrix(ToMatrix3x3(cameraMatrix), referenceSize, imageSize));
+            using var distMat = ToCvDistortion(distortionCoefficients);
 
+            // getOptimalNewCameraMatrix with alpha=1.0 preserves the full FOV (no cropping).
+            using var newKMat = Cv2.GetOptimalNewCameraMatrix(kMat, distMat, imageSize, 1.0, imageSize, out _, false);
+
+            // Build remapping tables.
+            using var map1 = new Mat();
+            using var map2 = new Mat();
+            Cv2.InitUndistortRectifyMap(kMat, distMat, Mat.Eye(3, 3, MatType.CV_64FC1), newKMat, imageSize, MatType.CV_32FC1, map1, map2);
+
+            // Remap BGR channels.
             using var undistortedBgr = new Mat();
-            Cv2.Undistort(sourceBgr, undistortedBgr, scaledCameraMatrix, distortion);
+            Cv2.Remap(sourceBgr, undistortedBgr, map1, map2, InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(0));
 
-            using var sourceMask = new Mat(sourceBgr.Rows, sourceBgr.Cols, MatType.CV_8UC1, Scalar.All(255));
+            // Remap a full-white mask to track which pixels came from the source image.
+            using var srcMask = new Mat(imageSize.Height, imageSize.Width, MatType.CV_8UC1, Scalar.All(255));
             using var undistortedMask = new Mat();
-            Cv2.Undistort(sourceMask, undistortedMask, scaledCameraMatrix, distortion);
+            Cv2.Remap(srcMask, undistortedMask, map1, map2, InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(0));
 
             var undistortedBgra = new Mat();
             Cv2.CvtColor(undistortedBgr, undistortedBgra, ColorConversionCodes.BGR2BGRA);
@@ -1027,11 +1048,77 @@ namespace BetterPlacemaking.Services
             }
             finally
             {
-                foreach (var channel in channels)
-                    channel.Dispose();
+                foreach (var ch in channels)
+                    ch.Dispose();
             }
 
             return undistortedBgra;
+        }
+
+        /// <summary>
+        /// Computes the bounding box of the warped source rectangle by sampling points along all
+        /// 4 edges and applying a percentile trim to clip tails near the vanishing line.
+        /// Matches warp_images.py's _compute_warped_bbox.
+        /// </summary>
+        private static (double minX, double minY, double maxX, double maxY) ComputeWarpedBbox(
+            double[,] homography,
+            int srcWidth,
+            int srcHeight,
+            double trimPct,
+            int edgeSamples = 200)
+        {
+            double w1 = srcWidth - 1.0;
+            double h1 = srcHeight - 1.0;
+
+            var projectedX = new List<double>(edgeSamples * 4);
+            var projectedY = new List<double>(edgeSamples * 4);
+
+            double h00 = homography[0, 0], h01 = homography[0, 1], h02 = homography[0, 2];
+            double h10 = homography[1, 0], h11 = homography[1, 1], h12 = homography[1, 2];
+            double h20 = homography[2, 0], h21 = homography[2, 1], h22 = homography[2, 2];
+
+            void Project(double px, double py)
+            {
+                double q3 = h20 * px + h21 * py + h22;
+                if (q3 <= 1e-8) return;  // behind camera
+                projectedX.Add((h00 * px + h01 * py + h02) / q3);
+                projectedY.Add((h10 * px + h11 * py + h12) / q3);
+            }
+
+            for (int i = 0; i < edgeSamples; i++)
+            {
+                double t = i / (double)(edgeSamples - 1);
+                Project(t * w1, 0);       // top edge
+                Project(t * w1, h1);      // bottom edge
+                Project(0, t * h1);       // left edge
+                Project(w1, t * h1);      // right edge
+            }
+
+            if (projectedX.Count == 0)
+                throw new InvalidOperationException(
+                    "No source edge points project in front of the camera. The homography may need to be inverted.");
+
+            projectedX.Sort();
+            projectedY.Sort();
+
+            double pLo = Math.Clamp(trimPct, 0.0, 49.0) / 100.0;
+            double pHi = 1.0 - pLo;
+            return (
+                Percentile(projectedX, pLo),
+                Percentile(projectedY, pLo),
+                Percentile(projectedX, pHi),
+                Percentile(projectedY, pHi));
+        }
+
+        private static double Percentile(List<double> sorted, double p)
+        {
+            if (sorted.Count == 0) return 0;
+            if (p <= 0) return sorted[0];
+            if (p >= 1) return sorted[^1];
+            double idx = p * (sorted.Count - 1);
+            int lo = (int)idx;
+            int hi = Math.Min(lo + 1, sorted.Count - 1);
+            return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
         }
 
         private static Mat WarpBgra(
@@ -1148,7 +1235,7 @@ namespace BetterPlacemaking.Services
                 ["composite_matrix"] = FromMatrix3x3(compositeMatrix),
                 ["homography_file"] = $"{cameraMac.Replace(':', '_')}_homography.yml",
                 ["source_image_size"] = new[] { sourceWidth, sourceHeight },
-                ["undistort_mode"] = usedUndistortedImage ? "standard" : "none",
+                ["undistort_mode"] = usedUndistortedImage ? "optimal" : "none",
                 ["used_undistorted_image"] = usedUndistortedImage ? 1 : 0,
             };
 
