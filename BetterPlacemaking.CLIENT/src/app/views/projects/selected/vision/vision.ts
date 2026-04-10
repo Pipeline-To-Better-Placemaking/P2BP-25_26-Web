@@ -21,6 +21,7 @@ import { HomographyService, GlobalHomographySetDto } from '../../../../services/
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, startWith } from 'rxjs/operators';
+import { VisionTutorialComponent } from './vision-tutorial/vision-tutorial';
 
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
@@ -50,6 +51,7 @@ export interface CameraEntry {
     MessageModule,
     TooltipModule,
     DynamicDialogModule,
+    VisionTutorialComponent,
   ],
   templateUrl: './vision.html',
   styleUrls: ['./vision.scss'],
@@ -73,6 +75,9 @@ export class Vision implements OnInit, OnDestroy {
   selectedFloorplanId: string | null = null;
 
 
+
+  showTutorial = false;
+  private readonly TOUR_KEY = 'vision-tutorial-seen';
 
   private readonly destroy$ = new Subject<void>();
 
@@ -102,6 +107,21 @@ export class Vision implements OnInit, OnDestroy {
 
     this.loadBoardLibrary();
     this.loadFloorplans();
+
+    setTimeout(() => {
+      if (!localStorage.getItem(this.TOUR_KEY)) {
+        this.showTutorial = true;
+      }
+    }, 500);
+  }
+
+  startTour(): void {
+    this.showTutorial = true;
+  }
+
+  onTutorialDone(): void {
+    this.showTutorial = false;
+    localStorage.setItem(this.TOUR_KEY, '1');
   }
 
   ngOnDestroy(): void {
