@@ -10,6 +10,7 @@ import { TableModule } from 'primeng/table';
 import { DynamicDialogModule, DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { interval, Subject } from 'rxjs';
 import { startWith, switchMap, takeUntil } from 'rxjs/operators';
+import { ActivatedRoute } from '@angular/router';
 import { FusionService } from '../../../../services/fusion-service';
 import { FusionConfigDto, FusionRunDto } from '../../../../models/FusionDtos';
 import { FusionModal } from './fusion-modal/fusion-modal';
@@ -48,6 +49,7 @@ export class Fusion implements OnInit, OnDestroy {
   constructor(
     private readonly fusionService: FusionService,
     private readonly dialogService: DialogService,
+    private readonly route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
@@ -97,6 +99,7 @@ export class Fusion implements OnInit, OnDestroy {
   }
 
   openFusionModal(): void {
+    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
     const ref = this.dialogService.open(FusionModal, {
       header: 'Run Manual Fusion',
       width: '900px',
@@ -105,13 +108,13 @@ export class Fusion implements OnInit, OnDestroy {
       dismissableMask: true,
       closable: true,
       contentStyle: {
-        'max-height': '900vh',    
+        'max-height': '900vh',
         'overflow': 'auto'
       },
       style: {
-        'min-height': '600px'    
+        'min-height': '600px'
       },
-      data: {},
+      data: { projectId },
     });
     if (!ref) return;
     this.modalRef = ref;
