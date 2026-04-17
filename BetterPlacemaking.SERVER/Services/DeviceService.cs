@@ -167,7 +167,6 @@ namespace BetterPlacemaking.Services
         /// </summary>
         public bool StartLidarScan(string deviceId, ScanSettingsRequest settings)
         {
-            Console.WriteLine($"StartLidarScan HIT for {deviceId}");
             if (string.IsNullOrWhiteSpace(deviceId) || settings == null)
                 return false;
 
@@ -188,9 +187,6 @@ namespace BetterPlacemaking.Services
                 { "min_revolutions_per_slice", settings.min_revolutions_per_slice },
                 { "force_recalibration", settings.force_recalibration }
             };
-
-            Console.WriteLine($"StartLidarScan called for device {deviceId}");
-            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(scanCmd));
 
             docRef.UpdateAsync(new Dictionary<string, object?>
             {

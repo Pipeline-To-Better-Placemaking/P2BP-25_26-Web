@@ -44,7 +44,6 @@ namespace BetterPlacemaking.Services
 
         public object CreateScan(string projectId, string deviceId, ScanSettingsRequest settings, string? initiatedByUserId = null)
         {
-            Console.WriteLine("CreateScan HIT");
             var collection = _db
                 .Collection("projects")
                 .Document(projectId)

@@ -176,7 +176,6 @@ export class Scanner implements OnInit {
   }
 
   public performScan(): void {
-    console.log("StartLidarScan HIT for {deviceId}");
     if (!this.projectId) {
       this.scanMessage = 'No project selected.';
       return;

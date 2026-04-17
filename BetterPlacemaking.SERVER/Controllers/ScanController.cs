@@ -24,7 +24,6 @@ namespace BetterPlacemaking.Controllers
 		[HttpPost("{projectId}/{deviceId}")]
 		public IActionResult StartScan(string projectId, string deviceId, [FromBody] ScanSettingsRequest? settings)
 		{
-			Console.WriteLine("StartScan endpoint HIT");
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
 				return BadRequest();
 
