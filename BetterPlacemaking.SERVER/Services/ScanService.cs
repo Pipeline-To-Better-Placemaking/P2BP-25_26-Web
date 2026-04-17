@@ -3,7 +3,6 @@ using Google.Cloud.Firestore;
 using System.Linq;
 using System.Text.Json;
 using BetterPlacemaking.Models;
-using Google.Cloud.Firestore;
 
 namespace BetterPlacemaking.Services
 {
@@ -192,23 +191,23 @@ namespace BetterPlacemaking.Services
             return true;
         }
 
-        public bool DeleteScan(string projectId, string deviceId, string scanId)
-        {
-            var docRef = _db
-                .Collection("projects")
-                .Document(projectId)
-                .Collection("devices")
-                .Document(deviceId)
-                .Collection("scans")
-                .Document(scanId);
+        public async Task<bool> DeleteScan(string projectId, string deviceId, string scanId)
+{
+    var docRef = _db
+        .Collection("projects")
+        .Document(projectId)
+        .Collection("devices")
+        .Document(deviceId)
+        .Collection("scans")
+        .Document(scanId);
 
-            var snap = docRef.GetSnapshotAsync().Result;
-            if (!snap.Exists)
-                return false;
+    var snapshot = await docRef.GetSnapshotAsync();
+    if (!snapshot.Exists)
+        return false;
 
-            docRef.DeleteAsync().Wait();
-            return true;
-        }
+    await docRef.DeleteAsync();
+    return true;
+}
 
         /// <summary>
         /// Latest <c>Status=complete</c> scan for this project across the given device ids (by <see cref="GetScans"/>).
