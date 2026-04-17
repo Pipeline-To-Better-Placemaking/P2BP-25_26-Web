@@ -20,6 +20,16 @@ export interface LoadLatestScanVisualizerResponse {
   scanId?: string;
 }
 
+export interface ScanRecordDto {
+  Id?: string;
+  Status?: string;
+  CreatedAt?: any;
+  StartedAt?: any;
+  FinishedAt?: any;
+  ObjUrl?: string | null;
+  Error?: string | null;
+}
+
 export type ScanResolution = 1 | 8 | 16 | 32 | 64;
 export type ProtocolMode = 'legacy' | 'express' | 'dense' | 'ultra';
 export type OrientationMode = 'table' | 'ceiling' | 'wall' | 'custom';
@@ -136,4 +146,10 @@ export class ScanService {
       {},
     );
   }
+
+  getScans(projectId: string, deviceId: string): Observable<ScanRecordDto[]> {
+  return this.http.get<ScanRecordDto[]>(
+    `${this.baseUrl}/api/scan/${projectId}/${deviceId}`
+  );
+}
 }

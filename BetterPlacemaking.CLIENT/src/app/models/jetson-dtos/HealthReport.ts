@@ -4,6 +4,9 @@ export interface HealthReport {
 	Cameras?: Record<string, CameraInfo> | null;
     System?: SystemInfo | null;
     IntrinsicsCalibration?: Record<string, IntrinsicsCalibrationState> | null;
+
+    Lidars?: Record<string, LidarInfo> | null;
+    PiCompanion?: PiCompanionInfo | null;
 }
 
 export interface ServiceStatus {
@@ -53,4 +56,20 @@ export interface IntrinsicsCalibrationState {
 	SuggestedRegion?: string | null;
 	SuggestedTilt?: string | null;
 	CurrentRmse: number;
+}
+
+export interface LidarInfo {
+    SensorId?: string | null;
+    Connected: boolean;
+    DevicePath?: string | null;
+    UsbHint?: string | null;
+    LastError?: string | null;
+}
+
+export interface PiCompanionInfo {
+    Configured: boolean;
+    Host?: string | null;
+    Reachable: boolean;
+    LatencyMs?: number | null;
+    LastError?: string | null;
 }
