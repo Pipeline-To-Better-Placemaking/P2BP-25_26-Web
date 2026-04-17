@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams  } from '@angular/common/http';
 import { Observable, catchError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ErrorHandlerService } from './error-handler-service';
@@ -46,9 +46,12 @@ export class FusionService {
       .get(`${environment.apiBaseUrl}/api/fusion/${runId}/download`, { responseType: 'blob' })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to download fusion run')));
   }
-  getConfig(): Observable<FusionConfigDto> {
+
+  getConfig(projectId?: string): Observable<FusionConfigDto> {
+    let params = new HttpParams();
+    if (projectId) params = params.set('projectId', projectId);
     return this.http
-      .get<FusionConfigDto>(`${environment.apiBaseUrl}/api/fusion/config`)
+      .get<FusionConfigDto>(`${environment.apiBaseUrl}/api/fusion/config`, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load fusion config')));
   }
 

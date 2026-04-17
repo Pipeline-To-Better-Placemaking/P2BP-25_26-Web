@@ -1,3 +1,4 @@
+
 <div class="fusion-page">
 
   <div class="fusion-header">
@@ -5,13 +6,20 @@
       <h1 class="fusion-title">Data Fusion</h1>
       <p class="fusion-subtitle">Merge multi-camera tracking data into unified pedestrian identities</p>
     </div>
-    <p-button
-      label="Run Manual Fusion"
-      icon="pi pi-play"
-      (onClick)="openFusionModal()"
-      [loading]="hasRunningFusion"
-      pTooltip="Select a date range and run the fusion pipeline"
-      tooltipPosition="left" />
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      <p-button
+        label="Change Auto-Fusion Time"
+        icon="pi pi-clock"
+        severity="secondary"
+        (onClick)="openScheduleDialog()" />
+      <p-button
+        label="Run Manual Fusion"
+        icon="pi pi-play"
+        (onClick)="openFusionModal()"
+        [loading]="hasRunningFusion"
+        pTooltip="Select a date range and run the fusion pipeline"
+        tooltipPosition="left" />
+    </div>
   </div>
 
   <p-message
@@ -51,7 +59,9 @@
            [class.fusion-stat-danger]="config?.Enabled === false">
         {{ config?.Enabled ? 'Enabled' : (config ? 'Disabled' : '—') }}
       </div>
-      <div class="fusion-stat-meta">nightly schedule</div>
+      <div class="fusion-stat-meta">
+        {{ config ? 'Daily at ' + formatScheduleTime(config) + ' UTC' : 'nightly schedule' }}
+      </div>
     </div>
   </div>
 
@@ -144,5 +154,47 @@
     </p-table>
 
   </div>
+
+  <!-- ── Schedule time dialog ──────────────────────────────────────────────── -->
+  <p-dialog
+    header="Set Automatic Fusion Time"
+    [(visible)]="scheduleDialogVisible"
+    [modal]="true"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    styleClass="fusion-schedule-dialog">
+
+    <div class="fusion-schedule-dialog-body">
+      <p class="fusion-schedule-dialog-hint">
+        Choose the daily time (UTC) when the fusion pipeline will run automatically.
+      </p>
+      <p-datepicker
+        [(ngModel)]="scheduleDialogTime"
+        [timeOnly]="true"
+        hourFormat="24"
+        [inline]="true"
+        styleClass="fusion-schedule-clock" />
+      <p-message
+        *ngIf="scheduleDialogError"
+        severity="error"
+        text="Failed to save. Please try again."
+        styleClass="w-full" />
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button
+        label="Cancel"
+        severity="secondary"
+        [text]="true"
+        (onClick)="scheduleDialogVisible = false" />
+      <p-button
+        label="Save Time"
+        icon="pi pi-check"
+        [loading]="scheduleDialogSaving"
+        (onClick)="saveScheduleTime()" />
+    </ng-template>
+
+  </p-dialog>
 
 </div>

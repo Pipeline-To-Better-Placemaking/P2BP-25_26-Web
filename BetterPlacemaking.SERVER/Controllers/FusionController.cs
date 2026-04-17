@@ -76,9 +76,9 @@ namespace BetterPlacemaking.Controllers
         }
 
         [HttpGet("config")]
-        public IActionResult GetConfig()
+        public IActionResult GetConfig([FromQuery] string? projectId = null)
         {
-            try { return Ok(_fusionService.GetConfig()); }
+            try { return Ok(_fusionService.GetConfig(projectId)); }
             catch (Exception) { return Problem("Error retrieving fusion config."); }
         }
 

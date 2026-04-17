@@ -19,7 +19,7 @@
 }
 
 .fusion-button {
-  padding: 13px 5px; /* Top/Bottom and Left/Right */
+  padding: 13px 5px;
   display: block;
   position:relative;
   top: 125px;
@@ -201,4 +201,28 @@
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+// ── Schedule time dialog ──────────────────────────────────────────────────────
+:host ::ng-deep .fusion-schedule-dialog {
+  width: 320px;
+}
+
+.fusion-schedule-dialog-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.5rem 0;
+}
+
+.fusion-schedule-dialog-hint {
+  font-size: 0.85rem;
+  color: var(--p-text-muted-color);
+  text-align: center;
+  margin: 0;
+}
+
+:host ::ng-deep .fusion-schedule-clock.p-datepicker {
+  width: 100%;
 }

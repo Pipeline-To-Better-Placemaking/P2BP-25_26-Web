@@ -7,6 +7,8 @@ import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { TooltipModule } from 'primeng/tooltip';
 import { TableModule } from 'primeng/table';
+import { DatePickerModule } from 'primeng/datepicker'; // NEW
+import { DialogModule } from 'primeng/dialog';       // NEW
 import { DynamicDialogModule, DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { interval, Subject } from 'rxjs';
 import { startWith, switchMap, takeUntil } from 'rxjs/operators';
@@ -30,6 +32,8 @@ const POLL_INTERVAL_MS = 6_000;
     MessageModule,
     TooltipModule,
     TableModule,
+    DatePickerModule,     // NEW
+    DialogModule,         // NEW
     DynamicDialogModule,
   ],
   templateUrl: './fusion.html',
@@ -42,6 +46,12 @@ export class Fusion implements OnInit, OnDestroy {
   config: FusionConfigDto | null = null;
   deletingRunId: string | null = null;
   downloadingRunId: string | null = null;
+
+  // ── Schedule dialog ────────────────────────────────────────────────────────
+  scheduleDialogVisible = false;
+  scheduleDialogSaving  = false;
+  scheduleDialogError   = false;
+  scheduleDialogTime: Date | null = null;
 
   private readonly destroy$ = new Subject<void>();
   private modalRef: DynamicDialogRef | null = null;
@@ -71,7 +81,8 @@ export class Fusion implements OnInit, OnDestroy {
         },
       });
 
-    this.fusionService.getConfig().subscribe({
+    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
+    this.fusionService.getConfig(projectId).subscribe({
       next: (cfg: FusionConfigDto) => (this.config = cfg),
       error: () => {},
     });
@@ -127,6 +138,56 @@ export class Fusion implements OnInit, OnDestroy {
     });
   }
 
+openScheduleDialog(): void {
+    this.scheduleDialogError   = false;
+    this.scheduleDialogVisible = true;
+    this.scheduleDialogTime    = null; // placeholder while we fetch
+
+    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
+    this.fusionService.getConfig(projectId).subscribe({
+      next: (cfg) => {
+        this.config = cfg;
+        const d = new Date();
+        d.setHours(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, 0, 0);
+        this.scheduleDialogTime = d;
+      },
+      error: () => (this.scheduleDialogError = true),
+    });
+}
+
+  saveScheduleTime(): void {
+    if (!this.scheduleDialogTime) return;
+    this.scheduleDialogSaving = true;
+    this.scheduleDialogError  = false;
+
+   const projectId = this.route.snapshot.paramMap.get('projectId') ?? this.config?.ProjectId;
+
+    this.fusionService.updateConfig({
+      ScheduledHourUtc:   this.scheduleDialogTime.getHours(),
+      ScheduledMinuteUtc: this.scheduleDialogTime.getMinutes(),
+      Enabled:            this.config?.Enabled ?? true,
+      ProjectId:          projectId,
+    }).subscribe({
+      next: (updated) => {
+        this.config = updated;
+        this.scheduleDialogSaving  = false;
+        this.scheduleDialogVisible = false;
+      },
+      error: () => {
+        this.scheduleDialogSaving = false;
+        this.scheduleDialogError  = true;
+      },
+    });
+  }
+
+  formatScheduleTime(config: FusionConfigDto): string {
+    const h = String(config.ScheduledHourUtc).padStart(2, '0');
+    const m = String(config.ScheduledMinuteUtc).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  // ── Existing methods (unchanged) ──────────────────────────────────────────
+
   deleteRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
     if (run.Status === 'running') return;
@@ -139,25 +200,25 @@ export class Fusion implements OnInit, OnDestroy {
       error: () => (this.deletingRunId = null),
     });
   }
-  
-downloadRun(run: FusionRunDto, event: Event): void {
-  event.stopPropagation();
-  if (!run.OutputGcsPath) return;
-  this.downloadingRunId = run.Id;
-  this.fusionService.downloadRun(run.Id).subscribe({
-    next: (blob) => {
-      const filename = run.OutputGcsPath!.split('/').pop() ?? 'fused_tracks.json';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      this.downloadingRunId = null;
-    },
-    error: () => (this.downloadingRunId = null),
-  });
-}
+
+  downloadRun(run: FusionRunDto, event: Event): void {
+    event.stopPropagation();
+    if (!run.OutputGcsPath) return;
+    this.downloadingRunId = run.Id;
+    this.fusionService.downloadRun(run.Id).subscribe({
+      next: (blob) => {
+        const filename = run.OutputGcsPath!.split('/').pop() ?? 'fused_tracks.json';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.downloadingRunId = null;
+      },
+      error: () => (this.downloadingRunId = null),
+    });
+  }
 
   runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'secondary' {
     if (status === 'success') return 'success';

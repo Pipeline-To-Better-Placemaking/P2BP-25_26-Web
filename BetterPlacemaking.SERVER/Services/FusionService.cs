@@ -18,6 +18,9 @@ namespace BetterPlacemaking.Services
         private const string ColFusionRuns   = "fusion_runs";
         private const string ColFusionConfig = "fusion_config";
         private const string ConfigDocId     = "default";
+        private const string DefaultConfigDocId = "default";
+        private static string ConfigDocIdFor(string? projectId) =>
+            string.IsNullOrWhiteSpace(projectId) ? DefaultConfigDocId : projectId;
 
         // ── History ──────────────────────────────────────────────────────────
 
@@ -137,14 +140,16 @@ namespace BetterPlacemaking.Services
 
         // ── Config ────────────────────────────────────────────────────────────
 
-        public FusionConfigDto GetConfig()
+        public FusionConfigDto GetConfig(string? projectId = null)
         {
-            var snap = _db.Collection(ColFusionConfig).Document(ConfigDocId).GetSnapshotAsync().Result;
+            var docId = ConfigDocIdFor(projectId);
+            var snap  = _db.Collection(ColFusionConfig).Document(docId).GetSnapshotAsync().Result;
+
             if (!snap.Exists)
-                return new FusionConfigDto(21, 0, true);
+                return new FusionConfigDto(21, 0, true, projectId);
 
             var cfg = snap.ConvertTo<FusionConfig>();
-            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled, cfg.ProjectId);
+            return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled, cfg.ProjectId ?? projectId);
         }
 
         public FusionConfigDto UpdateConfig(UpdateFusionConfigDto dto)
@@ -153,6 +158,11 @@ namespace BetterPlacemaking.Services
                 throw new ArgumentOutOfRangeException(nameof(dto.ScheduledHourUtc), "Hour must be 0-23.");
             if (dto.ScheduledMinuteUtc is < 0 or > 59)
                 throw new ArgumentOutOfRangeException(nameof(dto.ScheduledMinuteUtc), "Minute must be 0-59.");
+
+            var docId = ConfigDocIdFor(dto.ProjectId);
+
+            var oldSnap = _db.Collection(ColFusionConfig).Document(docId).GetSnapshotAsync().Result;
+            FusionConfig? oldCfg = oldSnap.Exists ? oldSnap.ConvertTo<FusionConfig>() : null;
 
             var cfg = new FusionConfig
             {
@@ -163,11 +173,23 @@ namespace BetterPlacemaking.Services
                 UpdatedAtUnix      = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
             };
 
-            _db.Collection(ColFusionConfig).Document(ConfigDocId).SetAsync(cfg).Wait();
-            _logger.LogInformation(
-                "Fusion config updated: {Hour:D2}:{Minute:D2} UTC enabled={Enabled} project={ProjectId}",
-                dto.ScheduledHourUtc, dto.ScheduledMinuteUtc, dto.Enabled, dto.ProjectId ?? "<none>");
+            _db.Collection(ColFusionConfig).Document(docId).SetAsync(cfg).Wait();
 
+            if (oldCfg is null)
+            {
+                _logger.LogInformation(
+                    "Fusion config initialized for project={ProjectId}: {H:D2}:{M:D2} enabled={Enabled}",
+                    dto.ProjectId ?? "<default>",
+                    dto.ScheduledHourUtc, dto.ScheduledMinuteUtc, dto.Enabled);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Fusion config updated for project={ProjectId}: {OldH:D2}:{OldM:D2} (enabled={OldEn}) → {NewH:D2}:{NewM:D2} (enabled={NewEn})",
+                    dto.ProjectId ?? "<default>",
+                    oldCfg.ScheduledHourUtc, oldCfg.ScheduledMinuteUtc, oldCfg.Enabled,
+                    dto.ScheduledHourUtc,    dto.ScheduledMinuteUtc,    dto.Enabled);
+            }
             return new FusionConfigDto(cfg.ScheduledHourUtc, cfg.ScheduledMinuteUtc, cfg.Enabled, cfg.ProjectId);
         }
 
