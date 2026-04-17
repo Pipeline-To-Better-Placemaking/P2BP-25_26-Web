@@ -10,10 +10,12 @@ import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
+import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { DividerModule } from 'primeng/divider';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
-import { ScanService, ScanScheduleDto } from '../../../../services/scan-service';
+import { ScanService, ScanScheduleDto, ScanSettingsPayload, BASE_SCAN_SETTINGS, SCAN_PRESETS, ScanPreset } from '../../../../services/scan-service';
 import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
 
@@ -23,6 +25,12 @@ interface FrequencyOption {
   name: string;
   code: string;
 }
+
+interface SelectOption<T> {
+  label: string;
+  value: T;
+}
+
 
 @Component({
   selector: 'app-scanner',
@@ -36,6 +44,8 @@ interface FrequencyOption {
     MessageModule,
     DatePickerModule,
     SelectModule,
+    ToggleSwitchModule,
+    DividerModule,
     PointCloudViewerComponent,
     SolidObjectsViewComponent,
   ],
@@ -69,6 +79,61 @@ export class Scanner implements OnInit {
   public editingScheduleId: string | null = null;
   public minEndDate: Date | null = null;
 
+  public readonly baseScanSettings: ScanSettingsPayload = structuredClone(BASE_SCAN_SETTINGS);
+  public scanSettings: ScanSettingsPayload = structuredClone(BASE_SCAN_SETTINGS);
+  public selectedPreset: ScanPreset | null = 'base';
+
+  public presetOptions: SelectOption<ScanPreset>[] = [
+    { label: 'Base Quality', value: 'base' },
+    { label: 'Medium Quality', value: 'medium' },
+    { label: 'High Quality', value: 'high' }
+  ];
+
+  public scanResolutionOptions: SelectOption<ScanSettingsPayload['scan_resolution']>[] = [
+    { label: '1 — 1.0° per slice', value: 1 },
+    { label: '8 — 0.125° per slice', value: 8 },
+    { label: '16 — 0.0625° per slice', value: 16 },
+    { label: '32 — 0.03125° per slice', value: 32 },
+    { label: '64 — 0.0156° per slice', value: 64 }
+  ];
+
+  public protocolModeOptions: SelectOption<ScanSettingsPayload['protocol_mode']>[] = [
+    { label: 'Legacy', value: 'legacy' },
+    { label: 'Express', value: 'express' },
+    { label: 'Dense', value: 'dense' },
+    { label: 'Ultra', value: 'ultra' }
+  ];
+
+  public orientationModeOptions: SelectOption<ScanSettingsPayload['orientation_mode']>[] = [
+    { label: 'Table (Right Side Up)', value: 'table' },
+    { label: 'Ceiling (Upside Down Up)', value: 'ceiling' },
+    { label: 'Wall', value: 'wall' },
+    { label: 'Custom', value: 'custom' }
+  ];
+
+  public outputModeOptions: SelectOption<ScanSettingsPayload['output_mode']>[] = [
+    { label: 'Filtered Only', value: 'filtered_only' },
+    { label: 'Raw Only', value: 'raw_only' },
+    { label: 'Raw and Filtered', value: 'raw_and_filtered' }
+  ];
+
+  public splitModeOptions: SelectOption<ScanSettingsPayload['split_mode']>[] = [
+    { label: 'None', value: 'none' },
+    { label: 'Front / Back 180°', value: 'front_back_180' }
+  ];
+
+  public captureStrategyOptions: SelectOption<ScanSettingsPayload['capture_strategy']>[] = [
+    { label: 'Fixed Time', value: 'fixed_time' },
+    { label: 'Minimum Revolutions', value: 'min_revolutions' },
+    { label: 'Hybrid', value: 'hybrid' }
+  ];
+
+  public minRevolutionOptions: SelectOption<ScanSettingsPayload['min_revolutions_per_slice']>[] = [
+    { label: '1 revolution', value: 1 },
+    { label: '2 revolutions', value: 2 },
+    { label: '3 revolutions', value: 3 }
+  ];
+
   constructor(
     private route: ActivatedRoute,
     private deviceService: DeviceService,
@@ -86,6 +151,30 @@ export class Scanner implements OnInit {
     this.visualMode = mode;
   }
 
+  public applyPreset(preset: ScanPreset | null): void {
+    if (!preset) {
+      return;
+    }
+
+    this.selectedPreset = preset;
+    this.scanSettings = structuredClone(SCAN_PRESETS[preset]);
+  }
+
+  public resetToBaseSettings(): void {
+    this.selectedPreset = 'base';
+    this.scanSettings = structuredClone(BASE_SCAN_SETTINGS);
+  }
+
+  public onScanSettingChanged(): void {
+    this.selectedPreset = null;
+  }
+
+  public get helperOrientationCustomMessage(): string {
+    return this.scanSettings.orientation_mode === 'custom'
+      ? 'Custom orientation is selectable, but extra axis controls may still depend on backend support.'
+      : '';
+  }
+
   public performScan(): void {
     if (!this.projectId) {
       this.scanMessage = 'No project selected.';
@@ -94,6 +183,10 @@ export class Scanner implements OnInit {
 
     this.scanning = true;
     this.scanMessage = null;
+
+    const payload: ScanSettingsPayload = {
+      ...this.scanSettings
+    };
 
     this.deviceService.getDevices().subscribe({
       next: (devices: DeviceDto[]) => {
@@ -106,14 +199,14 @@ export class Scanner implements OnInit {
         }
 
         const scanRequests = projectDevices.map(d =>
-          this.scanService.startScan(this.projectId, d.Id)
+          this.scanService.startScan(this.projectId, d.Id, payload)
         );
 
         forkJoin(scanRequests).subscribe({
           next: (results) => {
             this.scanMessage = `Scan requested for ${results.length} device(s).`;
             this.scanning = false;
-            setTimeout(() => this.scanMessage = null, 5000);
+            setTimeout(() => { this.scanMessage = null; }, 5000);
           },
           error: (err) => {
             this.scanMessage = this.getScanStartErrorMessage(err);

@@ -2,21 +2,204 @@
 
   <div class="p-card shadow-lg rounded-lg overflow-hidden mb-6">
     <p-card header="Immediate Lidar Scan">
-      <div class="flex flex-col gap-4">
-        <p-button
-          label="Perform Scan"
-          icon="pi pi-play"
-          styleClass="p-button-primary w-full md:w-auto"
-          [loading]="scanning"
-          [disabled]="scanning"
-          (onClick)="performScan()">
-        </p-button>
+      <div class="flex flex-col gap-5">
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label for="scanPreset" class="font-medium">Preset</label>
+            <p-select
+              inputId="scanPreset"
+              [options]="presetOptions"
+              [(ngModel)]="selectedPreset"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select preset"
+              styleClass="w-full"
+              (ngModelChange)="applyPreset($event)">
+            </p-select>
+            <small class="text-surface-500">
+              Quickly apply recommended scan settings.
+            </small>
+          </div>
+
+          <div class="flex items-end">
+            <p-button
+              label="Reset to Base"
+              icon="pi pi-refresh"
+              severity="secondary"
+              [outlined]="true"
+              styleClass="w-full lg:w-auto"
+              (onClick)="resetToBaseSettings()">
+            </p-button>
+          </div>
+        </div>
+
+        <p-divider></p-divider>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label for="scanResolution" class="font-medium">Scan Resolution</label>
+            <p-select
+              inputId="scanResolution"
+              [options]="scanResolutionOptions"
+              [(ngModel)]="scanSettings.scan_resolution"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Controls scan granularity and detail level.
+            </small>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="protocolMode" class="font-medium">Protocol Mode</label>
+            <p-select
+              inputId="protocolMode"
+              [options]="protocolModeOptions"
+              [(ngModel)]="scanSettings.protocol_mode"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Selects the LiDAR scan mode.
+            </small>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label for="orientationMode" class="font-medium">Orientation Mode</label>
+            <p-select
+              inputId="orientationMode"
+              [options]="orientationModeOptions"
+              [(ngModel)]="scanSettings.orientation_mode"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Sets how the point cloud is oriented after capture.
+            </small>
+            <small *ngIf="helperOrientationCustomMessage" class="text-orange-500">
+              {{ helperOrientationCustomMessage }}
+            </small>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="outputMode" class="font-medium">Output Mode</label>
+            <p-select
+              inputId="outputMode"
+              [options]="outputModeOptions"
+              [(ngModel)]="scanSettings.output_mode"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Chooses which point-cloud files are saved.
+            </small>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label for="splitMode" class="font-medium">Split Mode</label>
+            <p-select
+              inputId="splitMode"
+              [options]="splitModeOptions"
+              [(ngModel)]="scanSettings.split_mode"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Optionally splits output into front/back files.
+            </small>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="captureStrategy" class="font-medium">Capture Strategy</label>
+            <p-select
+              inputId="captureStrategy"
+              [options]="captureStrategyOptions"
+              [(ngModel)]="scanSettings.capture_strategy"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Controls how long data is collected per slice.
+            </small>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label for="minRevolutions" class="font-medium">Minimum Revolutions per Slice</label>
+            <p-select
+              inputId="minRevolutions"
+              [options]="minRevolutionOptions"
+              [(ngModel)]="scanSettings.min_revolutions_per_slice"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              (ngModelChange)="onScanSettingChanged()">
+            </p-select>
+            <small class="text-surface-500">
+              Minimum full LiDAR revolutions collected per slice.
+            </small>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-2">
+              <label for="filterEnabled" class="font-medium">Distance Filtering</label>
+              <p-toggleswitch
+                inputId="filterEnabled"
+                [(ngModel)]="scanSettings.filter_enabled"
+                (ngModelChange)="onScanSettingChanged()">
+              </p-toggleswitch>
+              <small class="text-surface-500">
+                Enables or disables distance filtering.
+              </small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <label for="forceRecalibration" class="font-medium">Recalibrate Before Scan</label>
+              <p-toggleswitch
+                inputId="forceRecalibration"
+                [(ngModel)]="scanSettings.force_recalibration"
+                (ngModelChange)="onScanSettingChanged()">
+              </p-toggleswitch>
+              <small class="text-surface-500">
+                Recalibrates the scanner before the next scan.
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 flex flex-wrap gap-3">
+          <p-button
+            label="Perform Scan"
+            icon="pi pi-play"
+            styleClass="p-button-primary w-full md:w-auto"
+            [loading]="scanning"
+            [disabled]="scanning"
+            (onClick)="performScan()">
+          </p-button>
+        </div>
 
         <p-message
           *ngIf="scanMessage"
           [text]="scanMessage">
         </p-message>
-
 
       </div>
     </p-card>
