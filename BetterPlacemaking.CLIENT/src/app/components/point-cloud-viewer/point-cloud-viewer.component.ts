@@ -14,6 +14,7 @@ import { ButtonModule } from 'primeng/button';
 import { SelectModule } from 'primeng/select';
 import { MessageModule } from 'primeng/message';
 import { VisualizerService, LidarPoint3D } from '../../services/visualizer-service';
+import { ScanService } from '../../services/scan-service';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { interval, of, Subscription } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
@@ -80,13 +81,14 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   @Input() projectContextId?: string;
   private routeProjectId?: string;
 
-  /** Polls points-meta when {@link projectContextId} is set (Scanner 3D View) to pick up device scan ingest. */
+  /** Polls points-meta when a project id is known (Scanner 3D View) to pick up device scan ingest. */
   private metaPollSub?: Subscription;
   private lastRevisionSeen = 0;
   private metaPollPrimed = false;
 
   constructor(
     private readonly visualizerService: VisualizerService,
+    private readonly scanService: ScanService,
     private readonly route: ActivatedRoute
   ) {}
 
@@ -117,6 +119,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
       this.initThreeJS();
       this.loadExistingPoints();
       this.startScanIngestMetaPolling();
+      this.tryAutoLoadLatestCompleteScan();
     }, 0);
   }
 
@@ -129,7 +132,7 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private startScanIngestMetaPolling(): void {
-    if (!this.projectContextId?.trim()) {
+    if (!this.effectiveProjectId()) {
       return;
     }
 
@@ -155,6 +158,24 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
           this.refreshPointCloud();
         }
       });
+  }
+
+  private tryAutoLoadLatestCompleteScan(): void {
+    const pid = this.effectiveProjectId()?.trim();
+    if (!pid) {
+      return;
+    }
+    this.scanService.loadLatestCompleteScanIntoVisualizer(pid).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.refreshPointCloud();
+        } else if (res.reason !== 'no_complete_scan' && res.reason !== 'no_devices' && res.message) {
+          this.statusSeverity = 'info';
+          this.statusMessage = res.message;
+        }
+      },
+      error: () => {},
+    });
   }
 
   // ── Three.js setup ─────────────────────────────────────────────────

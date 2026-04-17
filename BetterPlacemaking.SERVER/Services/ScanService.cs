@@ -3,9 +3,10 @@ using Google.Cloud.Firestore;
 
 namespace BetterPlacemaking.Services
 {
-    public class ScanService(FirestoreDb db)
+    public class ScanService(FirestoreDb db, DeviceService deviceService)
     {
         private readonly FirestoreDb _db = db;
+        private readonly DeviceService _deviceService = deviceService;
 
         /// <summary>
         /// Oldest pending scan for the device, or null if none.
@@ -60,11 +61,36 @@ namespace BetterPlacemaking.Services
             var docRef = collection.Document();
             docRef.SetAsync(scan).Wait();
 
+            // Wake the Jetson scan orchestrator. Writes only Config.LidarScan.BeginScanning on
+            // the root devices/{deviceId} doc (the one the heartbeat reads) and invalidates the
+            // Device cache. Heartbeat then delivers the flag once and one-shot clears it.
+            _deviceService.SetLidarBeginScanning(deviceId, true);
+
             return new
             {
                 Id = docRef.Id,
                 Status = "pending"
             };
+        }
+
+        public (bool Exists, string? ScanId, string? Status) HasPendingOrRunningScan(string projectId, string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
+                return (false, null, null);
+
+            var scans = GetScans(projectId, deviceId);
+            foreach (var row in scans)
+            {
+                var status = GetScanStringField(row, "Status");
+                if (string.Equals(status, "pending", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
+                {
+                    var scanId = GetScanStringField(row, "Id");
+                    return (true, scanId, status);
+                }
+            }
+
+            return (false, null, null);
         }
 
         public List<Dictionary<string, object>> GetScans(string projectId, string deviceId)
@@ -166,6 +192,89 @@ namespace BetterPlacemaking.Services
 
             docRef.DeleteAsync().Wait();
             return true;
+        }
+
+        /// <summary>
+        /// Latest <c>Status=complete</c> scan for this project across the given device ids (by <see cref="GetScans"/>).
+        /// </summary>
+        public (string DeviceId, Dictionary<string, object> Scan)? GetLatestCompleteScanForProject(
+            string projectId,
+            IEnumerable<string> deviceIds)
+        {
+            if (string.IsNullOrWhiteSpace(projectId))
+                return null;
+
+            (string DeviceId, Dictionary<string, object> Scan, DateTime SortUtc)? best = null;
+            foreach (var deviceId in deviceIds)
+            {
+                if (string.IsNullOrWhiteSpace(deviceId))
+                    continue;
+
+                foreach (var scan in GetScans(projectId, deviceId))
+                {
+                    var st = GetScanStringField(scan, "Status");
+                    if (!string.Equals(st, "complete", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var sortUtc = GetScanFinishedOrCreatedUtc(scan);
+                    if (best == null || sortUtc > best.Value.SortUtc)
+                        best = (deviceId, scan, sortUtc);
+                }
+            }
+
+            if (best == null)
+                return null;
+
+            return (best.Value.DeviceId, best.Value.Scan);
+        }
+
+        private static string? GetScanStringField(Dictionary<string, object> row, string key)
+        {
+            foreach (var k in new[] { key, char.ToLowerInvariant(key[0]) + key[1..] })
+            {
+                if (row.TryGetValue(k, out var v) && v != null)
+                {
+                    if (v is string s)
+                        return s;
+                    return v.ToString();
+                }
+            }
+
+            return null;
+        }
+
+        private static DateTime GetScanFinishedOrCreatedUtc(Dictionary<string, object> row)
+        {
+            if (TryGetTimestampUtc(row, "FinishedAt", out var t))
+                return t;
+            if (TryGetTimestampUtc(row, "CreatedAt", out t))
+                return t;
+
+            return DateTime.MinValue;
+        }
+
+        private static bool TryGetTimestampUtc(Dictionary<string, object> row, string key, out DateTime utc)
+        {
+            utc = default;
+            foreach (var k in new[] { key, char.ToLowerInvariant(key[0]) + key[1..] })
+            {
+                if (!row.TryGetValue(k, out var v) || v == null)
+                    continue;
+
+                if (v is Timestamp ts)
+                {
+                    utc = ts.ToDateTime();
+                    return true;
+                }
+
+                if (v is DateTime dt)
+                {
+                    utc = dt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(dt, DateTimeKind.Utc) : dt.ToUniversalTime();
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

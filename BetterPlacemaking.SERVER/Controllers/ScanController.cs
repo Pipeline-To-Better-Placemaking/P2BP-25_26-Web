@@ -11,10 +11,12 @@ namespace BetterPlacemaking.Controllers
 	[Authorize(Policy = "UserJwt")]
 	public class ScanController(
 		ScanService scanService,
+		DeviceService deviceService,
 		ScanCompleteVisualizerIngestService scanIngest,
 		NotificationService notificationService) : ControllerBase
 	{
 		private readonly ScanService _scanService = scanService;
+		private readonly DeviceService _deviceService = deviceService;
 		private readonly ScanCompleteVisualizerIngestService _scanIngest = scanIngest;
 		private readonly NotificationService _notificationService = notificationService;
 
@@ -26,6 +28,30 @@ namespace BetterPlacemaking.Controllers
 
 			try
 			{
+				var existing = _scanService.HasPendingOrRunningScan(projectId, deviceId);
+				if (existing.Exists)
+				{
+					// A scan the orchestrator has already claimed is genuinely in progress.
+					if (string.Equals(existing.Status, "running", StringComparison.OrdinalIgnoreCase))
+					{
+						return Conflict(new
+						{
+							reason = "scan_in_progress",
+							message = "A scan is already running for this device.",
+							scanId = existing.ScanId,
+							status = existing.Status
+						});
+					}
+
+					// Pending means the orchestrator hasn't claimed it yet. Re-arm the device
+					// flag in case the first heartbeat delivery was lost, and return the existing
+					// scan so a retry from the UI is idempotent rather than stuck behind a 409.
+					if (!string.IsNullOrWhiteSpace(deviceId))
+						_deviceService.SetLidarBeginScanning(deviceId, true);
+
+					return Ok(new { Id = existing.ScanId, Status = existing.Status });
+				}
+
 				var userId = ResolveCurrentUserId();
 				var response = _scanService.CreateScan(projectId, deviceId, userId);
 				return Ok(response);
@@ -69,6 +95,49 @@ namespace BetterPlacemaking.Controllers
 			catch (Exception)
 			{
 				return Problem("An unexpected error occurred while retrieving the scan.");
+			}
+		}
+
+		/// <summary>
+		/// Loads the newest <c>complete</c> device scan for this project into the in-memory visualizer (3D tab).
+		/// Tries Firestore <c>ObjUrl</c> then canonical GCS <c>vision/lidar-scans/{projectId}/{deviceId}/{scanId}.xyz</c>.
+		/// </summary>
+		[HttpPost("{projectId}/visualizer/latest")]
+		public async Task<IActionResult> LoadLatestCompleteScanIntoVisualizer(
+			string projectId,
+			CancellationToken cancellationToken)
+		{
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest();
+
+			try
+			{
+				var devices = _deviceService.GetDevicesByProjectId(projectId);
+				var deviceIds = devices
+					.Select(d => d.Id)
+					.Where(id => !string.IsNullOrWhiteSpace(id))
+					.Select(id => id!)
+					.ToList();
+				if (deviceIds.Count == 0)
+					return Ok(new { success = false, reason = "no_devices", message = "No devices assigned to this project." });
+
+				var latest = _scanService.GetLatestCompleteScanForProject(projectId, deviceIds);
+				if (latest == null)
+					return Ok(new { success = false, reason = "no_complete_scan", message = "No completed lidar scan for this project." });
+
+				var (deviceId, scan) = latest.Value;
+				var result = await _scanIngest
+					.TryIngestCompleteScanForVisualizerAsync(projectId, deviceId, scan, cancellationToken)
+					.ConfigureAwait(false);
+
+				if (result.Loaded)
+					return Ok(new { success = true, deviceId, scanId = scan.TryGetValue("Id", out var id) ? id?.ToString() : null });
+
+				return Ok(new { success = false, reason = result.Reason, message = result.Message, deviceId });
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while loading the latest scan into the visualizer.");
 			}
 		}
 

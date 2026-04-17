@@ -12,6 +12,14 @@ export interface ScanScheduleDto {
   EndTime?: string;
 }
 
+export interface LoadLatestScanVisualizerResponse {
+  success: boolean;
+  reason?: string;
+  message?: string;
+  deviceId?: string;
+  scanId?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ScanService {
   private readonly baseUrl = environment.apiBaseUrl;
@@ -47,6 +55,13 @@ export class ScanService {
   updateSchedule(projectId: string, scheduleId: string, schedule: ScanScheduleDto): Observable<void> {
     return this.http.put<void>(
       `${this.baseUrl}/api/scan-schedule/${projectId}/${scheduleId}`, schedule
+    );
+  }
+
+  loadLatestCompleteScanIntoVisualizer(projectId: string): Observable<LoadLatestScanVisualizerResponse> {
+    return this.http.post<LoadLatestScanVisualizerResponse>(
+      `${this.baseUrl}/api/scan/${encodeURIComponent(projectId)}/visualizer/latest`,
+      {},
     );
   }
 }

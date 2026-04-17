@@ -158,6 +158,37 @@ namespace BetterPlacemaking.Services
             return updated;
         }
 
+        /// <summary>
+        /// Sets <c>Config.LidarScan.BeginScanning</c> on the root <c>devices/{deviceId}</c> document
+        /// and invalidates the cached Device so the next heartbeat auth sees the new flag.
+        /// Only the single nested field is written (Firestore dot-notation), so other Config
+        /// subsections (Camera, Tracking, CharucoBoard, ArucoLock, Intrinsics, TrackingCameras)
+        /// are left untouched. Returns false if the device does not exist.
+        /// </summary>
+        public bool SetLidarBeginScanning(string deviceId, bool value)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return false;
+
+            var docRef = _db.Collection(collectionName).Document(deviceId);
+            var snap = docRef.GetSnapshotAsync().Result;
+            if (!snap.Exists)
+                return false;
+
+            docRef.UpdateAsync(new Dictionary<string, object>
+            {
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", value }
+            }).Wait();
+
+            // Invalidate the cached Device so the next heartbeat auth reloads from Firestore
+            // and sees the new flag. UpdateDeviceHealthReport already handles cache refresh when
+            // it clears the one-shot flag, so invalidation-only is sufficient here.
+            var existing = snap.ConvertTo<Device>();
+            InvalidateApiKeyHash(existing?.ApiKeyHash);
+
+            return true;
+        }
+
         public Device? GetDeviceByApiKey(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -400,6 +431,7 @@ namespace BetterPlacemaking.Services
             // and only clear when the heartbeat reports a terminal status.
             bool charucoBeginScanning = device.Config.CharucoBoard?.BeginScanning == true;
             bool arucoBeginScanning = device.Config.ArucoLock?.BeginScanning == true;
+            bool lidarBeginScanning = device.Config.LidarScan?.BeginScanning == true;
             bool intrinsicsBeginCalibration = device.Config.Intrinsics?.BeginCalibration == true;
             bool clearIntrinsicsBeginCalibration =
                 intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
@@ -407,6 +439,7 @@ namespace BetterPlacemaking.Services
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
+            if (lidarBeginScanning) flagsToClear["Config.LidarScan.BeginScanning"] = false;
             if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
@@ -416,6 +449,7 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
+                if (device.Config.LidarScan != null) device.Config.LidarScan.BeginScanning = false;
                 if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
                     device.Config.Intrinsics.BeginCalibration = false;
 
@@ -433,6 +467,8 @@ namespace BetterPlacemaking.Services
                     device.Config.CharucoBoard.BeginScanning = true;
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
+                if (lidarBeginScanning && device.Config.LidarScan != null)
+                    device.Config.LidarScan.BeginScanning = true;
             }
 
             return device.Config;

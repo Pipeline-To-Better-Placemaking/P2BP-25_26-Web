@@ -523,10 +523,21 @@ public onRunFullScan(): void {
       this.scanLoading = false;
       setTimeout(() => this.scanMessage = null, 5000);
     },
-    error: () => {
-      this.scanMessage = 'Failed to start scan.';
+    error: (err) => {
+      this.scanMessage = this.getScanStartErrorMessage(err);
       this.scanLoading = false;
     }
   });
+}
+
+private getScanStartErrorMessage(err: any): string {
+  if (err?.status === 409) {
+    const message = err?.error?.message;
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim();
+    }
+    return 'A scan is already in progress for one or more devices.';
+  }
+  return 'Failed to start scan.';
 }
 }

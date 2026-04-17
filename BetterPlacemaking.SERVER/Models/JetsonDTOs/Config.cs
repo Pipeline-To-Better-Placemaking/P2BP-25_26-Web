@@ -25,6 +25,9 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         public IntrinsicsConfig? Intrinsics { get; set; }
 
         [FirestoreProperty]
+        public LidarScanConfig? LidarScan { get; set; }
+
+        [FirestoreProperty]
         public int HeartbeatInterval { get; set; }
 
         [FirestoreProperty]
@@ -138,5 +141,21 @@ namespace BetterPlacemaking.Models.JetsonDTOs
 
         [FirestoreProperty]
         public double? LastRunUnix { get; set; }
+    }
+
+    [FirestoreData]
+    public class LidarScanConfig
+    {
+        [FirestoreProperty]
+        public bool Enabled { get; set; } = true;
+
+        [FirestoreProperty]
+        public bool BeginScanning { get; set; }
+
+        [FirestoreProperty]
+        public string? ScanCmd { get; set; }
+
+        [FirestoreProperty]
+        public double PollIntervalSeconds { get; set; } = 10.0;
     }
 }

@@ -1,20 +1,25 @@
+using System.Net;
 using BetterPlacemaking.Controllers;
 using BetterPlacemaking.Services.Visualizer;
+using Google;
 using Microsoft.Extensions.Options;
 
 namespace BetterPlacemaking.Services;
 
 /// <summary>
-/// When a device scan completes with <c>ObjUrl</c> pointing at a downloadable <c>.xyz</c> file,
-/// fetches it (SSRF-restricted) and replaces the in-memory visualizer session.
+/// Ingests device scan .xyz from HTTPS ObjUrl (SSRF-restricted) or canonical GCS path used by the lidar pipeline.
 /// </summary>
 public sealed class ScanCompleteVisualizerIngestService
 {
     public const string HttpClientName = "ScanCompleteIngest";
 
+    public static string CanonicalLidarXyzObjectName(string projectId, string deviceId, string scanId) =>
+        $"vision/lidar-scans/{projectId.Trim().Trim('/')}/{deviceId.Trim().Trim('/')}/{scanId.Trim().Trim('/')}.xyz";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly XyzParserService _xyzParser;
     private readonly FastMeshService _fastMesh;
+    private readonly CloudStorageService _cloudStorage;
     private readonly ILogger<ScanCompleteVisualizerIngestService> _logger;
     private readonly ScanIngestOptions _options;
 
@@ -22,19 +27,18 @@ public sealed class ScanCompleteVisualizerIngestService
         IHttpClientFactory httpClientFactory,
         XyzParserService xyzParser,
         FastMeshService fastMesh,
+        CloudStorageService cloudStorage,
         IOptions<ScanIngestOptions> options,
         ILogger<ScanCompleteVisualizerIngestService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _xyzParser = xyzParser;
         _fastMesh = fastMesh;
+        _cloudStorage = cloudStorage;
         _logger = logger;
         _options = options.Value;
     }
 
-    /// <summary>
-    /// Ingest if Firestore scan is <c>complete</c> and has a non-empty <c>ObjUrl</c>.
-    /// </summary>
     public async Task TryIngestFromScanDocumentAsync(
         Dictionary<string, object>? scan,
         CancellationToken cancellationToken = default)
@@ -44,35 +48,113 @@ public sealed class ScanCompleteVisualizerIngestService
 
         var status = GetStringField(scan, "Status");
         var objUrl = GetStringField(scan, "ObjUrl");
-        await TryIngestAsync(status, objUrl, cancellationToken).ConfigureAwait(false);
+        await TryIngestFromHttpsObjUrlAsync(status, objUrl, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Download <paramref name="objUrl"/> when <paramref name="status"/> is <c>complete</c>.
-    /// </summary>
-    public async Task TryIngestAsync(
+    public Task TryIngestAsync(
         string? status,
         string? objUrl,
+        CancellationToken cancellationToken = default) =>
+        TryIngestFromHttpsObjUrlAsync(status, objUrl, cancellationToken);
+
+    public async Task<ScanIngestAttemptResult> TryIngestCompleteScanForVisualizerAsync(
+        string projectId,
+        string deviceId,
+        Dictionary<string, object> scan,
         CancellationToken cancellationToken = default)
+    {
+        var status = GetStringField(scan, "Status");
+        if (string.IsNullOrWhiteSpace(status)
+            || !string.Equals(status.Trim(), "complete", StringComparison.OrdinalIgnoreCase))
+            return ScanIngestAttemptResult.Fail("not_complete", "Scan is not marked complete in Firestore.");
+
+        var scanId = GetStringField(scan, "Id");
+        if (string.IsNullOrWhiteSpace(scanId))
+            return ScanIngestAttemptResult.Fail("no_scan_id", "Scan document has no Id.");
+
+        var objUrl = GetStringField(scan, "ObjUrl");
+        if (await TryIngestFromHttpsObjUrlAsync(status, objUrl, cancellationToken).ConfigureAwait(false))
+            return ScanIngestAttemptResult.Ok();
+
+        var objectName = CanonicalLidarXyzObjectName(projectId, deviceId, scanId);
+        var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
+        var units = string.IsNullOrWhiteSpace(_options.XyzUnits) ? "m" : _options.XyzUnits!;
+        string? tempPath = null;
+
+        try
+        {
+            tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"gcs_scan_xyz_{Guid.NewGuid():N}.xyz");
+            await using (var file = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await _cloudStorage.DownloadToStreamAsync(objectName, file, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (new FileInfo(tempPath).Length > maxBytes)
+                return ScanIngestAttemptResult.Fail("file_too_large", "Downloaded object exceeds configured max size.");
+
+            var points = _xyzParser.ParseXyzFile(tempPath, sensorId: "device-scan", units: units);
+            if (points.Count == 0)
+                return ScanIngestAttemptResult.Fail("no_points_parsed", "No valid points in GCS .xyz object.");
+
+            VisualizerController.ReplaceCurrentPointsFromIngest(points, _fastMesh);
+            _logger.LogInformation(
+                "Scan ingest from GCS {Object} loaded {Count} points (revision bumped).",
+                objectName,
+                points.Count);
+            return ScanIngestAttemptResult.Ok();
+        }
+        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogWarning(ex, "GCS fallback: object not found {Object}.", objectName);
+            return ScanIngestAttemptResult.Fail(
+                "xyz_not_found",
+                "No reachable .xyz (ObjUrl failed or expired, and canonical Storage object is missing).");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GCS fallback ingest failed for {Object}.", objectName);
+            return ScanIngestAttemptResult.Fail("ingest_error", "Ingest failed; see server logs.");
+        }
+        finally
+        {
+            if (tempPath != null)
+            {
+                try
+                {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to delete temp GCS ingest file.");
+                }
+            }
+        }
+    }
+
+    private async Task<bool> TryIngestFromHttpsObjUrlAsync(
+        string? status,
+        string? objUrl,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(status)
             || !string.Equals(status.Trim(), "complete", StringComparison.OrdinalIgnoreCase))
-            return;
+            return false;
 
         if (string.IsNullOrWhiteSpace(objUrl))
-            return;
+            return false;
 
         if (!Uri.TryCreate(objUrl.Trim(), UriKind.Absolute, out var uri)
             || uri.Scheme != Uri.UriSchemeHttps)
         {
             _logger.LogWarning("Scan ingest skipped: ObjUrl must be an absolute https URL.");
-            return;
+            return false;
         }
 
         if (!IsHostAllowed(uri.Host))
         {
             _logger.LogWarning("Scan ingest skipped: host {Host} is not in the allowlist.", uri.Host);
-            return;
+            return false;
         }
 
         var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
@@ -92,14 +174,14 @@ public sealed class ScanCompleteVisualizerIngestService
                     "Scan ingest HTTP {Status} for ObjUrl host {Host}.",
                     (int)response.StatusCode,
                     uri.Host);
-                return;
+                return false;
             }
 
             var contentLength = response.Content.Headers.ContentLength;
             if (contentLength.HasValue && contentLength.Value > maxBytes)
             {
                 _logger.LogWarning("Scan ingest skipped: Content-Length {Len} exceeds max {Max}.", contentLength.Value, maxBytes);
-                return;
+                return false;
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -115,7 +197,7 @@ public sealed class ScanCompleteVisualizerIngestService
                     if (total > maxBytes)
                     {
                         _logger.LogWarning("Scan ingest aborted: download exceeded max {Max} bytes.", maxBytes);
-                        return;
+                        return false;
                     }
 
                     await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
@@ -126,15 +208,17 @@ public sealed class ScanCompleteVisualizerIngestService
             if (points.Count == 0)
             {
                 _logger.LogWarning("Scan ingest: no valid points parsed from downloaded .xyz.");
-                return;
+                return false;
             }
 
             VisualizerController.ReplaceCurrentPointsFromIngest(points, _fastMesh);
             _logger.LogInformation("Scan ingest loaded {Count} points (revision bumped).", points.Count);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Scan ingest failed for ObjUrl host {Host}.", uri.Host);
+            return false;
         }
         finally
         {
@@ -184,17 +268,14 @@ public sealed class ScanCompleteVisualizerIngestService
 
         return null;
     }
-
 }
 
 public sealed class ScanIngestOptions
 {
     public const string SectionName = "Visualizer:ScanIngest";
 
-    /// <summary>Extra hostnames allowed for ObjUrl (besides defaults). Example: mybucket.storage.googleapis.com</summary>
     public string[] AllowedHosts { get; set; } = [];
 
-    /// <summary>Passed to <see cref="XyzParserService.ParseXyzFile"/> (RPLidar exports are usually meters).</summary>
     public string XyzUnits { get; set; } = "m";
 
     public long MaxDownloadBytes { get; set; } = 200L * 1024 * 1024;
