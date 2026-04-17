@@ -153,7 +153,7 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         public bool BeginScanning { get; set; }
 
         [FirestoreProperty]
-        public string? ScanCmd { get; set; }
+        public Dictionary<string, object>? ScanCmd { get; set; }
 
         [FirestoreProperty]
         public double PollIntervalSeconds { get; set; } = 10.0;

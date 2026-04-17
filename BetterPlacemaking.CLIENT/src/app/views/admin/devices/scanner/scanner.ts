@@ -176,6 +176,7 @@ export class Scanner implements OnInit {
   }
 
   public performScan(): void {
+    console.log("StartLidarScan HIT for {deviceId}");
     if (!this.projectId) {
       this.scanMessage = 'No project selected.';
       return;
@@ -190,7 +191,7 @@ export class Scanner implements OnInit {
 
     this.deviceService.getDevices().subscribe({
       next: (devices: DeviceDto[]) => {
-        const projectDevices = devices.filter(d => d.ProjectId === this.projectId);
+        const projectDevices = devices.filter(d => d.ProjectId === this.projectId && d.Name === "Lidar Jetson");
 
         if (projectDevices.length === 0) {
           this.scanMessage = 'No devices assigned to this project.';

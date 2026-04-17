@@ -165,9 +165,10 @@ namespace BetterPlacemaking.Services
         /// subsections (Camera, Tracking, CharucoBoard, ArucoLock, Intrinsics, TrackingCameras)
         /// are left untouched. Returns false if the device does not exist.
         /// </summary>
-        public bool SetLidarBeginScanning(string deviceId, bool value)
+        public bool StartLidarScan(string deviceId, ScanSettingsRequest settings)
         {
-            if (string.IsNullOrWhiteSpace(deviceId))
+            Console.WriteLine($"StartLidarScan HIT for {deviceId}");
+            if (string.IsNullOrWhiteSpace(deviceId) || settings == null)
                 return false;
 
             var docRef = _db.Collection(collectionName).Document(deviceId);
@@ -175,20 +176,34 @@ namespace BetterPlacemaking.Services
             if (!snap.Exists)
                 return false;
 
-            docRef.UpdateAsync(new Dictionary<string, object>
+            var scanCmd = new Dictionary<string, object?>
             {
-                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", value }
+                { "scan_resolution", settings.scan_resolution },
+                { "protocol_mode", settings.protocol_mode },
+                { "orientation_mode", settings.orientation_mode },
+                { "output_mode", settings.output_mode },
+                { "split_mode", settings.split_mode },
+                { "filter_enabled", settings.filter_enabled },
+                { "capture_strategy", settings.capture_strategy },
+                { "min_revolutions_per_slice", settings.min_revolutions_per_slice },
+                { "force_recalibration", settings.force_recalibration }
+            };
+
+            Console.WriteLine($"StartLidarScan called for device {deviceId}");
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(scanCmd));
+
+            docRef.UpdateAsync(new Dictionary<string, object?>
+            {
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.Enabled)}", true },
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", true },
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.ScanCmd", scanCmd }
             }).Wait();
 
-            // Invalidate the cached Device so the next heartbeat auth reloads from Firestore
-            // and sees the new flag. UpdateDeviceHealthReport already handles cache refresh when
-            // it clears the one-shot flag, so invalidation-only is sufficient here.
             var existing = snap.ConvertTo<Device>();
             InvalidateApiKeyHash(existing?.ApiKeyHash);
 
             return true;
         }
-
         public Device? GetDeviceByApiKey(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -439,7 +454,7 @@ namespace BetterPlacemaking.Services
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (lidarBeginScanning) flagsToClear["Config.LidarScan.BeginScanning"] = false;
+            if (lidarBeginScanning) { flagsToClear["Config.LidarScan.BeginScanning"] = false;  flagsToClear["Config.LidarScan.ScanCmd"] = null!;}
             if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)

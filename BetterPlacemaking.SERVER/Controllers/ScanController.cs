@@ -3,7 +3,8 @@ using System.Security.Claims;
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
+using BetterPlacemaking.Models;
+using Google.Rpc;
 namespace BetterPlacemaking.Controllers
 {
 	[ApiController]
@@ -21,10 +22,14 @@ namespace BetterPlacemaking.Controllers
 		private readonly NotificationService _notificationService = notificationService;
 
 		[HttpPost("{projectId}/{deviceId}")]
-		public IActionResult StartScan(string projectId, string deviceId)
+		public IActionResult StartScan(string projectId, string deviceId, [FromBody] ScanSettingsRequest? settings)
 		{
+			Console.WriteLine("StartScan endpoint HIT");
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
 				return BadRequest();
+
+			if (settings == null)
+				return BadRequest("Scan settings are required.");
 
 			try
 			{
@@ -47,13 +52,13 @@ namespace BetterPlacemaking.Controllers
 					// flag in case the first heartbeat delivery was lost, and return the existing
 					// scan so a retry from the UI is idempotent rather than stuck behind a 409.
 					if (!string.IsNullOrWhiteSpace(deviceId))
-						_deviceService.SetLidarBeginScanning(deviceId, true);
+						_deviceService.StartLidarScan(deviceId, settings);
 
 					return Ok(new { Id = existing.ScanId, Status = existing.Status });
 				}
 
 				var userId = ResolveCurrentUserId();
-				var response = _scanService.CreateScan(projectId, deviceId, userId);
+				var response = _scanService.CreateScan(projectId, deviceId, settings, userId);
 				return Ok(response);
 			}
 			catch (Exception)

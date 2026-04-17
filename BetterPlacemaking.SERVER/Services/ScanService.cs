@@ -1,5 +1,9 @@
 using System;
 using Google.Cloud.Firestore;
+using System.Linq;
+using System.Text.Json;
+using BetterPlacemaking.Models;
+using Google.Cloud.Firestore;
 
 namespace BetterPlacemaking.Services
 {
@@ -38,8 +42,9 @@ namespace BetterPlacemaking.Services
                 .FirstOrDefault();
         }
 
-        public object CreateScan(string projectId, string deviceId, string? initiatedByUserId = null)
+        public object CreateScan(string projectId, string deviceId, ScanSettingsRequest settings, string? initiatedByUserId = null)
         {
+            Console.WriteLine("CreateScan HIT");
             var collection = _db
                 .Collection("projects")
                 .Document(projectId)
@@ -55,7 +60,19 @@ namespace BetterPlacemaking.Services
                 { "FinishedAt", null },
                 { "ObjUrl", null },
                 { "Error", null },
-                { "InitiatedByUserId", initiatedByUserId }
+                { "InitiatedByUserId", initiatedByUserId },
+
+                { "scan_resolution", settings.scan_resolution },
+                { "protocol_mode", settings.protocol_mode },
+                { "orientation_mode", settings.orientation_mode },
+                { "output_mode", settings.output_mode },
+                { "split_mode", settings.split_mode },
+                { "filter_enabled", settings.filter_enabled },
+                { "capture_strategy", settings.capture_strategy },
+                { "min_revolutions_per_slice", settings.min_revolutions_per_slice },
+                { "force_recalibration", settings.force_recalibration },
+                { "ScanSettingsJson", JsonSerializer.Serialize(settings) }
+
             };
 
             var docRef = collection.Document();
@@ -64,7 +81,7 @@ namespace BetterPlacemaking.Services
             // Wake the Jetson scan orchestrator. Writes only Config.LidarScan.BeginScanning on
             // the root devices/{deviceId} doc (the one the heartbeat reads) and invalidates the
             // Device cache. Heartbeat then delivers the flag once and one-shot clears it.
-            _deviceService.SetLidarBeginScanning(deviceId, true);
+            _deviceService.StartLidarScan(deviceId, settings);
 
             return new
             {
