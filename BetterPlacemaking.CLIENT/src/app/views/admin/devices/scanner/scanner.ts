@@ -12,6 +12,8 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { DividerModule } from 'primeng/divider';
+import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
@@ -22,7 +24,7 @@ import {
   ScanRecordDto,
   ScanScheduleDto,
   ScanService,
-  ScanSettingsPayload
+  ScanSettingsPayload,
 } from '../../../../services/scan-service';
 import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
@@ -55,6 +57,8 @@ interface SelectOption<T> {
     DividerModule,
     PointCloudViewerComponent,
     SolidObjectsViewComponent,
+    TableModule,
+    TagModule,
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
@@ -70,6 +74,12 @@ export class Scanner implements OnInit, OnDestroy {
 
   public scheduledDateTime: Date | null = null;
   public endDateTime: Date | null = null;
+
+
+  public currentScanStatus: string | null = null;
+  public currentScanRecord: ScanRecordDto | null = null;
+  public scanHistory: ScanRecordDto[] = [];
+  public deletingScanId: string | null = null;
 
   public frequencyOptions: FrequencyOption[] = [
     { name: 'Never', code: 'Never' },
@@ -138,9 +148,38 @@ export class Scanner implements OnInit, OnDestroy {
     { label: '3 revolutions', value: 3 }
   ];
 
-  public currentScanStatus: string | null = null;
-  public currentScanRecord: ScanRecordDto | null = null;
-  public scanHistory: ScanRecordDto[] = [];
+  public deleteScan(scan: ScanRecordDto): void {
+  if (!this.projectId || !this.currentLidarDeviceId || !scan.Id) {
+    return;
+  }
+
+  this.deletingScanId = scan.Id;
+
+  this.scanService.deleteScan(this.projectId, this.currentLidarDeviceId, scan.Id).subscribe({
+    next: () => {
+      this.scanHistory = this.scanHistory.filter(s => s.Id !== scan.Id);
+
+      if (this.currentScanRecord?.Id === scan.Id) {
+        this.currentScanRecord = null;
+        this.currentScanStatus = null;
+      }
+
+      this.deletingScanId = null;
+      this.scanMessage = 'Scan history entry deleted.';
+      this.scanMessageSeverity = 'success';
+
+      setTimeout(() => {
+        this.scanMessage = null;
+        this.scanMessageSeverity = 'info';
+      }, 3000);
+    },
+    error: () => {
+      this.deletingScanId = null;
+      this.scanMessage = 'Failed to delete scan history entry.';
+      this.scanMessageSeverity = 'error';
+    }
+  });
+}
 
   private currentLidarDeviceId: string | null = null;
   private scanStatusPollSub: Subscription | null = null;
@@ -191,6 +230,27 @@ export class Scanner implements OnInit, OnDestroy {
       : '';
   }
 
+  public get successCount(): number {
+  return this.scanHistory.filter(
+    s => (s.Status ?? '').toLowerCase() === 'complete' || (s.Status ?? '').toLowerCase() === 'done'
+  ).length;
+}
+
+public get failedCount(): number {
+  return this.scanHistory.filter(
+    s => (s.Status ?? '').toLowerCase() === 'error' || (s.Status ?? '').toLowerCase() === 'failed'
+  ).length;
+}
+
+public get lidarConnected(): boolean {
+  if (!this.currentLidarDeviceId) return false;
+  return this._lidarConnected;
+}
+
+public get currentLidarDeviceName(): string | null {
+  return this._currentLidarDeviceName;
+}
+
   public performScan(): void {
     if (!this.projectId) {
       this.scanMessage = 'No project selected.';
@@ -220,6 +280,8 @@ export class Scanner implements OnInit, OnDestroy {
         }
 
         const lidarDevice = projectDevices[0];
+        this._currentLidarDeviceName = lidarDevice.Name ?? 'LiDAR device';
+        this._lidarConnected = this.isLidarConnected(lidarDevice);
 
         if (!this.isLidarConnected(lidarDevice)) {
           this.scanMessage = 'LiDAR is not connected.';
@@ -319,6 +381,8 @@ export class Scanner implements OnInit, OnDestroy {
         if (!lidarDevice) {
           return;
         }
+        this._currentLidarDeviceName = lidarDevice.Name ?? 'LiDAR device';
+        this._lidarConnected = this.isLidarConnected(lidarDevice);
 
         this.currentLidarDeviceId = lidarDevice.Id;
         this.loadScanHistory(lidarDevice.Id);
@@ -407,6 +471,8 @@ export class Scanner implements OnInit, OnDestroy {
     return 0;
   }
 
+  private _lidarConnected = false;
+  private _currentLidarDeviceName: string | null = null;
   public formatScanDateTime(value: any): string {
     if (!value) {
       return '-';
@@ -540,6 +606,44 @@ export class Scanner implements OnInit, OnDestroy {
     const freq = this.frequencyOptions.find(f => f.code === code);
     return freq ? freq.name : code;
   }
+
+  public runStatusSeverity(status: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  switch ((status ?? '').toLowerCase()) {
+    case 'complete':
+    case 'done':
+      return 'success';
+    case 'running':
+    case 'in_progress':
+    case 'calibrating':
+      return 'info';
+    case 'pending':
+      return 'warn';
+    case 'error':
+    case 'failed':
+      return 'danger';
+    default:
+      return 'secondary';
+  }
+}
+
+public runStatusIcon(status: string | null | undefined): string {
+  switch ((status ?? '').toLowerCase()) {
+    case 'complete':
+    case 'done':
+      return 'pi pi-check-circle';
+    case 'running':
+    case 'in_progress':
+    case 'calibrating':
+      return 'pi pi-spin pi-spinner';
+    case 'pending':
+      return 'pi pi-clock';
+    case 'error':
+    case 'failed':
+      return 'pi pi-times-circle';
+    default:
+      return 'pi pi-circle';
+  }
+}
 
   private formatDate(value: Date): string {
     const year = value.getFullYear();

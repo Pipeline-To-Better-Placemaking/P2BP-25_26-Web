@@ -133,6 +133,12 @@ export class ScanService {
     );
   }
 
+  deleteScan(projectId: string, deviceId: string, scanId: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.baseUrl}/api/scan/${projectId}/${deviceId}/${scanId}`
+    );
+  }
+
   updateSchedule(projectId: string, scheduleId: string, schedule: ScanScheduleDto): Observable<void> {
     return this.http.put<void>(
       `${this.baseUrl}/api/scan-schedule/${projectId}/${scheduleId}`,

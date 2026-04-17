@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
 using Google.Rpc;
+using System.Threading.Tasks;
 namespace BetterPlacemaking.Controllers
 {
 	[ApiController]
@@ -145,6 +146,30 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+[HttpDelete("{projectId}/{deviceId}/{scanId}")]
+public async Task<IActionResult> DeleteScan(string projectId, string deviceId, string scanId)
+{
+    if (string.IsNullOrWhiteSpace(projectId) ||
+        string.IsNullOrWhiteSpace(deviceId) ||
+        string.IsNullOrWhiteSpace(scanId))
+    {
+        return BadRequest("Invalid parameters.");
+    }
+
+    try
+    {
+        var success = await _scanService.DeleteScan(projectId, deviceId, scanId);
+
+        if (!success)
+            return NotFound("Scan not found.");
+
+        return NoContent();
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"Failed to delete scan: {ex.Message}");
+    }
+}
 		[HttpPatch("{projectId}/{deviceId}/{scanId}/status")]
 		public async Task<IActionResult> UpdateScanStatus(
 			string projectId,

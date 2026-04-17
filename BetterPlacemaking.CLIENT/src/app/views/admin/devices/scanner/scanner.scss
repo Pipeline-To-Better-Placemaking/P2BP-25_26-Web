@@ -13,3 +13,228 @@
 :host ::ng-deep .p-select {
   width: 100%;
 }
+
+.fusion-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fusion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.fusion-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.15rem;
+  color: var(--p-text-color);
+}
+
+.fusion-subtitle {
+  font-size: 1rem;
+  color: var(--p-text-muted-color);
+  margin: 0;
+}
+
+.fusion-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+
+  @media (max-width: 900px) { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 500px) { grid-template-columns: 1fr; }
+}
+
+.fusion-stat-card {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.75rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.fusion-stat-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--p-text-muted-color);
+  margin-bottom: 0.4rem;
+}
+
+.fusion-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--p-text-color);
+  line-height: 1.1;
+}
+
+.fusion-stat-meta {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fusion-stat-success { color: var(--p-green-500); }
+.fusion-stat-danger  { color: var(--p-red-500); }
+.fusion-stat-info    { color: var(--p-primary-color); }
+
+.fusion-history-card {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.fusion-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.fusion-history-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.fusion-history-subtitle {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-left: 0.6rem;
+}
+
+.fusion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 3rem 1.5rem;
+  color: var(--p-text-muted-color);
+  text-align: center;
+}
+
+.fusion-empty-icon {
+  font-size: 2.5rem;
+  opacity: 0.3;
+}
+
+.fusion-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.fusion-empty-text {
+  font-size: 0.85rem;
+  opacity: 0.55;
+  margin-bottom: 0.5rem;
+}
+
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr > td {
+  vertical-align: top;
+}
+
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-success > td:first-child {
+  border-left: 4px solid var(--p-green-500);
+}
+
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-failed > td:first-child {
+  border-left: 4px solid var(--p-red-500);
+}
+
+:host ::ng-deep .fusion-run-table .p-datatable-tbody > tr.fusion-run-running > td:first-child {
+  border-left: 4px solid var(--p-primary-color);
+}
+
+.fusion-run-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.fusion-run-icon {
+  font-size: 1.1rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  color: var(--p-text-muted-color);
+}
+
+.fusion-run-range {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.fusion-run-meta {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  margin-top: 0.15rem;
+}
+
+.fusion-run-error {
+  font-size: 0.75rem;
+  font-family: var(--p-font-family-monospace, monospace);
+  color: var(--p-red-500);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+.fusion-run-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.fusion-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fusion-field,
+.fusion-toggle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fusion-field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.fusion-helper-warning {
+  font-size: 0.78rem;
+  color: var(--p-orange-500);
+}
+
+.fusion-actions-row {
+  padding: 0 1.5rem 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+}
