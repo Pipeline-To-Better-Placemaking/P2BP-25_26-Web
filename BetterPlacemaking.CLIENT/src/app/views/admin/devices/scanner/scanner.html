@@ -1,6 +1,11 @@
 <div class="fusion-page">
 
-  <div class="fusion-header">
+  <div class="flex justify-end mb-1">
+    <p-button label="Take Tour" icon="pi pi-question-circle" severity="secondary"
+              size="small" [text]="true" (onClick)="startTour()" />
+  </div>
+
+  <div id="tutorial-header" class="fusion-header">
     <div>
       <h1 class="fusion-title">LiDAR Scanning</h1>
       <p class="fusion-subtitle">Run scans, track progress, view history, and manage scan schedules</p>
@@ -40,7 +45,7 @@
     </p-message>
   </div>
 
-  <div class="fusion-stats">
+  <div id="tutorial-stats" class="fusion-stats">
     <div class="fusion-stat-card">
       <div class="fusion-stat-label">Current Status</div>
       <div class="fusion-stat-value"
@@ -83,14 +88,14 @@
     </div>
   </div>
 
-  <div class="fusion-history-card">
+  <div id="tutorial-scan-settings" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan Settings</span>
       <span class="fusion-history-subtitle">Current request configuration</span>
     </div>
 
     <div class="fusion-settings-grid">
-      <div class="fusion-field">
+      <div id="tutorial-preset" class="fusion-field">
         <label for="scanPreset" class="fusion-field-label">Preset</label>
         <p-select
           inputId="scanPreset"
@@ -104,7 +109,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-scan-resolution" class="fusion-field">
         <label for="scanResolution" class="fusion-field-label">Scan Resolution</label>
         <p-select
           inputId="scanResolution"
@@ -117,7 +122,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-protocol-mode" class="fusion-field">
         <label for="protocolMode" class="fusion-field-label">Protocol Mode</label>
         <p-select
           inputId="protocolMode"
@@ -130,7 +135,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-orientation-mode" class="fusion-field">
         <label for="orientationMode" class="fusion-field-label">Orientation Mode</label>
         <p-select
           inputId="orientationMode"
@@ -146,7 +151,7 @@
         </small>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-output-mode" class="fusion-field">
         <label for="outputMode" class="fusion-field-label">Output Mode</label>
         <p-select
           inputId="outputMode"
@@ -159,7 +164,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-split-mode" class="fusion-field">
         <label for="splitMode" class="fusion-field-label">Split Mode</label>
         <p-select
           inputId="splitMode"
@@ -172,7 +177,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-capture-strategy" class="fusion-field">
         <label for="captureStrategy" class="fusion-field-label">Capture Strategy</label>
         <p-select
           inputId="captureStrategy"
@@ -185,7 +190,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-field">
+      <div id="tutorial-min-revolutions" class="fusion-field">
         <label for="minRevolutions" class="fusion-field-label">Minimum Revolutions</label>
         <p-select
           inputId="minRevolutions"
@@ -198,7 +203,7 @@
         </p-select>
       </div>
 
-      <div class="fusion-toggle-field">
+      <div id="tutorial-filter" class="fusion-toggle-field">
         <label for="filterEnabled" class="fusion-field-label">Distance Filtering</label>
         <p-toggleswitch
           inputId="filterEnabled"
@@ -207,7 +212,7 @@
         </p-toggleswitch>
       </div>
 
-      <div class="fusion-toggle-field">
+      <div id="tutorial-recalibrate" class="fusion-toggle-field">
         <label for="forceRecalibration" class="fusion-field-label">Recalibrate Before Scan</label>
         <p-toggleswitch
           inputId="forceRecalibration"
@@ -218,7 +223,7 @@
     </div>
   </div>
 
-  <div class="fusion-history-card">
+  <div id="tutorial-scheduling" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan Scheduling</span>
       <span class="fusion-history-subtitle">Create and manage recurring scan jobs</span>
@@ -332,7 +337,7 @@
     </p-table>
   </div>
 
-  <div class="fusion-history-card">
+  <div id="tutorial-history" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan History</span>
       <span class="fusion-history-subtitle">Recent LiDAR runs</span>
@@ -416,8 +421,8 @@
     </p-table>
   </div>
 
-  <div class="mt-6 flex flex-col min-h-[min(70vh,640px)]">
-    <div class="flex flex-wrap gap-2 mb-3">
+  <div id="tutorial-visualization" class="mt-6 flex flex-col min-h-[min(70vh,640px)]">
+    <div id="tutorial-view-toggle" class="flex flex-wrap gap-2 mb-3">
       <p-button
         label="2D View"
         [outlined]="visualMode !== 'solids'"
@@ -438,7 +443,7 @@
       <app-point-cloud-viewer [projectContextId]="projectId || undefined" />
     </div>
 
-    <div
+    <div id="tutorial-2d-view"
       class="flex-1 min-h-0 min-w-0 overflow-hidden [&>*]:flex-1 [&>*]:min-h-0"
       [ngClass]="visualMode === 'solids' ? 'flex flex-col' : 'hidden'">
       <app-solid-objects-view
@@ -446,5 +451,7 @@
         [projectContextId]="projectId || undefined" />
     </div>
   </div>
+
+  <app-scanner-tutorial *ngIf="showTutorial" (done)="onTutorialDone()" (modeChange)="setVisualMode($any($event))" />
 
 </div>

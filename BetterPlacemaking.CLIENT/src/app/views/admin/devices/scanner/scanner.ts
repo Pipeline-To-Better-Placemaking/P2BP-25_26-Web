@@ -28,6 +28,7 @@ import {
 } from '../../../../services/scan-service';
 import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
+import { ScannerTutorialComponent } from './scanner-tutorial/scanner-tutorial';
 
 export type ScannerVisualMode = '3d' | 'solids';
 
@@ -59,6 +60,7 @@ interface SelectOption<T> {
     SolidObjectsViewComponent,
     TableModule,
     TagModule,
+    ScannerTutorialComponent,
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
@@ -66,6 +68,9 @@ interface SelectOption<T> {
 export class Scanner implements OnInit, OnDestroy {
   public projectId = '';
   public visualMode: ScannerVisualMode = 'solids';
+
+  showTutorial = false;
+  private readonly TOUR_KEY = 'scanner-tutorial-seen';
 
   public scanMessage: string | null = null;
   public scanMessageSeverity: 'success' | 'info' | 'warn' | 'error' = 'info';
@@ -196,10 +201,25 @@ export class Scanner implements OnInit, OnDestroy {
       this.loadSchedules();
       this.resolveLidarDeviceAndLoadHistory();
     }
+
+    setTimeout(() => {
+      if (!localStorage.getItem(this.TOUR_KEY)) {
+        this.showTutorial = true;
+      }
+    }, 500);
   }
 
   ngOnDestroy(): void {
     this.stopScanStatusPolling();
+  }
+
+  onTutorialDone(): void {
+    this.showTutorial = false;
+    localStorage.setItem(this.TOUR_KEY, '1');
+  }
+
+  startTour(): void {
+    this.showTutorial = true;
   }
 
   public setVisualMode(mode: ScannerVisualMode): void {
