@@ -188,8 +188,8 @@ namespace BetterPlacemaking.Services
                 { "force_recalibration", settings.force_recalibration }
             };
 
-            // ScanCmd (string?) is operator-managed and intentionally left alone; ScanSettings
-            // (dict) is the one-shot per-scan payload the orchestrator forwards to the scanner.
+            // ScanSettings is the one-shot per-scan payload the orchestrator forwards to the
+            // scanner; the legacy ScanCmd map is intentionally left untouched (see Config.cs).
             docRef.UpdateAsync(new Dictionary<string, object?>
             {
                 { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.Enabled)}", true },
