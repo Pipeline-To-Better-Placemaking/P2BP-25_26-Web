@@ -175,7 +175,7 @@ namespace BetterPlacemaking.Services
             if (!snap.Exists)
                 return false;
 
-            var scanCmd = new Dictionary<string, object?>
+            var scanSettings = new Dictionary<string, object?>
             {
                 { "scan_resolution", settings.scan_resolution },
                 { "protocol_mode", settings.protocol_mode },
@@ -188,11 +188,13 @@ namespace BetterPlacemaking.Services
                 { "force_recalibration", settings.force_recalibration }
             };
 
+            // ScanCmd (string?) is operator-managed and intentionally left alone; ScanSettings
+            // (dict) is the one-shot per-scan payload the orchestrator forwards to the scanner.
             docRef.UpdateAsync(new Dictionary<string, object?>
             {
                 { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.Enabled)}", true },
                 { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", true },
-                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.ScanCmd", scanCmd }
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.ScanSettings)}", scanSettings }
             }).Wait();
 
             var existing = snap.ConvertTo<Device>();
@@ -447,10 +449,20 @@ namespace BetterPlacemaking.Services
             bool clearIntrinsicsBeginCalibration =
                 intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
 
+            // Snapshot the one-shot ScanSettings payload before we clear it so it can be
+            // restored on the return object — the Jetson must receive it exactly once,
+            // identical to the BeginScanning restore pattern below.
+            Dictionary<string, object>? lidarScanSettingsSnapshot =
+                lidarBeginScanning ? device.Config.LidarScan?.ScanSettings : null;
+
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (lidarBeginScanning) { flagsToClear["Config.LidarScan.BeginScanning"] = false;  flagsToClear["Config.LidarScan.ScanCmd"] = null!;}
+            if (lidarBeginScanning)
+            {
+                flagsToClear["Config.LidarScan.BeginScanning"] = false;
+                flagsToClear["Config.LidarScan.ScanSettings"] = null!;
+            }
             if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
@@ -460,7 +472,11 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
-                if (device.Config.LidarScan != null) device.Config.LidarScan.BeginScanning = false;
+                if (device.Config.LidarScan != null)
+                {
+                    device.Config.LidarScan.BeginScanning = false;
+                    device.Config.LidarScan.ScanSettings = null;
+                }
                 if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
                     device.Config.Intrinsics.BeginCalibration = false;
 
@@ -479,7 +495,10 @@ namespace BetterPlacemaking.Services
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
                 if (lidarBeginScanning && device.Config.LidarScan != null)
+                {
                     device.Config.LidarScan.BeginScanning = true;
+                    device.Config.LidarScan.ScanSettings = lidarScanSettingsSnapshot;
+                }
             }
 
             return device.Config;

@@ -152,8 +152,14 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         [FirestoreProperty]
         public bool BeginScanning { get; set; }
 
+        // Optional operator-managed shell command override (null = use orchestrator default).
         [FirestoreProperty]
-        public Dictionary<string, object>? ScanCmd { get; set; }
+        public string? ScanCmd { get; set; }
+
+        // One-shot per-scan settings the orchestrator forwards to the scanner.
+        // Set by DeviceService.StartLidarScan; cleared on first heartbeat delivery.
+        [FirestoreProperty]
+        public Dictionary<string, object>? ScanSettings { get; set; }
 
         [FirestoreProperty]
         public double PollIntervalSeconds { get; set; } = 10.0;

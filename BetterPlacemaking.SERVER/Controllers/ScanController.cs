@@ -31,6 +31,10 @@ namespace BetterPlacemaking.Controllers
 			if (settings == null)
 				return BadRequest("Scan settings are required.");
 
+			var validationError = settings.Validate();
+			if (validationError != null)
+				return BadRequest(new { reason = "invalid_scan_settings", message = validationError });
+
 			try
 			{
 				var existing = _scanService.HasPendingOrRunningScan(projectId, deviceId);
