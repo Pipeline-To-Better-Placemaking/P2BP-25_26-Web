@@ -102,7 +102,7 @@ namespace BetterPlacemaking.Services
         {
             var cutoffUnix = new DateTimeOffset(DateTime.UtcNow - FusionTimeout).ToUnixTimeSeconds();
             return fusionService.GetHistory(50).Any(r =>
-                r.Status == "running" &&
+                (r.Status == "running" || r.Status == "cancelling") &&
                 r.StartedAtUnix >= cutoffUnix);
         }
 
@@ -118,7 +118,11 @@ namespace BetterPlacemaking.Services
                 r.StartedAtUnix >= startOfDay &&
                 r.TriggeredBy == "scheduler" &&
                 r.ProjectId == projectId &&
-                (r.Status == "success" || r.Status == "running" || r.Status == "failed"));
+                (r.Status == "success"
+                || r.Status == "running"
+                || r.Status == "cancelling"
+                || r.Status == "cancelled"
+                || r.Status == "failed"));
         }
     }
 }

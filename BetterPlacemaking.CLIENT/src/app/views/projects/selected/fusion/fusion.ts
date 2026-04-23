@@ -46,6 +46,7 @@ export class Fusion implements OnInit, OnDestroy {
   config: FusionConfigDto | null = null;
   deletingRunId: string | null = null;
   downloadingRunId: string | null = null;
+  cancellingRunId: string | null = null;
 
   // ── Schedule dialog ────────────────────────────────────────────────────────
   scheduleDialogVisible = false;
@@ -94,7 +95,7 @@ export class Fusion implements OnInit, OnDestroy {
   }
 
   get hasRunningFusion(): boolean {
-    return this.history.some((r) => r.Status === 'running');
+    return this.history.some((r) => r.Status === 'running' || r.Status === 'cancelling');
   }
 
   get lastRun(): FusionRunDto | null {
@@ -187,6 +188,24 @@ openScheduleDialog(): void {
   }
 
   // ── Existing methods (unchanged) ──────────────────────────────────────────
+  cancelRun(run: FusionRunDto, event: Event): void {
+    event.stopPropagation();
+    if (run.Status !== 'running') return;
+
+    this.cancellingRunId = run.Id;
+
+    this.fusionService.cancelRun(run.Id).subscribe({
+      next: () => {
+        this.history = this.history.map((r) =>
+          r.Id === run.Id ? { ...r, Status: 'cancelling' } : r,
+        );
+        this.cancellingRunId = null;
+      },
+      error: () => {
+        this.cancellingRunId = null;
+      },
+    });
+  }
 
   deleteRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
@@ -220,17 +239,21 @@ openScheduleDialog(): void {
     });
   }
 
-  runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'secondary' {
-    if (status === 'success') return 'success';
-    if (status === 'failed') return 'danger';
-    if (status === 'running') return 'info';
+ runStatusSeverity(status: string): 'success' | 'danger' | 'info' | 'warn' | 'secondary' {
+    if (status === 'success')    return 'success';
+    if (status === 'failed')     return 'danger';
+    if (status === 'running')    return 'info';
+    if (status === 'cancelling') return 'warn';
+    if (status === 'cancelled')  return 'secondary';
     return 'secondary';
   }
 
   runStatusIcon(status: string): string {
-    if (status === 'success') return 'pi pi-check-circle';
-    if (status === 'failed') return 'pi pi-times-circle';
-    if (status === 'running') return 'pi pi-spin pi-spinner';
+    if (status === 'success')    return 'pi pi-check-circle';
+    if (status === 'failed')     return 'pi pi-times-circle';
+    if (status === 'running')    return 'pi pi-spin pi-spinner';
+    if (status === 'cancelling') return 'pi pi-spin pi-spinner';
+    if (status === 'cancelled')  return 'pi pi-ban';
     return 'pi pi-question-circle';
   }
 

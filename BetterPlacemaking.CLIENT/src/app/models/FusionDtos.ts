@@ -1,6 +1,6 @@
 export interface FusionRunDto {
   Id: string;
-  Status: 'running' | 'success' | 'failed' | 'unknown';
+  Status: 'running' | 'cancelling' | 'cancelled' | 'success' | 'failed' | 'unknown';
   TriggeredBy: 'manual' | 'scheduled' | 'unknown';
   FromDateUnix?: number;
   ToDateUnix?: number;

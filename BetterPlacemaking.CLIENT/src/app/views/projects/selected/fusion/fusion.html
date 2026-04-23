@@ -127,6 +127,17 @@
           <td>
             <div class="fusion-run-right">
               <p-button
+                *ngIf="run.Status === 'running'"
+                icon="pi pi-stop-circle"
+                severity="warn"
+                size="small"
+                [loading]="cancellingRunId === run.Id"
+                pTooltip="Stop this fusion run"
+                tooltipPosition="top"
+                [text]="true"
+                (onClick)="cancelRun(run, $event)" />
+
+              <p-button
                 *ngIf="run.Status === 'success' && run.OutputGcsPath"
                 icon="pi pi-download"
                 severity="secondary"
@@ -138,7 +149,7 @@
                 (onClick)="downloadRun(run, $event)" />
 
               <p-button
-                *ngIf="run.Status !== 'running'"
+                *ngIf="run.Status !== 'running' && run.Status !== 'cancelling'"
                 icon="pi pi-trash"
                 severity="danger"
                 size="small"

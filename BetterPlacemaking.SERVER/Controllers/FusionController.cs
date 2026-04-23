@@ -48,6 +48,20 @@ namespace BetterPlacemaking.Controllers
             catch (Exception) { return Problem("Error deleting fusion run."); }
         }
 
+        [HttpPost("{runId}/cancel")]
+        public async Task<IActionResult> CancelRun(string runId)
+        {
+            var result = await _fusionService.CancelRunAsync(runId);
+            return result switch
+            {
+                "cancelling"  => Accepted(new { status = "cancelling" }),    // 202
+                "stale"       => Ok(new { status = "cancelled" }),
+                "not_running" => Conflict(new { error = "Run is not in a running state" }),
+                "not_found"   => NotFound(),
+                _             => StatusCode(500),
+            };
+        }
+
         [HttpGet("{runId}/download-url")]
         public async Task<IActionResult> GetDownloadUrl(string runId)
         {

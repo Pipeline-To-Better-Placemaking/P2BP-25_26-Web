@@ -66,6 +66,7 @@ builder.Services.AddScoped<ScanScheduleService>();
 builder.Services.AddScoped<FusionRunner>();
 builder.Services.AddScoped<FusionService>();
 builder.Services.AddHostedService<FusionSchedulerService>();
+builder.Services.AddSingleton<FusionCancellationRegistry>();
 
 // Visualizer services (point cloud, mesh generation, export)
 builder.Services.AddSingleton<BetterPlacemaking.Services.Visualizer.PointCloudService>();
