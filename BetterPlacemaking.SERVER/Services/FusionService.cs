@@ -22,6 +22,10 @@ namespace BetterPlacemaking.Services
         private static string ConfigDocIdFor(string? projectId) =>
             string.IsNullOrWhiteSpace(projectId) ? DefaultConfigDocId : projectId;
 
+        // Max wall-clock time a single fusion run is allowed to take before we cancel it
+        // and mark it as failed. Keep this in sync with FusionSchedulerService.FusionTimeout.
+        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(30);
+
         // ── History ──────────────────────────────────────────────────────────
 
         public List<FusionRunDto> GetHistory(int limit = 50)
@@ -42,7 +46,7 @@ namespace BetterPlacemaking.Services
         }
 
 
-        
+
         // ── Trigger ───────────────────────────────────────────────────────────
 
         public FusionRunDto TriggerFusion(
@@ -70,6 +74,11 @@ namespace BetterPlacemaking.Services
 
             _ = Task.Run(async () =>
             {
+                // Hard timeout on the whole run. When this fires, cts.Token is cancelled,
+                // which FusionRunner observes at every I/O boundary (GCS, Firestore,
+                // ReadLineAsync, Parallel.ForEachAsync) and at the phase checkpoints.
+                using var cts = new CancellationTokenSource(FusionTimeout);
+
                 try
                 {
                     var runner = new FusionRunner(gcs, db);
@@ -77,13 +86,16 @@ namespace BetterPlacemaking.Services
                     var fromUtc = DateTimeOffset.FromUnixTimeSeconds((long)fromUnix).UtcDateTime;
                     var toUtc   = DateTimeOffset.FromUnixTimeSeconds((long)toUnix).UtcDateTime;
 
-                    var result = await runner.RunAsync(new FusionRequest
-                    {
-                        From                = fromUtc,
-                        To                  = toUtc,
-                        InputStorageFolder  = projectId != null ? $"vision/tracks-raw/{projectId}"   : null,
-                        OutputStorageFolder = projectId != null ? $"vision/tracks-fused/{projectId}" : null,
-                    });
+                    var result = await runner.RunAsync(
+                        new FusionRequest
+                        {
+                            From                = fromUtc,
+                            To                  = toUtc,
+                            InputStorageFolder  = projectId != null ? $"vision/tracks-raw/{projectId}"   : null,
+                            OutputStorageFolder = projectId != null ? $"vision/tracks-fused/{projectId}" : null,
+                        },
+                        debug: false,
+                        ct: cts.Token);
 
                     if (!result.Success)
                         throw new InvalidOperationException(result.Message);
@@ -104,6 +116,17 @@ namespace BetterPlacemaking.Services
                     });
 
                     log.LogInformation("Fusion {RunId} completed → {Output}", runId, outputKey);
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                {
+                    var msg = $"Fusion timed out after {FusionTimeout.TotalMinutes:0} minutes";
+                    log.LogError("Fusion {RunId} timed out after {Timeout}", runId, FusionTimeout);
+                    await docRef.UpdateAsync(new Dictionary<string, object>
+                    {
+                        { "Status",          "failed" },
+                        { "ErrorMessage",    msg },
+                        { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+                    });
                 }
                 catch (Exception ex)
                 {
