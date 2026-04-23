@@ -59,6 +59,7 @@ builder.Services.AddScoped<FloorplanLibraryService>();
 builder.Services.AddScoped<LidarService>();
 builder.Services.AddScoped<ScanService>();
 builder.Services.AddScoped<ScanScheduleService>();
+builder.Services.AddHostedService<ScanScheduleExecutorService>();
 
 
 //Fusion services

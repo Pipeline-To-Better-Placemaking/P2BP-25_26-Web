@@ -303,6 +303,7 @@
           <th>Start Date & Time</th>
           <th>Frequency</th>
           <th>End Date & Time</th>
+          <th>Last Run</th>
           <th>Actions</th>
         </tr>
       </ng-template>
@@ -316,6 +317,7 @@
             </ng-container>
             <ng-template #noEndDate>-</ng-template>
           </td>
+          <td>{{ formatLastRunAt(s.LastRunAt) }}</td>
           <td>
             <div class="fusion-run-right">
               <p-button
