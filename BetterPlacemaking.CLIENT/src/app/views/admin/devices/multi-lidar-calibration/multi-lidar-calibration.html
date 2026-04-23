@@ -1,0 +1,122 @@
+<div class="flex flex-col gap-4 p-1">
+
+  <p class="text-sm text-muted-color">
+    Drag and rotate LiDAR devices to define their relative positions for scan stitching.
+  </p>
+
+  <div class="flex gap-6 items-start">
+
+    <!-- LEFT: DEVICE LIST + CONTROLS -->
+    <div class="flex flex-col gap-3 flex-1 min-w-0">
+
+      <div>
+        <div class="text-sm font-semibold mb-2">LiDAR Devices</div>
+
+        <div *ngFor="let p of placements"
+             class="flex items-center justify-between p-2 border rounded cursor-pointer"
+             [class.bg-primary-50]="selected?.deviceId === p.deviceId"
+             (click)="select(p)">
+
+          <span>{{ p.name }}</span>
+
+          <span class="text-xs text-muted-color">
+            ({{ p.x | number:'1.0-0' }}, {{ p.y | number:'1.0-0' }})
+          </span>
+        </div>
+      </div>
+
+      <!-- SELECTED DEVICE CONTROLS -->
+      <div *ngIf="selected" class="flex flex-col gap-2">
+
+        <div class="text-sm font-semibold">Selected: {{ selected.name }}</div>
+
+        <div class="grid grid-cols-2 gap-2">
+
+          <div>
+            <label class="text-xs">X</label>
+            <input pInputText type="number" [(ngModel)]="selected.x" class="w-full" />
+          </div>
+
+          <div>
+            <label class="text-xs">Y</label>
+            <input pInputText type="number" [(ngModel)]="selected.y" class="w-full" />
+          </div>
+
+        </div>
+
+        <div>
+          <label class="text-xs">Rotation (°)</label>
+          <input pInputText type="number" [(ngModel)]="selected.yawDeg" class="w-full" />
+        </div>
+
+        <div class="flex gap-2">
+          <p-button label="-5°" (onClick)="rotateSelected(-5)" />
+          <p-button label="+5°" (onClick)="rotateSelected(5)" />
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- RIGHT: CANVAS -->
+    <div class="w-96 flex-shrink-0 flex flex-col gap-2">
+
+      <div class="text-sm font-semibold">Layout</div>
+
+      <div class="relative border rounded bg-surface-100 dark:bg-surface-800"
+           style="height: 400px;"
+           (mousemove)="onDrag($event)"
+           (mouseup)="stopDrag()"
+           (mouseleave)="stopDrag()">
+
+        <div *ngFor="let p of placements"
+             class="absolute flex flex-col items-center cursor-pointer"
+             [style.left.px]="p.x"
+             [style.top.px]="p.y"
+             (mousedown)="startDrag($event, p)"
+             (click)="select(p)">
+
+          <!-- LIDAR NODE -->
+          <div class="w-8 h-8 rounded-full border flex items-center justify-center bg-surface-0 shadow"
+               [class.border-primary]="selected?.deviceId === p.deviceId">
+
+            <!-- DIRECTION ARROW -->
+            <div class="w-0.5 h-5 bg-black dark:bg-white"
+                 [style.transform]="'rotate(' + p.yawDeg + 'deg)'">
+            </div>
+
+          </div>
+
+          <span class="text-xs mt-1 text-center">
+            {{ p.name }}
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="flex gap-2 border-t pt-4">
+
+    <p-button label="Save Calibration"
+              icon="pi pi-save"
+              severity="primary"
+              (onClick)="save()" />
+
+    <p-button label="Load"
+              icon="pi pi-refresh"
+              severity="secondary"
+              (onClick)="load()" />
+
+    <p-button label="Reset"
+              icon="pi pi-times"
+              severity="secondary"
+              (onClick)="reset()" />
+
+  </div>
+
+</div>

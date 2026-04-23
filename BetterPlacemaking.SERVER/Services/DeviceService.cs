@@ -165,9 +165,9 @@ namespace BetterPlacemaking.Services
         /// subsections (Camera, Tracking, CharucoBoard, ArucoLock, Intrinsics, TrackingCameras)
         /// are left untouched. Returns false if the device does not exist.
         /// </summary>
-        public bool SetLidarBeginScanning(string deviceId, bool value)
+        public bool StartLidarScan(string deviceId, ScanSettingsRequest settings)
         {
-            if (string.IsNullOrWhiteSpace(deviceId))
+            if (string.IsNullOrWhiteSpace(deviceId) || settings == null)
                 return false;
 
             var docRef = _db.Collection(collectionName).Document(deviceId);
@@ -175,20 +175,33 @@ namespace BetterPlacemaking.Services
             if (!snap.Exists)
                 return false;
 
-            docRef.UpdateAsync(new Dictionary<string, object>
+            var scanSettings = new Dictionary<string, object?>
             {
-                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", value }
+                { "scan_resolution", settings.scan_resolution },
+                { "protocol_mode", settings.protocol_mode },
+                { "orientation_mode", settings.orientation_mode },
+                { "output_mode", settings.output_mode },
+                { "split_mode", settings.split_mode },
+                { "filter_enabled", settings.filter_enabled },
+                { "capture_strategy", settings.capture_strategy },
+                { "min_revolutions_per_slice", settings.min_revolutions_per_slice },
+                { "force_recalibration", settings.force_recalibration }
+            };
+
+            // ScanSettings is the one-shot per-scan payload the orchestrator forwards to the
+            // scanner; the legacy ScanCmd map is intentionally left untouched (see Config.cs).
+            docRef.UpdateAsync(new Dictionary<string, object?>
+            {
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.Enabled)}", true },
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", true },
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.ScanSettings)}", scanSettings }
             }).Wait();
 
-            // Invalidate the cached Device so the next heartbeat auth reloads from Firestore
-            // and sees the new flag. UpdateDeviceHealthReport already handles cache refresh when
-            // it clears the one-shot flag, so invalidation-only is sufficient here.
             var existing = snap.ConvertTo<Device>();
             InvalidateApiKeyHash(existing?.ApiKeyHash);
 
             return true;
         }
-
         public Device? GetDeviceByApiKey(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -436,10 +449,20 @@ namespace BetterPlacemaking.Services
             bool clearIntrinsicsBeginCalibration =
                 intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
 
+            // Snapshot the one-shot ScanSettings payload before we clear it so it can be
+            // restored on the return object — the Jetson must receive it exactly once,
+            // identical to the BeginScanning restore pattern below.
+            Dictionary<string, object>? lidarScanSettingsSnapshot =
+                lidarBeginScanning ? device.Config.LidarScan?.ScanSettings : null;
+
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (lidarBeginScanning) flagsToClear["Config.LidarScan.BeginScanning"] = false;
+            if (lidarBeginScanning)
+            {
+                flagsToClear["Config.LidarScan.BeginScanning"] = false;
+                flagsToClear["Config.LidarScan.ScanSettings"] = null!;
+            }
             if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
@@ -449,7 +472,11 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
-                if (device.Config.LidarScan != null) device.Config.LidarScan.BeginScanning = false;
+                if (device.Config.LidarScan != null)
+                {
+                    device.Config.LidarScan.BeginScanning = false;
+                    device.Config.LidarScan.ScanSettings = null;
+                }
                 if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
                     device.Config.Intrinsics.BeginCalibration = false;
 
@@ -468,7 +495,10 @@ namespace BetterPlacemaking.Services
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
                 if (lidarBeginScanning && device.Config.LidarScan != null)
+                {
                     device.Config.LidarScan.BeginScanning = true;
+                    device.Config.LidarScan.ScanSettings = lidarScanSettingsSnapshot;
+                }
             }
 
             return device.Config;

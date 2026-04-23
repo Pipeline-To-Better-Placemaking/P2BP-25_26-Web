@@ -25,12 +25,14 @@ import { ProjectService } from '../../services/project-service';
 import { filter, startWith, Subscription } from 'rxjs';
 import { NgIf } from '@angular/common';
 import { AuthService } from '../../services/auth-service';
-import { ExportService } from '../../services/export-service';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { ExportModal } from '../../views/projects/selected/export-modal/export-modal';
 
 @Component({
   selector: 'app-default-layout',
   standalone: true,
   imports: [RouterOutlet, ButtonModule, AvatarModule, MenuModule, RouterModule, FontAwesomeModule, NgIf],
+  providers: [DialogService],
   templateUrl: './default-layout.html',
   styleUrl: './default-layout.scss',
 })
@@ -38,6 +40,7 @@ import { ExportService } from '../../services/export-service';
 export class DefaultLayout implements OnInit, OnDestroy {
   private projectId?: string;
   private routerSub?: Subscription;
+  private exportDialogRef?: DynamicDialogRef;
 
   public readonly faMoon = faMoon;
   public readonly faUser = faUser;
@@ -50,7 +53,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private authService: AuthService,
     private projectService: ProjectService,
-    private exportService: ExportService
+    private dialogService: DialogService,
   ) {}
 
   navItems: MenuItem[] = [];
@@ -168,9 +171,16 @@ export class DefaultLayout implements OnInit, OnDestroy {
   }
 
   private exportProjectData(): void {
-    if (this.projectId) {
-      this.exportService.exportProjectPdf(this.projectId);
-    }
+    if (!this.projectId) return;
+    const ref = this.dialogService.open(ExportModal, {
+      header: 'Configure Export',
+      width: '720px',
+      modal: true,
+      dismissableMask: true,
+      closable: true,
+      data: { projectId: this.projectId },
+    });
+    this.exportDialogRef = ref ?? undefined;
   }
 
   toggleDarkMode(): void {

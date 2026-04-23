@@ -152,8 +152,16 @@ namespace BetterPlacemaking.Models.JetsonDTOs
         [FirestoreProperty]
         public bool BeginScanning { get; set; }
 
+        // Legacy field kept as Dictionary<string, object>? to stay backward-compatible with
+        // existing Firestore documents (earlier StartLidarScan wrote the settings map here).
+        // No code reads it anymore; new code writes + reads ScanSettings below.
         [FirestoreProperty]
-        public string? ScanCmd { get; set; }
+        public Dictionary<string, object>? ScanCmd { get; set; }
+
+        // One-shot per-scan settings the orchestrator forwards to the scanner.
+        // Set by DeviceService.StartLidarScan; cleared on first heartbeat delivery.
+        [FirestoreProperty]
+        public Dictionary<string, object>? ScanSettings { get; set; }
 
         [FirestoreProperty]
         public double PollIntervalSeconds { get; set; } = 10.0;

@@ -10,6 +10,7 @@ import { ScanService } from '../../../../services/scan-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ProjectDto } from '../../../../models/ProjectDto';
 import { ServiceStatus } from '../../../../models/jetson-dtos/HealthReport';
+import { BASE_SCAN_SETTINGS } from '../../../../services/scan-service';
 
 import { StatsWidget } from './components/statswidget';
 import { DevicesWidget } from './components/deviceswidget';
@@ -95,7 +96,7 @@ export interface Alert {
           <app-alerts-widget
             [alerts]="alerts"
             [alertCounts]="getAlertCounts()"
-            (openDevicesPage)="goToDevicesPage()"   
+            (openDevicesPage)="goToDevicesPage()"
             [formatTimeAgoFn]="formatTimeAgo.bind(this)"
             (refresh)="loadDashboard()"
             (openAlertsPage)="goToDevicesPage()">
@@ -514,7 +515,7 @@ public onRunFullScan(): void {
   }
 
   const scanRequests = projectDevices.map(d =>
-    this.scanService.startScan(this.projectId!, d.Id)
+    this.scanService.startScan(this.projectId!, d.Id, BASE_SCAN_SETTINGS)
   );
 
   forkJoin(scanRequests).subscribe({

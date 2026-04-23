@@ -3,7 +3,9 @@ using System.Security.Claims;
 using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
+using BetterPlacemaking.Models;
+using Google.Rpc;
+using System.Threading.Tasks;
 namespace BetterPlacemaking.Controllers
 {
 	[ApiController]
@@ -21,10 +23,17 @@ namespace BetterPlacemaking.Controllers
 		private readonly NotificationService _notificationService = notificationService;
 
 		[HttpPost("{projectId}/{deviceId}")]
-		public IActionResult StartScan(string projectId, string deviceId)
+		public IActionResult StartScan(string projectId, string deviceId, [FromBody] ScanSettingsRequest? settings)
 		{
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
 				return BadRequest();
+
+			if (settings == null)
+				return BadRequest("Scan settings are required.");
+
+			var validationError = settings.Validate();
+			if (validationError != null)
+				return BadRequest(new { reason = "invalid_scan_settings", message = validationError });
 
 			try
 			{
@@ -47,13 +56,13 @@ namespace BetterPlacemaking.Controllers
 					// flag in case the first heartbeat delivery was lost, and return the existing
 					// scan so a retry from the UI is idempotent rather than stuck behind a 409.
 					if (!string.IsNullOrWhiteSpace(deviceId))
-						_deviceService.SetLidarBeginScanning(deviceId, true);
+						_deviceService.StartLidarScan(deviceId, settings);
 
 					return Ok(new { Id = existing.ScanId, Status = existing.Status });
 				}
 
 				var userId = ResolveCurrentUserId();
-				var response = _scanService.CreateScan(projectId, deviceId, userId);
+				var response = _scanService.CreateScan(projectId, deviceId, settings, userId);
 				return Ok(response);
 			}
 			catch (Exception)
@@ -76,6 +85,41 @@ namespace BetterPlacemaking.Controllers
 			catch (Exception)
 			{
 				return Problem("An unexpected error occurred while retrieving scans.");
+			}
+		}
+
+		/// <summary>
+		/// Streams the raw .xyz point cloud for a given scan. Used by the client-side PDF export to
+		/// render one top-down thumbnail per historical scan. Prefers Firestore ObjUrl, falls back to the
+		/// canonical GCS object. Returns 404 when the scan doc or its .xyz cannot be resolved.
+		/// </summary>
+		[HttpGet("{projectId}/{deviceId}/{scanId}/xyz")]
+		public async Task<IActionResult> DownloadScanXyz(
+			string projectId,
+			string deviceId,
+			string scanId,
+			CancellationToken cancellationToken)
+		{
+			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(scanId))
+				return BadRequest();
+
+			try
+			{
+				var scan = _scanService.GetScan(projectId, deviceId, scanId);
+				if (scan == null)
+					return NotFound();
+
+				var stream = await _scanIngest
+					.DownloadScanXyzAsync(projectId, deviceId, scan, cancellationToken)
+					.ConfigureAwait(false);
+				if (stream == null)
+					return NotFound(new { reason = "xyz_unavailable" });
+
+				return File(stream, "text/plain", $"{scanId}.xyz");
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while downloading the scan .xyz.");
 			}
 		}
 
@@ -141,6 +185,30 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+[HttpDelete("{projectId}/{deviceId}/{scanId}")]
+public async Task<IActionResult> DeleteScan(string projectId, string deviceId, string scanId)
+{
+    if (string.IsNullOrWhiteSpace(projectId) ||
+        string.IsNullOrWhiteSpace(deviceId) ||
+        string.IsNullOrWhiteSpace(scanId))
+    {
+        return BadRequest("Invalid parameters.");
+    }
+
+    try
+    {
+        var success = await _scanService.DeleteScan(projectId, deviceId, scanId);
+
+        if (!success)
+            return NotFound("Scan not found.");
+
+        return NoContent();
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, $"Failed to delete scan: {ex.Message}");
+    }
+}
 		[HttpPatch("{projectId}/{deviceId}/{scanId}/status")]
 		public async Task<IActionResult> UpdateScanStatus(
 			string projectId,
