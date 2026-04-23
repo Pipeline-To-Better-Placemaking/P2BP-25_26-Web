@@ -20,14 +20,18 @@ public static class FusionEngineConfig
     public const string InputStorageFolder  = "vision/tracks-raw";   // folder containing JSONL files
     public const string OutputStorageFolder = "vision/tracks-fused";
 
-    public const double SimThreshold   = 0.75;
-    public const double MaxSpeedPxPerS = 4000.0;
-    public const double MaxGapMs       = 12000.0;
-    public const int    MinTrackPoints = 8;
-    public const double MinDurationS   = 1.0;
-    public const double MaxJumpClean   = 6000.0;
-    public const double DupEps         = 1e-3;
-    public const int    SmoothWin      = 2;
+    public const double SimThreshold       = 0.75;
+
+
+    public const double MaxSpeedWorldPerS  = 4000.0;   // mm / s
+    public const double MaxJumpFusion      = 15000.0;  // mm
+
+    public const double MaxGapMs           = 12000.0;
+    public const int    MinTrackPoints     = 8;
+    public const double MinDurationS       = 1.0;
+    public const double MaxJumpClean       = 3000.0;   // mm — per-point jump filter
+    public const double DupEps             = 1e-3;
+    public const int    SmoothWin          = 2;
 }
 
 // ─────────────────────────────────────────────
@@ -696,29 +700,56 @@ public class FusionEngine
     private readonly bool _debug;
     public FusionEngine(bool debug = false) => _debug = debug;
 
+    /// <summary>
+    /// Distance between the gid's last known position and the new track's FIRST position
+    /// (where the person would have to "re-appear" coming out of the gap), divided by the
+    /// elapsed time end-of-old → start-of-new. Negative or zero gaps are treated as
+    /// teleports (the new track starts before or simultaneously with the gid's end).
+    /// </summary>
     private (bool teleport, double dist, double dtMs, double speed)
         TeleportMetrics(FusedIdentity gid, TrackObject track)
     {
-        double dx    = track.X - gid.X;
-        double dy    = track.Y - gid.Y;
-        double dist  = VectorMath.Hypot(dx, dy);
-        double dtMs  = track.TStart - gid.TEnd;
-        if (dtMs <= 0) return (false, dist, dtMs, 0.0);
-        double speed  = dist / (dtMs / 1000.0);
-        return (speed > FusionEngineConfig.MaxSpeedPxPerS, dist, dtMs, speed);
+        var trackStart = track.Events.First();
+        double dx      = trackStart.X - gid.X;
+        double dy      = trackStart.Y - gid.Y;
+        double dist    = VectorMath.Hypot(dx, dy);
+        double dtMs    = track.TStart - gid.TEnd;
+
+        // Time-inverted or zero-gap → infinite implied speed → reject as teleport.
+        if (dtMs <= 0)
+            return (true, dist, dtMs, double.PositiveInfinity);
+
+        // Hard absolute spatial cap, independent of speed/time math.
+        if (dist > FusionEngineConfig.MaxJumpFusion)
+            return (true, dist, dtMs, dist / (dtMs / 1000.0));
+
+        double speed = dist / (dtMs / 1000.0);
+        return (speed > FusionEngineConfig.MaxSpeedWorldPerS, dist, dtMs, speed);
     }
 
     private (bool ok, double gapMs) TimeCompatible(FusedIdentity gid, TrackObject track)
     {
         double gap = track.TStart - gid.TEnd;
-        return (gap <= FusionEngineConfig.MaxGapMs, gap);
+        // Reject negative gaps too — a new track can't start before the gid ended.
+        return (gap >= 0 && gap <= FusionEngineConfig.MaxGapMs, gap);
     }
 
+    /// <summary>
+    /// Returns true if the candidate track shares a camera with ANY segment already fused
+    /// into the gid AND its time window overlaps that segment. The previous implementation
+    /// only checked the very first camera the gid ever saw, missing overlaps after multi-cam merges.
+    /// </summary>
     private bool Overlaps(FusedIdentity gid, TrackObject track)
     {
-        string gidCam = gid.Tracks[0][0].Cam;
-        if (track.Cam != gidCam) return false;
-        return track.TStart <= gid.TEnd && track.TEnd >= gid.TStart;
+        foreach (var seg in gid.Tracks)
+        {
+            if (seg.Count == 0) continue;
+            if (seg[0].Cam != track.Cam) continue;
+            long segStart = seg.First().Time;
+            long segEnd   = seg.Last().Time;
+            if (track.TStart <= segEnd && track.TEnd >= segStart) return true;
+        }
+        return false;
     }
 
     public List<FusedIdentity> Run(List<TrackObject> trackObjs)
@@ -967,6 +998,7 @@ public class FusionRunner
                 request.From.Value, request.To.Value.Date.AddDays(1).AddMilliseconds(-1));
 
             // ── 3. Load + build tracks ──────────────────────────────────────────
+            ct.ThrowIfCancellationRequested();
             var (vectors, tracks) = JsonlLoader.Load(localInputPath);
             var trackObjs         = TrackBuilder.Build(vectors, tracks);
 
@@ -982,14 +1014,17 @@ public class FusionRunner
             var intrinsicsDict = await _firestoreLoader.LoadIntrinsicsAsync(activeMacs, ct);
 
             // ── 6. World transform (undistortion + homography + Kalman) ─────────
+            ct.ThrowIfCancellationRequested();
             WorldTransform.Apply(trackObjs, homographies, intrinsicsDict);
 
             // ── 7. Fuse identities ───────────────────────────────────────────────
+            ct.ThrowIfCancellationRequested();
             var engine = new FusionEngine(debug);
             var gids   = engine.Run(trackObjs);
 
             // ── 8. Serialize + upload result to GCS ─────────────────────────────
             // Output file name encodes the full range: fused_tracks-20250405_20250408.json
+            ct.ThrowIfCancellationRequested();
             string localOutputPath = Path.Combine(tempDir, "fused_tracks.json");
             FusionExporter.Export(gids, localOutputPath);
 
@@ -1009,6 +1044,10 @@ public class FusionRunner
             var data = JsonSerializer.Deserialize<object>(json);
 
             return new FusionResult { Success = true, Data = data };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // let FusionService see the real cancellation and log a clean timeout
         }
         catch (Exception ex)
         {
