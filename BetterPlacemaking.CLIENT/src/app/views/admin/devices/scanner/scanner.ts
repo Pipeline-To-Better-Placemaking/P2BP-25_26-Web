@@ -498,6 +498,22 @@ export class Scanner implements OnInit, OnDestroy {
     return 0;
   }
 
+  public formatLastRunAt(value: any): string {
+    if (value == null) return '—';
+    let ms = 0;
+    if (typeof value === 'number') {
+      ms = value < 1e12 ? value * 1000 : value;
+    } else if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (Number.isNaN(parsed)) return '—';
+      ms = parsed;
+    } else {
+      const s = (value as any)?.seconds ?? (value as any)?._seconds;
+      if (typeof s === 'number') ms = s * 1000;
+    }
+    return ms > 0 ? new Date(ms).toLocaleString() : '—';
+  }
+
   private loadSchedules(): void {
     this.scanService.getSchedules(this.projectId).subscribe({
       next: (schedules) => {

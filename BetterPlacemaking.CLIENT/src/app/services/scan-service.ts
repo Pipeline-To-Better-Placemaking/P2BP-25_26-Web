@@ -11,6 +11,7 @@ export interface ScanScheduleDto {
   Frequency: string;
   EndDate?: string;
   EndTime?: string;
+  LastRunAt?: any;
 }
 
 export interface LoadLatestScanVisualizerResponse {

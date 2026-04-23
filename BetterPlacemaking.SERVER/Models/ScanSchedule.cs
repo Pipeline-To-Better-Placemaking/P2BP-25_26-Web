@@ -28,4 +28,7 @@ public class ScanSchedule
 
     [FirestoreProperty]
     public string? CreatedByUserId { get; set; }
+
+    [FirestoreProperty]
+    public Timestamp? LastRunAt { get; set; }
 }
