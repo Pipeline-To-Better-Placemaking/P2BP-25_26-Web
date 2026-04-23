@@ -88,6 +88,41 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+		/// <summary>
+		/// Streams the raw .xyz point cloud for a given scan. Used by the client-side PDF export to
+		/// render one top-down thumbnail per historical scan. Prefers Firestore ObjUrl, falls back to the
+		/// canonical GCS object. Returns 404 when the scan doc or its .xyz cannot be resolved.
+		/// </summary>
+		[HttpGet("{projectId}/{deviceId}/{scanId}/xyz")]
+		public async Task<IActionResult> DownloadScanXyz(
+			string projectId,
+			string deviceId,
+			string scanId,
+			CancellationToken cancellationToken)
+		{
+			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(scanId))
+				return BadRequest();
+
+			try
+			{
+				var scan = _scanService.GetScan(projectId, deviceId, scanId);
+				if (scan == null)
+					return NotFound();
+
+				var stream = await _scanIngest
+					.DownloadScanXyzAsync(projectId, deviceId, scan, cancellationToken)
+					.ConfigureAwait(false);
+				if (stream == null)
+					return NotFound(new { reason = "xyz_unavailable" });
+
+				return File(stream, "text/plain", $"{scanId}.xyz");
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while downloading the scan .xyz.");
+			}
+		}
+
 		[HttpGet("{projectId}/{deviceId}/{scanId}")]
 		public IActionResult GetScan(string projectId, string deviceId, string scanId)
 		{
