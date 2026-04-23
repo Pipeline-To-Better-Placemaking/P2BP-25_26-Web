@@ -22,6 +22,16 @@
         [disabled]="scanning"
         (onClick)="performScan()">
       </p-button>
+
+      <p-button
+        label="LiDAR Calibration"
+        icon="pi pi-compass"
+        severity="secondary"
+        [disabled]="!selectedFloorplan"
+        [pTooltip]="!selectedFloorplan ? 'Select a floorplan first' : ''"
+        tooltipPosition="left"
+        (onClick)="openLidarCalibration()">
+      </p-button>
     </div>
   </div>
 
@@ -252,9 +262,7 @@
         </p-select>
       </div>
 
-      <div
-        *ngIf="selectedFrequency && selectedFrequency.code !== 'Never'"
-        class="fusion-field">
+      <div *ngIf="selectedFrequency && selectedFrequency.code !== 'Never'" class="fusion-field">
         <label for="endDateTime" class="fusion-field-label">End Date & Time</label>
         <p-datepicker
           inputId="endDateTime"
@@ -330,6 +338,103 @@
         </tr>
       </ng-template>
     </p-table>
+  </div>
+
+  <div class="fusion-history-card">
+    <div class="fusion-history-header">
+      <span class="fusion-history-title">LiDAR Calibration</span>
+      <span class="fusion-history-subtitle">Use the shared floorplan library and open calibration in a popout</span>
+    </div>
+
+    <div class="p-6 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-muted-color">
+          Select a shared floorplan before opening the LiDAR calibration workspace.
+        </div>
+
+        <p-button
+          label="Open LiDAR Calibration"
+          icon="pi pi-compass"
+          severity="secondary"
+          [disabled]="!selectedFloorplan"
+          [pTooltip]="!selectedFloorplan ? 'Select a floorplan from the Floorplan Library first' : ''"
+          tooltipPosition="left"
+          (onClick)="openLidarCalibration()">
+        </p-button>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <label class="cursor-pointer">
+            <p-button
+              label="Upload Floorplan"
+              icon="pi pi-upload"
+              severity="secondary"
+              [loading]="uploadingFloorplan"
+              (onClick)="floorplanInput.click()">
+            </p-button>
+            <input
+              #floorplanInput
+              type="file"
+              accept="image/*,.pdf"
+              class="hidden"
+              (change)="onFloorplanFileSelected($event)" />
+          </label>
+        </div>
+
+        <div *ngIf="floorplansLoading" class="text-muted-color text-sm py-3 text-center">
+          Loading floorplans...
+        </div>
+
+        <div *ngIf="!floorplansLoading && floorplans.length === 0"
+             class="text-muted-color text-sm py-4 text-center">
+          No floorplans uploaded yet.
+        </div>
+
+        <div *ngIf="!floorplansLoading && floorplans.length > 0"
+             class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          <div *ngFor="let fp of floorplans"
+               class="flex flex-col rounded-lg overflow-hidden cursor-pointer transition-all"
+               [class.ring-2]="fp.Id === selectedFloorplanId"
+               [class.ring-primary-500]="fp.Id === selectedFloorplanId"
+               [class.border]="fp.Id !== selectedFloorplanId"
+               [class.border-surface-200]="fp.Id !== selectedFloorplanId"
+               [class.dark:border-surface-700]="fp.Id !== selectedFloorplanId"
+               [class.bg-surface-100]="fp.Id !== selectedFloorplanId"
+               [class.dark:bg-surface-800]="fp.Id !== selectedFloorplanId"
+               [class.bg-primary-50]="fp.Id === selectedFloorplanId"
+               [class.dark:bg-primary-950]="fp.Id === selectedFloorplanId"
+               (click)="selectFloorplan(fp.Id)">
+            <div class="relative h-24 bg-surface-200 dark:bg-surface-700 flex items-center justify-center overflow-hidden">
+              <img *ngIf="fp.ImageDownloadUrl"
+                   [src]="fp.ImageDownloadUrl"
+                   class="w-full h-full object-cover" />
+              <i *ngIf="!fp.ImageDownloadUrl" class="pi pi-image text-2xl opacity-30"></i>
+              <div *ngIf="fp.Id === selectedFloorplanId"
+                   class="absolute top-1 right-1 bg-primary-500 rounded-full w-5 h-5 flex items-center justify-center">
+                <i class="pi pi-check text-white text-xs"></i>
+              </div>
+            </div>
+
+            <div class="p-2 flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-xs truncate">{{ fp.Nickname }}</div>
+                <div class="text-xs text-muted-color">{{ fp.ImageWidth }} × {{ fp.ImageHeight }}</div>
+              </div>
+              <p-button
+                icon="pi pi-trash"
+                severity="danger"
+                [text]="true"
+                size="small"
+                pTooltip="Delete"
+                tooltipPosition="left"
+                (onClick)="deleteFloorplan(fp.Id); $event.stopPropagation()">
+              </p-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="fusion-history-card">
@@ -415,6 +520,21 @@
       </ng-template>
     </p-table>
   </div>
+
+  <p-dialog
+    header="LiDAR Calibration"
+    [(visible)]="lidarCalibrationVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '95vw', height: '90vh' }"
+    styleClass="lidar-calibration-dialog">
+
+    <app-multi-lidar-calibration
+      [projectId]="projectId"
+      [floorPlan]="selectedFloorplan">
+    </app-multi-lidar-calibration>
+  </p-dialog>
 
   <div class="mt-6 flex flex-col min-h-[min(70vh,640px)]">
     <div class="flex flex-wrap gap-2 mb-3">

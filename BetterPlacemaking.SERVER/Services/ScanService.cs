@@ -108,47 +108,57 @@ namespace BetterPlacemaking.Services
             return (false, null, null);
         }
 
-        public List<Dictionary<string, object>> GetScans(string projectId, string deviceId)
+        public List<Dictionary<string, object?>> GetScans(string projectId, string deviceId)
+{
+    var response = _db
+        .Collection("projects")
+        .Document(projectId)
+        .Collection("devices")
+        .Document(deviceId)
+        .Collection("scans")
+        .GetSnapshotAsync()
+        .Result
+        .Documents
+        .Select(doc =>
         {
-            var response = _db
-                .Collection("projects")
-                .Document(projectId)
-                .Collection("devices")
-                .Document(deviceId)
-                .Collection("scans")
-                .GetSnapshotAsync()
-                .Result
-                .Documents
-                .Select(doc =>
-                {
-                    var data = doc.ToDictionary();
-                    data["Id"] = doc.Id;
-                    return data;
-                })
-                .ToList();
+            var data = doc.ToDictionary()
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => NormalizeFirestoreValue(kvp.Value)
+                );
 
-            return response;
-        }
+            data["Id"] = doc.Id;
+            return data;
+        })
+        .ToList();
 
-        public Dictionary<string, object>? GetScan(string projectId, string deviceId, string scanId)
-        {
-            var snap = _db
-                .Collection("projects")
-                .Document(projectId)
-                .Collection("devices")
-                .Document(deviceId)
-                .Collection("scans")
-                .Document(scanId)
-                .GetSnapshotAsync()
-                .Result;
+    return response;
+}
 
-            if (!snap.Exists)
-                return null;
+        public Dictionary<string, object?>? GetScan(string projectId, string deviceId, string scanId)
+{
+    var snap = _db
+        .Collection("projects")
+        .Document(projectId)
+        .Collection("devices")
+        .Document(deviceId)
+        .Collection("scans")
+        .Document(scanId)
+        .GetSnapshotAsync()
+        .Result;
 
-            var response = snap.ToDictionary();
-            response["Id"] = snap.Id;
-            return response;
-        }
+    if (!snap.Exists)
+        return null;
+
+    var response = snap.ToDictionary()
+        .ToDictionary(
+            kvp => kvp.Key,
+            kvp => NormalizeFirestoreValue(kvp.Value)
+        );
+
+    response["Id"] = snap.Id;
+    return response;
+}
 
         public bool UpdateScanStatus(string projectId, string deviceId, string scanId, string? status, string? objUrl, string? error)
         {
@@ -291,5 +301,16 @@ namespace BetterPlacemaking.Services
 
             return false;
         }
+
+        private static object? NormalizeFirestoreValue(object? value)
+{
+    if (value == null)
+        return null;
+
+    if (value is Timestamp ts)
+        return ts.ToDateTime().ToString("o");
+
+    return value;
+}
     }
 }

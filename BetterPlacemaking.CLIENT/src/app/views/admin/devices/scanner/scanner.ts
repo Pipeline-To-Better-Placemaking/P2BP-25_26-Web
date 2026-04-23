@@ -14,6 +14,8 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { DividerModule } from 'primeng/divider';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
+import { DialogModule } from 'primeng/dialog';
+import { TooltipModule } from 'primeng/tooltip';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
@@ -24,10 +26,12 @@ import {
   ScanRecordDto,
   ScanScheduleDto,
   ScanService,
-  ScanSettingsPayload,
+  ScanSettingsPayload
 } from '../../../../services/scan-service';
 import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
+import { MultiLidarCalibration } from '../multi-lidar-calibration/multi-lidar-calibration';
+import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 
 export type ScannerVisualMode = '3d' | 'solids';
 
@@ -55,10 +59,13 @@ interface SelectOption<T> {
     SelectModule,
     ToggleSwitchModule,
     DividerModule,
-    PointCloudViewerComponent,
-    SolidObjectsViewComponent,
     TableModule,
     TagModule,
+    DialogModule,
+    TooltipModule,
+    PointCloudViewerComponent,
+    SolidObjectsViewComponent,
+    MultiLidarCalibration,
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']
@@ -74,12 +81,6 @@ export class Scanner implements OnInit, OnDestroy {
 
   public scheduledDateTime: Date | null = null;
   public endDateTime: Date | null = null;
-
-
-  public currentScanStatus: string | null = null;
-  public currentScanRecord: ScanRecordDto | null = null;
-  public scanHistory: ScanRecordDto[] = [];
-  public deletingScanId: string | null = null;
 
   public frequencyOptions: FrequencyOption[] = [
     { name: 'Never', code: 'Never' },
@@ -148,46 +149,28 @@ export class Scanner implements OnInit, OnDestroy {
     { label: '3 revolutions', value: 3 }
   ];
 
-  public deleteScan(scan: ScanRecordDto): void {
-  if (!this.projectId || !this.currentLidarDeviceId || !scan.Id) {
-    return;
-  }
+  public currentScanStatus: string | null = null;
+  public currentScanRecord: ScanRecordDto | null = null;
+  public scanHistory: ScanRecordDto[] = [];
+  public deletingScanId: string | null = null;
 
-  this.deletingScanId = scan.Id;
+  public lidarCalibrationVisible = false;
 
-  this.scanService.deleteScan(this.projectId, this.currentLidarDeviceId, scan.Id).subscribe({
-    next: () => {
-      this.scanHistory = this.scanHistory.filter(s => s.Id !== scan.Id);
-
-      if (this.currentScanRecord?.Id === scan.Id) {
-        this.currentScanRecord = null;
-        this.currentScanStatus = null;
-      }
-
-      this.deletingScanId = null;
-      this.scanMessage = 'Scan history entry deleted.';
-      this.scanMessageSeverity = 'success';
-
-      setTimeout(() => {
-        this.scanMessage = null;
-        this.scanMessageSeverity = 'info';
-      }, 3000);
-    },
-    error: () => {
-      this.deletingScanId = null;
-      this.scanMessage = 'Failed to delete scan history entry.';
-      this.scanMessageSeverity = 'error';
-    }
-  });
-}
+  public floorplansLoading = false;
+  public uploadingFloorplan = false;
+  public floorplans: FloorplanItem[] = [];
+  public selectedFloorplanId: string | null = null;
 
   private currentLidarDeviceId: string | null = null;
   private scanStatusPollSub: Subscription | null = null;
+  private _lidarConnected = false;
+  private _currentLidarDeviceName: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
     private deviceService: DeviceService,
-    private scanService: ScanService
+    private scanService: ScanService,
+    private floorplanService: FloorplanService,
   ) {}
 
   ngOnInit(): void {
@@ -195,6 +178,7 @@ export class Scanner implements OnInit, OnDestroy {
     if (this.projectId) {
       this.loadSchedules();
       this.resolveLidarDeviceAndLoadHistory();
+      this.loadFloorplans();
     }
   }
 
@@ -207,10 +191,7 @@ export class Scanner implements OnInit, OnDestroy {
   }
 
   public applyPreset(preset: ScanPreset | null): void {
-    if (!preset) {
-      return;
-    }
-
+    if (!preset) return;
     this.selectedPreset = preset;
     this.scanSettings = structuredClone(SCAN_PRESETS[preset]);
   }
@@ -231,25 +212,28 @@ export class Scanner implements OnInit, OnDestroy {
   }
 
   public get successCount(): number {
-  return this.scanHistory.filter(
-    s => (s.Status ?? '').toLowerCase() === 'complete' || (s.Status ?? '').toLowerCase() === 'done'
-  ).length;
-}
+    return this.scanHistory.filter(
+      s => (s.Status ?? '').toLowerCase() === 'complete' || (s.Status ?? '').toLowerCase() === 'done'
+    ).length;
+  }
 
-public get failedCount(): number {
-  return this.scanHistory.filter(
-    s => (s.Status ?? '').toLowerCase() === 'error' || (s.Status ?? '').toLowerCase() === 'failed'
-  ).length;
-}
+  public get failedCount(): number {
+    return this.scanHistory.filter(
+      s => (s.Status ?? '').toLowerCase() === 'error' || (s.Status ?? '').toLowerCase() === 'failed'
+    ).length;
+  }
 
-public get lidarConnected(): boolean {
-  if (!this.currentLidarDeviceId) return false;
-  return this._lidarConnected;
-}
+  public get lidarConnected(): boolean {
+    return this._lidarConnected;
+  }
 
-public get currentLidarDeviceName(): string | null {
-  return this._currentLidarDeviceName;
-}
+  public get currentLidarDeviceName(): string | null {
+    return this._currentLidarDeviceName;
+  }
+
+  public get selectedFloorplan(): FloorplanItem | null {
+    return this.floorplans.find((f) => f.Id === this.selectedFloorplanId) ?? null;
+  }
 
   public performScan(): void {
     if (!this.projectId) {
@@ -283,18 +267,14 @@ public get currentLidarDeviceName(): string | null {
         this._currentLidarDeviceName = lidarDevice.Name ?? 'LiDAR device';
         this._lidarConnected = this.isLidarConnected(lidarDevice);
 
-        if (!this.isLidarConnected(lidarDevice)) {
-          this.scanMessage = 'LiDAR is not connected.';
-          this.scanMessageSeverity = 'error';
-          this.scanning = false;
-          return;
-        }
-
         this.currentLidarDeviceId = lidarDevice.Id;
         this.currentScanStatus = 'pending';
-        this.currentScanRecord = {
-          Status: 'pending'
-        };
+        this.currentScanRecord = { Status: 'pending' };
+
+        if (!this.isLidarConnected(lidarDevice)) {
+          this.scanMessage = 'Warning: LiDAR reports as offline, but attempting scan anyway.';
+          this.scanMessageSeverity = 'warn';
+        }
 
         this.scanService.startScan(this.projectId, lidarDevice.Id, payload).subscribe({
           next: () => {
@@ -327,8 +307,7 @@ public get currentLidarDeviceName(): string | null {
   public isLidarConnected(device: DeviceDto): boolean {
     const lidars = device?.HealthReport?.Lidars;
     if (!lidars) return false;
-
-    const first = Object.values(lidars)[0];
+    const first = Object.values(lidars)[0] as any;
     return first?.Connected === true;
   }
 
@@ -371,6 +350,59 @@ public get currentLidarDeviceName(): string | null {
     }
   }
 
+  public runStatusSeverity(status: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch ((status ?? '').toLowerCase()) {
+      case 'complete':
+      case 'done':
+        return 'success';
+      case 'running':
+      case 'in_progress':
+      case 'calibrating':
+        return 'info';
+      case 'pending':
+        return 'warn';
+      case 'error':
+      case 'failed':
+        return 'danger';
+      default:
+        return 'secondary';
+    }
+  }
+
+  public runStatusIcon(status: string | null | undefined): string {
+    switch ((status ?? '').toLowerCase()) {
+      case 'complete':
+      case 'done':
+        return 'pi pi-check-circle';
+      case 'running':
+      case 'in_progress':
+      case 'calibrating':
+        return 'pi pi-spin pi-spinner';
+      case 'pending':
+        return 'pi pi-clock';
+      case 'error':
+      case 'failed':
+        return 'pi pi-times-circle';
+      default:
+        return 'pi pi-circle';
+    }
+  }
+
+  public formatScanDateTime(value: any): string {
+    if (!value) return '-';
+
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+    }
+
+    if (value?.seconds) {
+      return new Date(value.seconds * 1000).toLocaleString();
+    }
+
+    return '-';
+  }
+
   private resolveLidarDeviceAndLoadHistory(): void {
     this.deviceService.getDevices().subscribe({
       next: (devices: DeviceDto[]) => {
@@ -378,13 +410,12 @@ public get currentLidarDeviceName(): string | null {
           d => d.ProjectId === this.projectId && d.Name?.toLowerCase().includes('lidar')
         );
 
-        if (!lidarDevice) {
-          return;
-        }
+        if (!lidarDevice) return;
+
+        this.currentLidarDeviceId = lidarDevice.Id;
         this._currentLidarDeviceName = lidarDevice.Name ?? 'LiDAR device';
         this._lidarConnected = this.isLidarConnected(lidarDevice);
 
-        this.currentLidarDeviceId = lidarDevice.Id;
         this.loadScanHistory(lidarDevice.Id);
       },
       error: () => {}
@@ -397,9 +428,7 @@ public get currentLidarDeviceName(): string | null {
     this.scanStatusPollSub = interval(3000).subscribe(() => {
       this.scanService.getScans(this.projectId, deviceId).subscribe({
         next: (scans: ScanRecordDto[]): void => {
-          if (!scans?.length) {
-            return;
-          }
+          if (!scans?.length) return;
 
           const latest = this.getLatestScan(scans);
           this.scanHistory = [...scans];
@@ -455,9 +484,7 @@ public get currentLidarDeviceName(): string | null {
 
   private getSortTimestamp(scan: ScanRecordDto): number {
     const raw = scan?.CreatedAt ?? scan?.StartedAt ?? scan?.FinishedAt;
-    if (!raw) {
-      return 0;
-    }
+    if (!raw) return 0;
 
     if (typeof raw === 'string') {
       const parsed = Date.parse(raw);
@@ -469,25 +496,6 @@ public get currentLidarDeviceName(): string | null {
     }
 
     return 0;
-  }
-
-  private _lidarConnected = false;
-  private _currentLidarDeviceName: string | null = null;
-  public formatScanDateTime(value: any): string {
-    if (!value) {
-      return '-';
-    }
-
-    if (typeof value === 'string') {
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
-    }
-
-    if (value?.seconds) {
-      return new Date(value.seconds * 1000).toLocaleString();
-    }
-
-    return '-';
   }
 
   private loadSchedules(): void {
@@ -607,43 +615,97 @@ public get currentLidarDeviceName(): string | null {
     return freq ? freq.name : code;
   }
 
-  public runStatusSeverity(status: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
-  switch ((status ?? '').toLowerCase()) {
-    case 'complete':
-    case 'done':
-      return 'success';
-    case 'running':
-    case 'in_progress':
-    case 'calibrating':
-      return 'info';
-    case 'pending':
-      return 'warn';
-    case 'error':
-    case 'failed':
-      return 'danger';
-    default:
-      return 'secondary';
-  }
-}
+  public deleteScan(scan: ScanRecordDto): void {
+    if (!this.projectId || !this.currentLidarDeviceId || !scan.Id) {
+      return;
+    }
 
-public runStatusIcon(status: string | null | undefined): string {
-  switch ((status ?? '').toLowerCase()) {
-    case 'complete':
-    case 'done':
-      return 'pi pi-check-circle';
-    case 'running':
-    case 'in_progress':
-    case 'calibrating':
-      return 'pi pi-spin pi-spinner';
-    case 'pending':
-      return 'pi pi-clock';
-    case 'error':
-    case 'failed':
-      return 'pi pi-times-circle';
-    default:
-      return 'pi pi-circle';
+    this.deletingScanId = scan.Id;
+
+    this.scanService.deleteScan(this.projectId, this.currentLidarDeviceId, scan.Id).subscribe({
+      next: () => {
+        this.scanHistory = this.scanHistory.filter(s => s.Id !== scan.Id);
+
+        if (this.currentScanRecord?.Id === scan.Id) {
+          this.currentScanRecord = null;
+          this.currentScanStatus = null;
+        }
+
+        this.deletingScanId = null;
+        this.scanMessage = 'Scan history entry deleted.';
+        this.scanMessageSeverity = 'success';
+
+        setTimeout(() => {
+          this.scanMessage = null;
+          this.scanMessageSeverity = 'info';
+        }, 3000);
+      },
+      error: () => {
+        this.deletingScanId = null;
+        this.scanMessage = 'Failed to delete scan history entry.';
+        this.scanMessageSeverity = 'error';
+      }
+    });
   }
-}
+
+  public openLidarCalibration(): void {
+    if (!this.selectedFloorplan) {
+      this.scanMessage = 'Select a floorplan before opening LiDAR calibration.';
+      this.scanMessageSeverity = 'error';
+      return;
+    }
+
+    this.lidarCalibrationVisible = true;
+  }
+
+  private loadFloorplans(): void {
+    this.floorplansLoading = true;
+    this.floorplanService.getLibrary(this.projectId).subscribe({
+      next: (items: FloorplanItem[]) => {
+        this.floorplans = items;
+        this.floorplansLoading = false;
+
+        if (!this.selectedFloorplanId && items.length > 0) {
+          this.selectedFloorplanId = items[0].Id;
+        }
+
+        if (this.selectedFloorplanId && !items.find((f) => f.Id === this.selectedFloorplanId)) {
+          this.selectedFloorplanId = items[0]?.Id ?? null;
+        }
+      },
+      error: () => {
+        this.floorplansLoading = false;
+      },
+    });
+  }
+
+  public selectFloorplan(id: string): void {
+    this.selectedFloorplanId = id;
+  }
+
+  public onFloorplanFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const nickname = file.name.replace(/\.[^.]+$/, '');
+    this.uploadingFloorplan = true;
+    this.floorplanService.upload(file, nickname, this.projectId).subscribe({
+      next: () => {
+        this.uploadingFloorplan = false;
+        this.loadFloorplans();
+      },
+      error: () => {
+        this.uploadingFloorplan = false;
+      },
+    });
+  }
+
+  public deleteFloorplan(id: string): void {
+    this.floorplanService.delete(id).subscribe({
+      next: () => this.loadFloorplans(),
+    });
+  }
 
   private formatDate(value: Date): string {
     const year = value.getFullYear();

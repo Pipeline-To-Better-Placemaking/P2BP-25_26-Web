@@ -13,6 +13,7 @@ import { UserSettings } from './views/user-settings/user-settings';
 import { Scanner } from './views/admin/devices/scanner/scanner';
 import { Vision } from './views/projects/selected/vision/vision';
 import { ProjectPermissions } from './views/admin/project-permissions/project-permissions';
+import { MultiLidarCalibration } from './views/admin/devices/multi-lidar-calibration/multi-lidar-calibration';
 
 const admin: Routes = [
   {
@@ -48,6 +49,7 @@ export const routes: Routes = [
           { path: 'admin/permissions', component: ProjectPermissions },
           { path: 'admin', children: admin },
           { path: 'model', component: Scanner },
+          { path: 'lidar-calibration', component: MultiLidarCalibration },
           { path: 'dashboard', component: Dashboard },
           { path: 'devices', component: DevicesList },
           {
