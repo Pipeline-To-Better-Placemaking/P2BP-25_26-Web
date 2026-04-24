@@ -7,12 +7,14 @@ import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dy
 import { BoardLibraryItem } from '../../../../../models/BoardLibrary';
 import { BoardService } from '../../../../../services/board-service';
 import { BoardGenerateModal } from '../board-generate-modal/board-generate-modal';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 const DEFAULT_DETAIL_LONG_EDGE_MM = 180;
 const MIN_DETAIL_EDGE_MM = 40;
 
 type BoardDetailModalData = {
   board?: BoardLibraryItem;
+  projectId?: string;
   onBoardUpdated?: (item: BoardLibraryItem) => void;
 };
 
@@ -20,7 +22,7 @@ type BoardDetailModalData = {
   selector: 'app-board-detail-modal',
   standalone: true,
   providers: [DialogService],
-  imports: [CommonModule, ButtonModule, TagModule, TooltipModule],
+  imports: [CommonModule, ButtonModule, TagModule, TooltipModule, PermissionDirective],
   templateUrl: './board-detail-modal.html',
 })
 export class BoardDetailModal {
@@ -28,6 +30,7 @@ export class BoardDetailModal {
   downloading = false;
   deleting = false;
   editing = false;
+  projectId: string | null = null;
   private onBoardUpdated?: (item: BoardLibraryItem) => void;
 
   constructor(
@@ -38,6 +41,7 @@ export class BoardDetailModal {
   ) {
     const data = (this.config.data ?? {}) as BoardDetailModalData;
     this.board = data.board ?? null;
+    this.projectId = data.projectId ?? null;
     this.onBoardUpdated = data.onBoardUpdated;
   }
 
@@ -92,6 +96,7 @@ export class BoardDetailModal {
       data: {
         existingBoard: this.board,
         boardId: this.board.Id,
+        projectId: this.projectId ?? undefined,
       },
     });
 

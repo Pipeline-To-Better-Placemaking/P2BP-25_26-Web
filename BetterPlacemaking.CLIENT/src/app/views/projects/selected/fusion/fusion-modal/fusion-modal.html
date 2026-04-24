@@ -59,6 +59,7 @@
       [disabled]="submitting"
       (onClick)="cancel()" />
     <p-button
+      *hasPermission="'Project.Scans.Start'; projectId: projectId"
       label="Run Fusion"
       icon="pi pi-play"
       [loading]="submitting"

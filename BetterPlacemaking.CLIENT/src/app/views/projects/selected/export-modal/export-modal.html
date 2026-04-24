@@ -1,4 +1,4 @@
-<div class="flex flex-col gap-4 px-1 pb-1">
+<div *hasPermission="'Project.Export'; projectId: projectId" class="flex flex-col gap-4 px-1 pb-1">
 
   <!-- Title + notes -->
   <div class="flex flex-col gap-2">
@@ -126,6 +126,7 @@
     <div class="flex gap-2">
       <p-button label="Cancel" severity="secondary" (onClick)="cancel()" [disabled]="generating" />
       <p-button label="Generate PDF" icon="pi pi-download"
+                *hasPermission="'Project.Export'; projectId: projectId"
                 (onClick)="generate()" [disabled]="!canGenerate" [loading]="generating" />
     </div>
   </div>

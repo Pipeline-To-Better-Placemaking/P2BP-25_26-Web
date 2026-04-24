@@ -3,9 +3,11 @@ import { Component, Input, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
+import { ActivatedRoute } from '@angular/router';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 interface LidarPlacement {
   deviceId: string;
@@ -22,7 +24,8 @@ interface LidarPlacement {
     CommonModule,
     FormsModule,
     ButtonModule,
-    InputTextModule
+    InputTextModule,
+    PermissionDirective
   ],
   templateUrl: './multi-lidar-calibration.html',
   styleUrls: ['./multi-lidar-calibration.scss']
@@ -35,9 +38,13 @@ export class MultiLidarCalibration implements OnInit {
   selected: LidarPlacement | null = null;
   dragging: LidarPlacement | null = null;
 
-  constructor(private deviceService: DeviceService) {}
+  constructor(
+    private deviceService: DeviceService,
+    private route: ActivatedRoute,
+  ) {}
 
   ngOnInit(): void {
+    this.projectId ||= this.route.snapshot.paramMap.get('projectId') ?? '';
     this.loadDevices();
   }
 

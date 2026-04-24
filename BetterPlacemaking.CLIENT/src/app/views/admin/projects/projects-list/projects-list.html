@@ -1,4 +1,4 @@
-<div class="w-full flex flex-col content-background rounded-lg">
+<div *hasPermission="'Global.Projects.ReadAll'" class="w-full flex flex-col content-background rounded-lg">
 	<p-confirmDialog></p-confirmDialog>
 	<p-table [value]="projects" class="rounded-lg overflow-hidden">
 		<ng-template #caption>
@@ -7,7 +7,13 @@
 					<span class="font-semibold text-xl">Projects</span>
 					<span class="text-muted-color text-xl">{{ projects.length || 0 }}</span>
 				</div>
-				<p-button label="Add" icon="pi pi-plus" (onClick)="addProject()"> </p-button>
+				<p-button
+					*hasPermission="'Global.Projects.Create'"
+					label="Add"
+					icon="pi pi-plus"
+					(onClick)="addProject()"
+				>
+				</p-button>
 			</div>
 		</ng-template>
 
@@ -27,8 +33,22 @@
 				<td>{{ project.Location }}</td>
 				<td>
 					<div class="flex gap-2">
-						<p-button label="Edit" icon="pi pi-pencil" severity="secondary" size="small" (onClick)="editProject(project)"></p-button>
-						<p-button label="Delete" icon="pi pi-trash" severity="danger" size="small" (onClick)="deleteProject(project)"></p-button>
+						<p-button
+							*hasPermission="'Project.Update'; projectId: project.Id"
+							label="Edit"
+							icon="pi pi-pencil"
+							severity="secondary"
+							size="small"
+							(onClick)="editProject(project)"
+						></p-button>
+						<p-button
+							*hasPermission="'Project.Delete'; projectId: project.Id"
+							label="Delete"
+							icon="pi pi-trash"
+							severity="danger"
+							size="small"
+							(onClick)="deleteProject(project)"
+						></p-button>
 					</div>
 				</td>
 			</tr>

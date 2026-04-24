@@ -27,11 +27,19 @@ import { NgIf } from '@angular/common';
 import { AuthService } from '../../services/auth-service';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { ExportModal } from '../../views/projects/selected/export-modal/export-modal';
+import { PermissionDirective } from '../../directives/permission.directive';
+
+type PermissionMenuItem = MenuItem & {
+  permission?: string | string[];
+  permissionProjectId?: string | null;
+  permissionMode?: 'all' | 'any';
+  items?: PermissionMenuItem[];
+};
 
 @Component({
   selector: 'app-default-layout',
   standalone: true,
-  imports: [RouterOutlet, ButtonModule, AvatarModule, MenuModule, RouterModule, FontAwesomeModule, NgIf],
+  imports: [RouterOutlet, ButtonModule, AvatarModule, MenuModule, RouterModule, FontAwesomeModule, NgIf, PermissionDirective],
   providers: [DialogService],
   templateUrl: './default-layout.html',
   styleUrl: './default-layout.scss',
@@ -56,11 +64,11 @@ export class DefaultLayout implements OnInit, OnDestroy {
     private dialogService: DialogService,
   ) {}
 
-  navItems: MenuItem[] = [];
+  navItems: PermissionMenuItem[] = [];
 
-  navItemsIfSelected: MenuItem[] = [];
+  navItemsIfSelected: PermissionMenuItem[] = [];
 
-  navItemsAdmin: MenuItem[] = [];
+  navItemsAdmin: PermissionMenuItem[] = [];
 
   footerItems: MenuItem[] = [];
   userMenuItems: MenuItem[] = [];
@@ -123,13 +131,13 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Project',
           items: [
-            { label: 'Dashboard', faIcon: faChartLine, routerLink: `/${base}/dashboard` },
-            { label: '3D Model', faIcon: faCube, routerLink: `/${base}/model` },
-            { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision` },
-            { label: 'Fusion', faIcon: faCodeMerge, routerLink: `/${base}/fusion` },
-            { label: 'Permissions', faIcon: faUserShield, routerLink: `/${base}/admin/permissions` },
-            { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/devices` },
-            { label: 'Export Data', faIcon: faDownload, command: () => this.exportProjectData() },
+            { label: 'Dashboard', faIcon: faChartLine, routerLink: `/${base}/dashboard`, permission: 'Project.Read', permissionProjectId: base },
+            { label: '3D Model', faIcon: faCube, routerLink: `/${base}/model`, permission: 'Project.Scans.Read', permissionProjectId: base },
+            { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision`, permission: 'Project.Read', permissionProjectId: base },
+            { label: 'Fusion', faIcon: faCodeMerge, routerLink: `/${base}/fusion`, permission: 'Project.Scans.Read', permissionProjectId: base },
+            { label: 'Permissions', faIcon: faUserShield, routerLink: `/${base}/admin/permissions`, permission: 'Project.Members.AssignEditorViewer', permissionProjectId: base },
+            { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/devices`, permission: 'Project.Devices.Read', permissionProjectId: base },
+            { label: 'Export Data', faIcon: faDownload, command: () => this.exportProjectData(), permission: 'Project.Export', permissionProjectId: base },
           ],
         },
       ];
@@ -137,8 +145,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Users', faIcon: faUserShield, routerLink: `/${base}/admin/users` },
-            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `/${base}/admin/projects` },
+            { label: 'Users', faIcon: faUserShield, routerLink: `/${base}/admin/users`, permission: 'Global.Users.Read' },
+            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: `/${base}/admin/projects`, permission: 'Global.Projects.ReadAll' },
           ],
         },
       ];
@@ -149,8 +157,8 @@ export class DefaultLayout implements OnInit, OnDestroy {
         {
           label: 'Admin',
           items: [
-            { label: 'Users', faIcon: faUserShield, routerLink: '/admin/users' },
-            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: '/admin/projects' },
+            { label: 'Users', faIcon: faUserShield, routerLink: '/admin/users', permission: 'Global.Users.Read' },
+            { label: 'Manage Projects', faIcon: faFolderOpen, routerLink: '/admin/projects', permission: 'Global.Projects.ReadAll' },
           ],
         },
       ];
@@ -159,7 +167,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   private buildProjectSelectorNav(projectId?: string): void {
     const link = projectId ? `/${projectId}/projects` : '/projects';
-    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: link }];
+    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: link, permission: 'Global.Projects.ReadAll' }];
   }
 
   private buildUserMenuItems(projectId?: string): void {
@@ -181,6 +189,16 @@ export class DefaultLayout implements OnInit, OnDestroy {
       data: { projectId: this.projectId },
     });
     this.exportDialogRef = ref ?? undefined;
+  }
+
+  public handleMenuItemClick(event: Event, item: PermissionMenuItem): void {
+    if (!item.command) return;
+
+    if (!item.routerLink) {
+      event.preventDefault();
+    }
+
+    item.command({ originalEvent: event, item });
   }
 
   toggleDarkMode(): void {

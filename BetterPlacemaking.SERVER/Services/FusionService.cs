@@ -27,7 +27,7 @@ namespace BetterPlacemaking.Services
 
         // Max wall-clock time a single fusion run is allowed to take before we cancel it
         // and mark it as failed. Keep this in sync with FusionSchedulerService.FusionTimeout.
-        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(15);
 
         // ── History ──────────────────────────────────────────────────────────
 

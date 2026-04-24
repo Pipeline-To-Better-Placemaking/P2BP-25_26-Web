@@ -2,14 +2,16 @@ using System;
 using Google.Cloud.Firestore;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using BetterPlacemaking.Models;
 
 namespace BetterPlacemaking.Services
 {
-    public class ScanService(FirestoreDb db, DeviceService deviceService)
+    public class ScanService(FirestoreDb db, DeviceService deviceService, ILogger<ScanService> logger)
     {
         private readonly FirestoreDb _db = db;
         private readonly DeviceService _deviceService = deviceService;
+        private readonly ILogger<ScanService> _logger = logger;
 
         /// <summary>
         /// Oldest pending scan for the device, or null if none.
@@ -198,6 +200,36 @@ namespace BetterPlacemaking.Services
                 return true;
 
             docRef.UpdateAsync(updates).Wait();
+
+            // Clear the lidar one-shot the moment the Jetson successfully claims the scan.
+            // Until this runs, Config.LidarScan.BeginScanning stays true in Firestore and each
+            // heartbeat keeps re-delivering it -- that's what makes claim-phase hiccups
+            // (PATCH 500, next-pending 404, missed heartbeat) self-heal on the next tick.
+            // We intentionally do NOT clear on complete/error: a new user click during the
+            // current scan must be able to keep BeginScanning=true for the next scan.
+            if (string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
+            {
+                // Best-effort: do NOT fail the PATCH if the flag-clear write blips.
+                // The scan status DID transition to "running" (the UpdateAsync above
+                // succeeded), so the orchestrator must see a 200 and proceed with
+                // the actual scan. A stuck BeginScanning=true on the next heartbeat
+                // is benign -- the orchestrator's next-pending will return 404
+                // (scan is now running, not pending), it logs and waits, and the
+                // very next user click invalidates the device cache via
+                // StartLidarScan, which forces a fresh Firestore read and resets
+                // the flag state.
+                try
+                {
+                    _deviceService.ClearLidarScanOneShotIfSet(deviceId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "ClearLidarScanOneShotIfSet failed after PATCH=running for device {DeviceId}, scan {ScanId}; flag will catch up on next heartbeat-driven refresh.",
+                        deviceId, scanId);
+                }
+            }
+
             return true;
         }
 

@@ -5,6 +5,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
 import { ActivatedRoute } from '@angular/router';
 import { HomographyService, PuzzlePieceDto } from '../../../../../services/homography-service';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 
 interface LayerState {
@@ -24,7 +25,7 @@ interface LayerState {
 @Component({
   selector: 'app-puzzle',
   standalone: true,
-  imports: [CommonModule, FormsModule, InputTextModule, ButtonModule],
+  imports: [CommonModule, FormsModule, InputTextModule, ButtonModule, PermissionDirective],
   templateUrl: './puzzle.component.html',
   styleUrl: './puzzle.component.scss',
 })

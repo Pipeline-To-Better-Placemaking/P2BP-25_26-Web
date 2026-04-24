@@ -32,6 +32,7 @@ import { PointCloudViewerComponent } from '../../../../components/point-cloud-vi
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
 import { MultiLidarCalibration } from '../multi-lidar-calibration/multi-lidar-calibration';
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 export type ScannerVisualMode = '3d' | 'solids';
 
@@ -66,6 +67,7 @@ interface SelectOption<T> {
     PointCloudViewerComponent,
     SolidObjectsViewComponent,
     MultiLidarCalibration,
+    PermissionDirective,
   ],
   templateUrl: './scanner.html',
   styleUrls: ['./scanner.scss']

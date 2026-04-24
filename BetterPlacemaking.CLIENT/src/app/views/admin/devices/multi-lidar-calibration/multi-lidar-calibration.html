@@ -1,4 +1,4 @@
-<div class="flex flex-col gap-4 p-1">
+<div *hasPermission="'Project.Update'; projectId: projectId" class="flex flex-col gap-4 p-1">
 
   <p class="text-sm text-muted-color">
     Drag and rotate LiDAR devices to define their relative positions for scan stitching.

@@ -119,7 +119,7 @@ export class CameraModal implements OnInit, OnDestroy {
       // startWith(0) inside ensures an immediate fetch each time the rate switches.
       this.pollRate$.pipe(
         switchMap((ms) => interval(ms).pipe(startWith(0))),
-        switchMap(() => this.deviceService.getDevice(this.device!.Id)),
+        switchMap(() => this.deviceService.getDevice(this.device!.ProjectId, this.device!.Id)),
         takeUntil(this.destroy$),
       ).subscribe({
         next: (updated) => {

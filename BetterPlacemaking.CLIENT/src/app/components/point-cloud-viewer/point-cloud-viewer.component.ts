@@ -16,11 +16,11 @@ import { MessageModule } from 'primeng/message';
 import { VisualizerService, LidarPoint3D } from '../../services/visualizer-service';
 import { ScanService } from '../../services/scan-service';
 import { ActivatedRoute, ParamMap } from '@angular/router';
-import { interval, of, Subscription } from 'rxjs';
-import { catchError, switchMap } from 'rxjs/operators';
+import { of } from 'rxjs';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { PermissionDirective } from '../../directives/permission.directive';
 
 interface QualitySettings {
   downsample: number;
@@ -36,7 +36,7 @@ interface ExportOption {
 @Component({
   selector: 'app-point-cloud-viewer',
   standalone: true,
-  imports: [CommonModule, FormsModule, CardModule, ButtonModule, SelectModule, MessageModule],
+  imports: [CommonModule, FormsModule, CardModule, ButtonModule, SelectModule, MessageModule, PermissionDirective],
   templateUrl: './point-cloud-viewer.component.html',
 })
 export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -80,11 +80,12 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   /** When embedded (e.g. 3D View on Scanner), parent passes route `projectId` for upload query params. */
   @Input() projectContextId?: string;
   private routeProjectId?: string;
-
-  /** Polls points-meta when a project id is known (Scanner 3D View) to pick up device scan ingest. */
-  private metaPollSub?: Subscription;
-  private lastRevisionSeen = 0;
-  private metaPollPrimed = false;
+  /**
+   * Source currently shown in the viewer.
+   * - auto: loaded from latest completed auto-uploaded scan via /visualizer/latest
+   * - manual: loaded from ad-hoc file upload in this viewer
+   */
+  private activeSource: 'auto' | 'manual' = 'auto';
 
   constructor(
     private readonly visualizerService: VisualizerService,
@@ -113,69 +114,24 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
     return this.projectContextId?.trim() || this.routeProjectId;
   }
 
+  public get permissionProjectId(): string | null {
+    return this.effectiveProjectId() ?? null;
+  }
+
   ngAfterViewInit(): void {
     // Small timeout to allow the DOM to fully settle before initialising WebGL
     setTimeout(() => {
       this.initThreeJS();
-      this.loadExistingPoints();
-      this.startScanIngestMetaPolling();
-      this.tryAutoLoadLatestCompleteScan();
+      // Always start from latest auto-uploaded scan for deterministic behavior.
+      this.refreshPointCloud();
     }, 0);
   }
 
   ngOnDestroy(): void {
-    this.metaPollSub?.unsubscribe();
     if (this.animationFrameId != null) {
       cancelAnimationFrame(this.animationFrameId);
     }
     this.renderer?.dispose();
-  }
-
-  private startScanIngestMetaPolling(): void {
-    if (!this.effectiveProjectId()) {
-      return;
-    }
-
-    this.metaPollSub = interval(2800)
-      .pipe(
-        switchMap(() =>
-          this.visualizerService.getPointsMeta().pipe(
-            catchError(() => of(null)),
-          ),
-        ),
-      )
-      .subscribe((meta) => {
-        if (!meta) {
-          return;
-        }
-        if (!this.metaPollPrimed) {
-          this.metaPollPrimed = true;
-          this.lastRevisionSeen = meta.Revision;
-          return;
-        }
-        if (meta.Revision > this.lastRevisionSeen) {
-          this.lastRevisionSeen = meta.Revision;
-          this.refreshPointCloud();
-        }
-      });
-  }
-
-  private tryAutoLoadLatestCompleteScan(): void {
-    const pid = this.effectiveProjectId()?.trim();
-    if (!pid) {
-      return;
-    }
-    this.scanService.loadLatestCompleteScanIntoVisualizer(pid).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.refreshPointCloud();
-        } else if (res.reason !== 'no_complete_scan' && res.reason !== 'no_devices' && res.message) {
-          this.statusSeverity = 'info';
-          this.statusMessage = res.message;
-        }
-      },
-      error: () => {},
-    });
   }
 
   // ── Three.js setup ─────────────────────────────────────────────────
@@ -244,40 +200,50 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
 
   // ── Data loading ───────────────────────────────────────────────────
 
-  private loadExistingPoints(): void {
-    this.visualizerService.getPoints().subscribe({
-      next: (points) => {
-        if (points && points.length > 0) {
-          this.lidar3D = points;
-          this.renderPointCloud();
-          this.loadAndRenderMesh();
-        }
-      },
-      error: () => {
-        // No existing points – that's fine
-      },
-    });
-  }
-
   refreshPointCloud(): void {
     this.isLoading = true;
     this.clearScene();
+    const pid = this.effectiveProjectId()?.trim();
 
-    this.visualizerService.getPoints().subscribe({
-      next: (points) => {
-        this.isLoading = false;
-        if (!points || points.length === 0) {
-          this.showStatus('No point cloud data available.', 'info');
-          return;
+    const loadPointsIntoViewer = () => {
+      this.visualizerService.getPoints().subscribe({
+        next: (points) => {
+          this.isLoading = false;
+          if (!points || points.length === 0) {
+            this.lidar3D = [];
+            this.showStatus('No point cloud data available.', 'info');
+            return;
+          }
+          this.lidar3D = points;
+          this.renderPointCloud();
+          this.loadAndRenderMesh();
+          this.activeSource = 'auto';
+          this.showStatus(`Loaded latest auto scan: ${points.length.toLocaleString()} points.`, 'success');
+        },
+        error: () => {
+          this.isLoading = false;
+          this.showStatus('Failed to refresh point cloud.', 'error');
+        },
+      });
+    };
+
+    // Scanner tab behavior: refresh always snaps back to latest completed auto-uploaded scan.
+    if (!pid) {
+      loadPointsIntoViewer();
+      return;
+    }
+
+    this.scanService.loadLatestCompleteScanIntoVisualizer(pid).subscribe({
+      next: (res) => {
+        if (!res.success && res.reason !== 'no_complete_scan' && res.reason !== 'no_devices' && res.message) {
+          this.statusSeverity = 'info';
+          this.statusMessage = res.message;
         }
-        this.lidar3D = points;
-        this.renderPointCloud();
-        this.loadAndRenderMesh();
-        this.showStatus(`Loaded ${points.length.toLocaleString()} points.`, 'success');
+        loadPointsIntoViewer();
       },
       error: () => {
         this.isLoading = false;
-        this.showStatus('Failed to refresh point cloud.', 'error');
+        this.showStatus('Failed to load latest auto-uploaded scan.', 'error');
       },
     });
   }
@@ -380,9 +346,14 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
           this.uploadProgress = 0;
           if (!points || points.length === 0) return;
           this.lidar3D = points;
+          this.activeSource = 'manual';
           this.clearScene();
           this.renderPointCloud();
           setTimeout(() => this.loadAndRenderMesh(), 500);
+          this.showStatus(
+            `Showing manual upload (${points.length.toLocaleString()} points). Press Refresh to return to latest auto scan.`,
+            'info',
+          );
         },
         error: () => {
           this.isLoading = false;

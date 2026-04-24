@@ -65,6 +65,36 @@ namespace BetterPlacemaking.Authorization
             if (cached.HasValue)
                 return cached.Value;
 
+            // Super-admin style global roles can carry project permissions and should short-circuit project checks.
+            var globalAssignmentSnapshot = await _db.Collection("user_global_roles")
+                .Document(userId)
+                .GetSnapshotAsync(cancellationToken);
+
+            var globalRoleSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (globalAssignmentSnapshot.Exists && globalAssignmentSnapshot.TryGetValue("roles", out IEnumerable<string> assignedGlobalRoles))
+            {
+                foreach (var role in assignedGlobalRoles)
+                {
+                    if (!string.IsNullOrWhiteSpace(role))
+                        globalRoleSet.Add(role);
+                }
+            }
+
+            if (globalRoleSet.Count > 0)
+            {
+                var globallyAllowed = await RoleSetContainsPermissionAsync(
+                    collectionName: "role_definitions_global",
+                    roles: globalRoleSet,
+                    permission: permission,
+                    cancellationToken: cancellationToken);
+
+                if (globallyAllowed)
+                {
+                    await SetCachedAsync(cacheKey, true, ProjectCacheDuration, cancellationToken);
+                    return true;
+                }
+            }
+
             var memberSnapshot = await _db.Collection("projects")
                 .Document(projectId)
                 .Collection("members")

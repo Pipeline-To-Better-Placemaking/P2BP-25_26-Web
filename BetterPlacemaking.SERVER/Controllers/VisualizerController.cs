@@ -2,6 +2,7 @@ using BetterPlacemaking.Models.Visualizer;
 using BetterPlacemaking.Services;
 using BetterPlacemaking.Services.Visualizer;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using IOPath = System.IO.Path;
 
@@ -13,6 +14,7 @@ namespace BetterPlacemaking.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "UserJwt")]
 public class VisualizerController : ControllerBase
 {
     private readonly PointCloudService _pointCloudService;

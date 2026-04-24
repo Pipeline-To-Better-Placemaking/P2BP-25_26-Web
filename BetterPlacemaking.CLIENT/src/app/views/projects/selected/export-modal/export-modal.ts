@@ -12,6 +12,7 @@ import { MessageService } from 'primeng/api';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { ScanService, ProjectScanRecord } from '../../../../services/scan-service';
 import { ExportConfig, ExportService } from '../../../../services/export-service';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 interface QuickPick {
   key: 'last5' | 'last10' | 'days30' | 'allComplete';
@@ -31,6 +32,7 @@ interface QuickPick {
     TableModule,
     TagModule,
     TooltipModule,
+    PermissionDirective,
   ],
   templateUrl: './export-modal.html',
 })

@@ -1,4 +1,4 @@
-<div class="w-full flex flex-col content-background rounded-lg">
+<div *hasPermission="'Global.Users.Read'" class="w-full flex flex-col content-background rounded-lg">
   <p-toast key="permissions" position="bottom-right"></p-toast>
 
   <p-table

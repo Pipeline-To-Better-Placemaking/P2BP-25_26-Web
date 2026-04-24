@@ -2,6 +2,7 @@ using System.Security.Claims;
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -154,6 +155,7 @@ namespace BetterPlacemaking.Controllers
 
         [HttpGet("workspace/{projectId}")]
         [Authorize(Policy = "UserJwt")]
+        [RequirePermission(Permissions.Project.Read)]
         public async Task<IActionResult> GetPuzzleWorkspace(string projectId, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(projectId))
@@ -176,6 +178,7 @@ namespace BetterPlacemaking.Controllers
 
         [HttpPost("workspace/{projectId}/puzzle-pieces/refresh")]
         [Authorize(Policy = "UserJwt")]
+        [RequirePermission(Permissions.Project.Update)]
         public async Task<IActionResult> RefreshPuzzlePieces(string projectId, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(projectId))
@@ -198,6 +201,7 @@ namespace BetterPlacemaking.Controllers
 
         [HttpGet("workspace/{projectId}/puzzle-pieces/{deviceId}/{cameraMac}")]
         [Authorize(Policy = "UserJwt")]
+        [RequirePermission(Permissions.Project.Read)]
         public async Task<IActionResult> GetPuzzlePiece(
             string projectId,
             string deviceId,
@@ -231,6 +235,7 @@ namespace BetterPlacemaking.Controllers
 
         [HttpPost("workspace/{projectId}/global-homographies")]
         [Authorize(Policy = "UserJwt")]
+        [RequirePermission(Permissions.Project.Update)]
         public IActionResult SaveGlobalHomographies(string projectId, [FromBody] SaveGlobalHomographiesDto dto)
         {
             if (string.IsNullOrWhiteSpace(projectId))

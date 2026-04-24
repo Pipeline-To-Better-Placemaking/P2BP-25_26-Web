@@ -1,4 +1,4 @@
-<div class="w-full flex flex-col content-background rounded-lg">
+<div *hasPermission="'Project.Read'; projectId: projectId" class="w-full flex flex-col content-background rounded-lg">
 
   <!-- Recommended action bar -->
   <p-message *ngIf="recommendedAction" severity="warn" [text]="recommendedAction" styleClass="w-full" />
@@ -24,6 +24,7 @@
       <div class="text-xs text-muted-color mt-1">Fully calibrated</div>
       <div class="mt-4">
         <p-button
+          *hasPermission="'Project.Devices.Read'; projectId: projectId"
           [label]="camsNeedingAttention > 0 ? 'Calibrate (' + camsNeedingAttention + ')' : 'Review Cameras'"
           [icon]="camsNeedingAttention > 0 ? 'pi pi-exclamation-triangle' : 'pi pi-eye'"
           size="small"
@@ -46,6 +47,7 @@
       <div class="text-xs text-muted-color mt-1">Lens distortion calibrated</div>
       <div class="mt-4">
         <p-button
+          *hasPermission="'Project.Devices.Manage'; projectId: projectId"
           label="Run Intrinsics"
           icon="pi pi-camera"
           size="small"
@@ -67,6 +69,7 @@
       <div class="text-xs text-muted-color mt-1">Pixel → world mapping</div>
       <div class="mt-4">
         <p-button
+          *hasPermission="'Project.Devices.Manage'; projectId: projectId"
           [label]="homographyActionLabel"
           icon="pi pi-compass"
           size="small"
@@ -88,6 +91,7 @@
       <div class="text-xs text-muted-color mt-1">Origin established</div>
       <div class="mt-4">
         <p-button
+          *hasPermission="'Project.Devices.Manage'; projectId: projectId"
           label="Open ArUco Lock"
           icon="pi pi-lock"
           size="small"
@@ -110,6 +114,7 @@
         <div class="vision-panel-action">
           <div class="text-sm text-muted-color">Discover cameras and jump straight into per-camera calibration.</div>
           <p-button
+            *hasPermission="'Project.Devices.Read'; projectId: projectId"
             label="Open Camera"
             icon="pi pi-video"
             size="small"
@@ -163,6 +168,7 @@
           <div class="flex items-center justify-between">
             <div class="text-sm text-muted-color">Saved boards are user-scoped and reusable across projects.</div>
             <p-button
+              *hasPermission="'Project.Update'; projectId: projectId"
               label="Generate New Board"
               icon="pi pi-plus"
               severity="secondary"
@@ -222,6 +228,7 @@
             <div class="text-sm text-muted-color">Click a floorplan to select it for the puzzle workspace.</div>
             <label class="cursor-pointer">
               <p-button
+                *hasPermission="'Project.Update'; projectId: projectId"
                 label="Upload Floorplan"
                 icon="pi pi-upload"
                 severity="secondary"
@@ -269,7 +276,8 @@
                   <div class="font-semibold text-xs truncate">{{ fp.Nickname }}</div>
                   <div class="text-xs text-muted-color">{{ fp.ImageWidth }} × {{ fp.ImageHeight }}</div>
                 </div>
-                <p-button icon="pi pi-trash" severity="danger" [text]="true" size="small"
+                <p-button *hasPermission="'Project.Update'; projectId: projectId"
+                          icon="pi pi-trash" severity="danger" [text]="true" size="small"
                           pTooltip="Delete" tooltipPosition="left"
                           (onClick)="deleteFloorplan(fp.Id); $event.stopPropagation()" />
               </div>
@@ -287,6 +295,7 @@
         <div class="vision-panel-action">
           <div class="text-sm text-muted-color">Check Jetson heartbeat, health, and device-level calibration actions.</div>
           <p-button
+            *hasPermission="'Project.Devices.Read'; projectId: projectId"
             label="Open Device"
             icon="pi pi-desktop"
             size="small"
@@ -351,6 +360,7 @@
             </div>
           </div>
           <p-button
+            *hasPermission="'Project.Read'; projectId: projectId"
             label="Open Puzzle"
             icon="pi pi-map"
             severity="contrast"

@@ -1,5 +1,6 @@
 using BetterPlacemaking.Models.Tracking;
 using BetterPlacemaking.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BetterPlacemaking.Controllers;
@@ -7,6 +8,7 @@ namespace BetterPlacemaking.Controllers;
 /// <summary>Endpoints aligned with P2BP-25_26-Visualizer GalleryModelApi tracking minimal APIs.</summary>
 [ApiController]
 [Route("api/tracking")]
+[Authorize(Policy = "UserJwt")]
 public class TrackingController : ControllerBase
 {
     private readonly TrackingDataService _tracking;
