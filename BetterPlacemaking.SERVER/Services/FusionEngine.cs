@@ -998,7 +998,7 @@ public class FusionRunner
                 request.From.Value, request.To.Value.Date.AddDays(1).AddMilliseconds(-1));
 
             // ── 3. Load + build tracks ──────────────────────────────────────────
-            ct.ThrowIfCancellationRequested();
+            //ct.ThrowIfCancellationRequested();
             var (vectors, tracks) = JsonlLoader.Load(localInputPath);
             var trackObjs         = TrackBuilder.Build(vectors, tracks);
 
@@ -1014,17 +1014,17 @@ public class FusionRunner
             var intrinsicsDict = await _firestoreLoader.LoadIntrinsicsAsync(activeMacs, ct);
 
             // ── 6. World transform (undistortion + homography + Kalman) ─────────
-            ct.ThrowIfCancellationRequested();
+           // ct.ThrowIfCancellationRequested();
             WorldTransform.Apply(trackObjs, homographies, intrinsicsDict);
 
             // ── 7. Fuse identities ───────────────────────────────────────────────
-            ct.ThrowIfCancellationRequested();
+            ////ct.ThrowIfCancellationRequested();
             var engine = new FusionEngine(debug);
             var gids   = engine.Run(trackObjs);
 
             // ── 8. Serialize + upload result to GCS ─────────────────────────────
             // Output file name encodes the full range: fused_tracks-20250405_20250408.json
-            ct.ThrowIfCancellationRequested();
+            ////ct.ThrowIfCancellationRequested();
             string localOutputPath = Path.Combine(tempDir, "fused_tracks.json");
             FusionExporter.Export(gids, localOutputPath);
 
