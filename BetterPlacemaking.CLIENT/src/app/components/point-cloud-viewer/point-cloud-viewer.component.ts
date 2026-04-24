@@ -203,49 +203,104 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
   refreshPointCloud(): void {
     this.isLoading = true;
     this.clearScene();
+    this.lidar3D = [];
     const pid = this.effectiveProjectId()?.trim();
 
-    const loadPointsIntoViewer = () => {
-      this.visualizerService.getPoints().subscribe({
-        next: (points) => {
-          this.isLoading = false;
-          if (!points || points.length === 0) {
-            this.lidar3D = [];
-            this.showStatus('No point cloud data available.', 'info');
-            return;
-          }
-          this.lidar3D = points;
-          this.renderPointCloud();
-          this.loadAndRenderMesh();
-          this.activeSource = 'auto';
-          this.showStatus(`Loaded latest auto scan: ${points.length.toLocaleString()} points.`, 'success');
-        },
-        error: () => {
-          this.isLoading = false;
-          this.showStatus('Failed to refresh point cloud.', 'error');
-        },
-      });
-    };
-
-    // Scanner tab behavior: refresh always snaps back to latest completed auto-uploaded scan.
+    // When there's no project context we can't ask the server for the latest
+    // auto-uploaded scan — just show whatever is currently in the session.
     if (!pid) {
-      loadPointsIntoViewer();
+      this.loadCurrentSessionPoints({ fallbackMessage: 'No point cloud data available.' });
       return;
     }
 
     this.scanService.loadLatestCompleteScanIntoVisualizer(pid).subscribe({
       next: (res) => {
-        if (!res.success && res.reason !== 'no_complete_scan' && res.reason !== 'no_devices' && res.message) {
-          this.statusSeverity = 'info';
-          this.statusMessage = res.message;
+        if (res.success) {
+          // Server ingested the latest auto-uploaded scan into the session; render it.
+          this.loadCurrentSessionPoints({
+            onEmpty: () =>
+              this.showStatus(
+                'Server reported a loaded auto scan but returned no points. Try again or re-run the scan.',
+                'error',
+              ),
+            onLoaded: (count) => {
+              this.activeSource = 'auto';
+              this.showStatus(`Loaded latest auto scan: ${count.toLocaleString()} points.`, 'success');
+            },
+          });
+          return;
         }
-        loadPointsIntoViewer();
+
+        // Ingest failed. Surface the server's reason instead of the stale-session fallback,
+        // and don't pretend we loaded an auto scan.
+        this.isLoading = false;
+        const reasonMessage = this.describeLatestScanFailure(res.reason, res.message);
+        this.showStatus(reasonMessage, 'info');
       },
       error: () => {
         this.isLoading = false;
         this.showStatus('Failed to load latest auto-uploaded scan.', 'error');
       },
     });
+  }
+
+  /** Fetch `_currentPoints` from the server and render if non-empty. */
+  private loadCurrentSessionPoints(opts: {
+    fallbackMessage?: string;
+    onEmpty?: () => void;
+    onLoaded?: (count: number) => void;
+  }): void {
+    this.visualizerService.getPoints().subscribe({
+      next: (points) => {
+        this.isLoading = false;
+        if (!points || points.length === 0) {
+          this.lidar3D = [];
+          if (opts.onEmpty) {
+            opts.onEmpty();
+          } else if (opts.fallbackMessage) {
+            this.showStatus(opts.fallbackMessage, 'info');
+          }
+          return;
+        }
+        this.lidar3D = points;
+        this.renderPointCloud();
+        this.loadAndRenderMesh();
+        if (opts.onLoaded) {
+          opts.onLoaded(points.length);
+        }
+      },
+      error: () => {
+        this.isLoading = false;
+        this.showStatus('Failed to refresh point cloud.', 'error');
+      },
+    });
+  }
+
+  /**
+   * Human-readable explanation for why <c>POST /api/scan/{pid}/visualizer/latest</c>
+   * did not ingest an auto-uploaded scan. Prefers the server's message when present.
+   */
+  private describeLatestScanFailure(reason?: string, message?: string): string {
+    switch (reason) {
+      case 'no_devices':
+        return 'No scanner devices are assigned to this project yet.';
+      case 'no_complete_scan':
+        return 'No completed auto-uploaded scan found for this project yet.';
+      case 'not_complete':
+        return 'Latest scan is not marked complete.';
+      case 'no_scan_id':
+        return 'Latest scan record is missing an Id.';
+      case 'xyz_not_found':
+        return message || 'Latest scan .xyz could not be downloaded (ObjUrl expired or canonical Storage object is missing).';
+      case 'no_points_parsed':
+        return 'Latest scan .xyz contained no parseable points.';
+      case 'file_too_large':
+        return 'Latest scan .xyz exceeds the configured size limit.';
+      case 'ingest_error':
+        return 'Failed to ingest latest scan — see server logs.';
+      default:
+        return message || 'Could not load latest auto-uploaded scan.';
+    }
   }
 
   // ── Quality (fixed: maximum — all points, no downsample cap) ───────
