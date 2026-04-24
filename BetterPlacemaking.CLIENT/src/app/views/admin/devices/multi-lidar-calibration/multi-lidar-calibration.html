@@ -180,7 +180,7 @@
 
         <div *ngFor="let overlay of overlays; let i = index"
              class="flex items-center justify-between p-2 border rounded cursor-pointer"
-             [class.bg-primary-50]="selectedOverlayIndex === i"
+             [class.bg-surface-500]="selectedOverlayIndex === i"
              (click)="selectOverlay(i)">
           <div class="text-sm">{{ overlay.label }}</div>
           <div class="text-xs text-muted-color">

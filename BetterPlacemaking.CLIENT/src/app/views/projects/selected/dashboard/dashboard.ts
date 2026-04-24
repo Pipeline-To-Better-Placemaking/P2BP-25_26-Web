@@ -6,11 +6,15 @@ import { catchError } from 'rxjs/operators';
 
 import { DeviceService } from '../../../../services/device-service';
 import { ProjectService } from '../../../../services/project-service';
-import { ScanService } from '../../../../services/scan-service';
+import {
+  BASE_SCAN_SETTINGS,
+  ScanRecordDto,
+  ScanService
+} from '../../../../services/scan-service';
+
 import { DeviceDto } from '../../../../models/DeviceDto';
 import { ProjectDto } from '../../../../models/ProjectDto';
 import { ServiceStatus } from '../../../../models/jetson-dtos/HealthReport';
-import { BASE_SCAN_SETTINGS } from '../../../../services/scan-service';
 
 import { StatsWidget } from './components/statswidget';
 import { DevicesWidget } from './components/deviceswidget';
@@ -24,7 +28,6 @@ import { DialogModule } from 'primeng/dialog';
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 const HEARTBEAT_GRACE_MULTIPLIER = 6;
 const MIN_ONLINE_WINDOW_MS = 2 * 60 * 1000;
-
 
 export interface ProjectViewModel {
   title: string;
@@ -71,7 +74,6 @@ export interface Alert {
           (alertsClick)="openAlertsDialog()">
         </app-stats-widget>
 
-
         <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
           <app-devices-widget
             *hasPermission="'Project.Devices.Read'; projectId: projectId"
@@ -86,9 +88,9 @@ export interface Alert {
 
           <app-scan-status-widget
             *hasPermission="'Project.Scans.Read'; projectId: projectId"
-            [projectId]="projectId"
             [lastScanTime]="lastScanTime"
-            [formatTimeAgoFn]="formatTimeAgo.bind(this)"
+            [formatTimeAgoFn]="formatTimeAgo"
+            [projectId]="projectId"
             [scanLoading]="scanLoading"
             [scanMessage]="scanMessage"
             (refresh)="refreshLastScan()"
@@ -110,14 +112,13 @@ export interface Alert {
           <div id="project-checklist-section">
             <app-project-checklist-widget
               [project]="project"
-              (projectProgressClick)="onProjectProgressClick()"
               [deviceCounts]="deviceCounts"
+              (projectProgressClick)="onProjectProgressClick()"
               (refresh)="loadDashboard()"
               (devicesAddedClick)="goToDevicesPage()"
               (offlineDevicesFixedClick)="goToDevicesPage()"
               (warningsResolvedClick)="goToAlertsPage()">
             </app-project-checklist-widget>
-
 
             <p-dialog
               header="Project Checklist"
@@ -184,10 +185,10 @@ export class Dashboard implements OnInit {
 
   public loading = false;
   public error: string | null = null;
+
   public scanLoading = false;
   public scanMessage: string | null = null;
-
-  public lastScanTime: Date = new Date();
+  public lastScanTime: Date = new Date(0);
 
   public showProjectChecklistDialog = false;
   public showAlertsDialog = false;
@@ -215,9 +216,6 @@ export class Dashboard implements OnInit {
     this.loadDashboard();
   }
 
-  public openAlertsDialog(): void {
-    this.showAlertsDialog = true;
-  }
   public loadDashboard(): void {
     if (!this.projectId) {
       this.error = 'No project selected.';
@@ -233,10 +231,12 @@ export class Dashboard implements OnInit {
     }).subscribe({
       next: ({ project, devices }) => {
         this.devices = devices ?? [];
+
         this.updateDeviceCounts();
         this.buildProject(project);
         this.buildAlerts();
-        this.updateLastScanTime();
+        this.loadLatestScanTime();
+
         this.loading = false;
       },
       error: (err) => {
@@ -245,6 +245,10 @@ export class Dashboard implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  public openAlertsDialog(): void {
+    this.showAlertsDialog = true;
   }
 
   private buildProject(projectDto: ProjectDto | null): void {
@@ -272,30 +276,19 @@ export class Dashboard implements OnInit {
     return 'Project is ready.';
   }
 
-  /*private calculateProjectProgress(): number {
+  private calculateProjectProgress(): number {
     if (this.devices.length === 0) return 0;
 
+    const total = this.deviceCounts.total || 1;
+    const offlineRatio = this.deviceCounts.offline / total;
+    const warningRatio = this.deviceCounts.warning / total;
+
     let progress = 100;
-    if (this.deviceCounts.offline > 0) progress -= 35;
-    if (this.deviceCounts.warning > 0) progress -= 15;
+    progress -= offlineRatio * 60;
+    progress -= warningRatio * 30;
 
-    return Math.max(25, Math.min(100, progress));
-  }*/
-
-  private calculateProjectProgress(): number {
-  if (this.devices.length === 0) return 0;
-
-  const total = this.deviceCounts.total;
-  const offlineRatio = this.deviceCounts.offline / total;
-  const warningRatio = this.deviceCounts.warning / total;
-
-  let progress = 100;
-
-  progress -= offlineRatio * 60;  // offline = big impact
-  progress -= warningRatio * 30;  // warnings = medium impact
-
-  return Math.max(0, Math.round(progress));
-}
+    return Math.max(0, Math.round(progress));
+  }
 
   private getProjectStatus(progress: number, started: boolean): 'active' | 'inactive' | 'completed' {
     if (!started) return 'inactive';
@@ -311,6 +304,7 @@ export class Dashboard implements OnInit {
 
     this.devices.forEach(device => {
       const status = this.getDeviceStatus(device);
+
       if (status === 'online') online++;
       else if (status === 'offline') offline++;
       else warning++;
@@ -322,6 +316,11 @@ export class Dashboard implements OnInit {
   public getDeviceStatus(device: DeviceDto): 'online' | 'offline' | 'warning' {
     if (!this.isHeartbeatFresh(device)) {
       return 'offline';
+    }
+
+    // LiDAR devices are considered healthy as long as their heartbeat is fresh.
+    if (device.Name?.toLowerCase().includes('lidar')) {
+      return 'online';
     }
 
     const services = device.HealthReport?.Services;
@@ -337,7 +336,7 @@ export class Dashboard implements OnInit {
     }
 
     const hasDegradedState = serviceStates.some(
-      state => state !== 'active' && state !== 'activating',
+      state => state !== 'active' && state !== 'activating'
     );
 
     return hasDegradedState ? 'warning' : 'online';
@@ -404,15 +403,71 @@ export class Dashboard implements OnInit {
     this.alerts = alerts;
   }
 
-  private updateLastScanTime(): void {
-    const validDates = this.devices
-      .map(d => this.getHealthReportDate(d))
-      .filter((d): d is Date => d instanceof Date && !Number.isNaN(d.getTime()));
+  private loadLatestScanTime(): void {
+    if (!this.projectId) return;
 
-    if (validDates.length > 0) {
-      validDates.sort((a, b) => b.getTime() - a.getTime());
-      this.lastScanTime = validDates[0];
+    const lidarDevices = this.devices.filter(d =>
+      d.Name?.toLowerCase().includes('lidar')
+    );
+
+    if (lidarDevices.length === 0) {
+      this.lastScanTime = new Date(0);
+      return;
     }
+
+    const requests = lidarDevices.map(device =>
+      this.scanService.getScans(this.projectId!, device.Id).pipe(
+        catchError(() => of([] as ScanRecordDto[]))
+      )
+    );
+
+    forkJoin(requests).subscribe({
+      next: (scanGroups) => {
+        const allScans = scanGroups.flat();
+        this.updateLastScanTime(allScans);
+      },
+      error: () => {
+        this.lastScanTime = new Date(0);
+      }
+    });
+  }
+
+  private updateLastScanTime(scans: ScanRecordDto[]): void {
+    const completedScans = scans
+      .filter(s => {
+        const status = (s.Status ?? '').toLowerCase();
+        return status === 'complete' || status === 'done';
+      })
+      .sort((a, b) => {
+        const aTime = this.getScanTimestamp(a.FinishedAt ?? a.CreatedAt);
+        const bTime = this.getScanTimestamp(b.FinishedAt ?? b.CreatedAt);
+        return bTime - aTime;
+      });
+
+    const lastScan = completedScans[0];
+
+    if (lastScan) {
+      this.lastScanTime = new Date(
+        this.getScanTimestamp(lastScan.FinishedAt ?? lastScan.CreatedAt)
+      );
+    } else {
+      this.lastScanTime = new Date(0);
+    }
+  }
+
+  private getScanTimestamp(value: any): number {
+    if (!value) return 0;
+
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    if (value.seconds) {
+      return value.seconds * 1000;
+    }
+
+    return 0;
   }
 
   private getHealthReportDate(device: DeviceDto): Date | null {
@@ -438,7 +493,7 @@ export class Dashboard implements OnInit {
 
     const maxAgeMs = Math.max(
       MIN_ONLINE_WINDOW_MS,
-      heartbeatIntervalSeconds * 1000 * HEARTBEAT_GRACE_MULTIPLIER,
+      heartbeatIntervalSeconds * 1000 * HEARTBEAT_GRACE_MULTIPLIER
     );
 
     return Date.now() - lastReportDate.getTime() <= maxAgeMs;
@@ -458,92 +513,92 @@ export class Dashboard implements OnInit {
 
     return { total, high, critical, unresolved };
   }
-public refreshLastScan(): void {
-  this.loadDashboard();
-}
 
-public formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-}
-
-//Public onProjectProgressClick(): void {
-  //const checklistElement = document.getElementById('project-checklist-section');
-
-  //if (checklistElement) {
-    //checklistElement.scrollIntoView({
-      //behavior: 'smooth',
-      //block: 'center'
-    //});
-  //}
-//}
-public onProjectProgressClick(): void {
-  this.showProjectChecklistDialog = true;
-}
-
-
-public goToDevicesPage(): void {
-  if (!this.projectId) return;
-  this.router.navigate(['/', this.projectId, 'devices']);
-}
-
-public goTo3DModelPage(): void {
-  if (!this.projectId) return;
-  this.router.navigate(['/', this.projectId, 'model']);
-}
-
-
-public goToAlertsPage(): void {
-  this.showAlertsDialog = true;
-}
-
-public onRunFullScan(): void {
-  if (!this.projectId) return;
-
-  this.scanLoading = true;
-  this.scanMessage = null;
-
-  const projectDevices = this.devices.filter(d => d.ProjectId === this.projectId);
-
-  if (projectDevices.length === 0) {
-    this.scanMessage = 'No devices assigned to this project.';
-    this.scanLoading = false;
-    return;
+  public refreshLastScan(): void {
+    this.loadLatestScanTime();
   }
 
-  const scanRequests = projectDevices.map(d =>
-    this.scanService.startScan(this.projectId!, d.Id, BASE_SCAN_SETTINGS)
-  );
-
-  forkJoin(scanRequests).subscribe({
-    next: (results) => {
-      this.scanMessage = `Scan requested for ${results.length} device(s).`;
-      this.scanLoading = false;
-      setTimeout(() => this.scanMessage = null, 5000);
-    },
-    error: (err) => {
-      this.scanMessage = this.getScanStartErrorMessage(err);
-      this.scanLoading = false;
+  public formatTimeAgo = (date: Date): string => {
+    if (!date || date.getTime() === 0) {
+      return 'No scans yet';
     }
-  });
-}
 
-private getScanStartErrorMessage(err: any): string {
-  if (err?.status === 409) {
-    const message = err?.error?.message;
-    if (typeof message === 'string' && message.trim()) {
-      return message.trim();
-    }
-    return 'A scan is already in progress for one or more devices.';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
+  public onProjectProgressClick(): void {
+    this.showProjectChecklistDialog = true;
   }
-  return 'Failed to start scan.';
-}
+
+  public goToDevicesPage(): void {
+    if (!this.projectId) return;
+    void this.router.navigate([this.projectId, 'devices']);
+  }
+
+  public goToAlertsPage(): void {
+    this.openAlertsDialog();
+  }
+
+  public goTo3DModelPage(): void {
+    if (!this.projectId) return;
+    void this.router.navigate([this.projectId, 'model']);
+  }
+
+  public onRunFullScan(): void {
+    if (!this.projectId) {
+      this.scanMessage = 'No project selected.';
+      return;
+    }
+
+    const projectDevices = this.devices.filter(d =>
+      d.Name?.toLowerCase().includes('lidar')
+    );
+
+    if (projectDevices.length === 0) {
+      this.scanMessage = 'No LiDAR devices found for this project.';
+      return;
+    }
+
+    this.scanLoading = true;
+    this.scanMessage = null;
+
+    const scanRequests = projectDevices.map(d =>
+      this.scanService.startScan(this.projectId!, d.Id, BASE_SCAN_SETTINGS)
+    );
+
+    forkJoin(scanRequests).subscribe({
+      next: (results) => {
+        this.scanMessage = `Scan requested for ${results.length} device(s).`;
+        this.scanLoading = false;
+        setTimeout(() => {
+          this.scanMessage = null;
+        }, 5000);
+      },
+      error: (err) => {
+        this.scanMessage = this.getScanStartErrorMessage(err);
+        this.scanLoading = false;
+      }
+    });
+  }
+
+  private getScanStartErrorMessage(err: any): string {
+    if (err?.status === 409) {
+      const message = err?.error?.message;
+      if (typeof message === 'string' && message.trim()) {
+        return message.trim();
+      }
+      return 'A scan is already in progress for one or more devices.';
+    }
+
+    return 'Failed to start scan.';
+  }
 }

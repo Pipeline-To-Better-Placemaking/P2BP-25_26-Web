@@ -35,8 +35,8 @@ import { PermissionDirective } from '../../../../../directives/permission.direct
             {{ formatTimeAgoFn(lastScanTime) }}
           </div>
           <div class="text-gray-600">
-            Last device report received
-          </div>
+  Last completed scan
+</div>
         </div>
 
         <div class="text-sm">

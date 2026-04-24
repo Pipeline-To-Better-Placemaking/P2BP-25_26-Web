@@ -633,7 +633,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
 
     ctx.clearRect(0, 0, w, h);
 
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = '#637282';
     ctx.fillRect(0, 0, w, h);
 
     if (this.floorplanLoaded && this.floorplanImg) {
