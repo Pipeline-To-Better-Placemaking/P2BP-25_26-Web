@@ -30,9 +30,14 @@ namespace BetterPlacemaking.Services
 
         // ── History ──────────────────────────────────────────────────────────
 
-        public List<FusionRunDto> GetHistory(int limit = 50)
+        public List<FusionRunDto> GetHistory(string? projectId, int limit = 50)
         {
-            var docs = _db.Collection(ColFusionRuns)
+            Query query = _db.Collection(ColFusionRuns);
+
+            if (!string.IsNullOrWhiteSpace(projectId))
+                query = query.WhereEqualTo("ProjectId", projectId);
+
+            var docs = query
                 .OrderByDescending("StartedAtUnix")
                 .Limit(limit)
                 .GetSnapshotAsync().Result.Documents;
@@ -48,11 +53,12 @@ namespace BetterPlacemaking.Services
         }
 
         // ── Cancel a running run ──────────────────────────────────────────────
-        public async Task<bool> CancelRunAsync(string runId)
+
+        public async Task<string> CancelRunAsync(string runId)
         {
             var docRef = _db.Collection(ColFusionRuns).Document(runId);
             var snap   = await docRef.GetSnapshotAsync();
-            if (!snap.Exists) return false;
+            if (!snap.Exists) return "not_found";
 
             var run = snap.ConvertTo<FusionRun>();
             if (run.Status != "running")
@@ -60,7 +66,7 @@ namespace BetterPlacemaking.Services
                 _logger.LogInformation(
                     "Cancel requested for fusion {RunId} but status is {Status} — ignored.",
                     runId, run.Status);
-                return false;
+                return "not_running";
             }
 
             await docRef.UpdateAsync(new Dictionary<string, object>
@@ -81,9 +87,10 @@ namespace BetterPlacemaking.Services
                     { "ErrorMessage",    "Cancelled by user (no active token)." },
                     { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                 });
+                return "stale";
             }
 
-            return true;
+            return "cancelling";
         }
 
         // ── Trigger ───────────────────────────────────────────────────────────
