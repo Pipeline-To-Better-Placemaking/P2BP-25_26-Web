@@ -84,7 +84,7 @@ export const SCAN_PRESETS: Record<ScanPreset, ScanSettingsPayload> = {
   },
   medium: {
     scan_resolution: 16,
-    protocol_mode: 'express',
+    protocol_mode: 'legacy',
     orientation_mode: 'table',
     output_mode: 'filtered_only',
     split_mode: 'none',
@@ -95,12 +95,12 @@ export const SCAN_PRESETS: Record<ScanPreset, ScanSettingsPayload> = {
   },
   high: {
     scan_resolution: 32,
-    protocol_mode: 'dense',
+    protocol_mode: 'legacy',
     orientation_mode: 'table',
     output_mode: 'raw_and_filtered',
     split_mode: 'none',
     filter_enabled: true,
-    capture_strategy: 'min_revolutions',
+    capture_strategy: 'hybrid',
     min_revolutions_per_slice: 3,
     force_recalibration: false
   }

@@ -116,9 +116,9 @@ export class Scanner implements OnInit, OnDestroy {
 
   public protocolModeOptions: SelectOption<ScanSettingsPayload['protocol_mode']>[] = [
     { label: 'Legacy', value: 'legacy' },
-    { label: 'Express', value: 'express' },
-    { label: 'Dense', value: 'dense' },
-    { label: 'Ultra', value: 'ultra' }
+    { label: 'Express (For upgraded LiDAR only)', value: 'express' },
+    { label: 'Dense (For upgraded LiDAR only)', value: 'dense' },
+    { label: 'Ultra (For upgraded LiDAR only)', value: 'ultra' }
   ];
 
   public orientationModeOptions: SelectOption<ScanSettingsPayload['orientation_mode']>[] = [
