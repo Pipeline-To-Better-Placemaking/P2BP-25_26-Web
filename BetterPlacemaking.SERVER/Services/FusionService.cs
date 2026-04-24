@@ -3,17 +3,20 @@ using BetterPlacemaking.Models.Fusion;
 using Google.Cloud.Firestore;
 using Microsoft.Extensions.Logging;
 using BetterPlacemaking.Models.Dtos;
+using BetterPlacemaking.Models;
 
 namespace BetterPlacemaking.Services
 {
     public class FusionService(
         FirestoreDb db,
         ILogger<FusionService> logger,
-        CloudStorageService gcs)
+        CloudStorageService gcs,
+        FusionCancellationRegistry cancelRegistry)
     {
         private readonly FirestoreDb            _db     = db;
         private readonly ILogger<FusionService> _logger = logger;
         private readonly CloudStorageService    _gcs    = gcs;
+        private readonly FusionCancellationRegistry _cancelRegistry = cancelRegistry;
 
         private const string ColFusionRuns   = "fusion_runs";
         private const string ColFusionConfig = "fusion_config";
@@ -21,6 +24,10 @@ namespace BetterPlacemaking.Services
         private const string DefaultConfigDocId = "default";
         private static string ConfigDocIdFor(string? projectId) =>
             string.IsNullOrWhiteSpace(projectId) ? DefaultConfigDocId : projectId;
+
+        // Max wall-clock time a single fusion run is allowed to take before we cancel it
+        // and mark it as failed. Keep this in sync with FusionSchedulerService.FusionTimeout.
+        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(30);
 
         // ── History ──────────────────────────────────────────────────────────
 
@@ -40,9 +47,39 @@ namespace BetterPlacemaking.Services
         {
             await _db.Collection(ColFusionRuns).Document(runId).DeleteAsync();
         }
+        // ── Cancel a run ──────────────────────────────────────────────────────
+        public async Task<string> CancelRunAsync(string runId)
+        {
+            var docRef = _db.Collection(ColFusionRuns).Document(runId);
+            var snap   = await docRef.GetSnapshotAsync();
+            if (!snap.Exists) return "not_found";
 
+            var run = snap.ConvertTo<FusionRun>();
+            if (run.Status != "running") return "not_running";
 
-        
+            if (_cancelRegistry.TryCancel(runId))
+            {
+                // Optimistic UI hint: the task itself will write "cancelled" on exit.
+                await docRef.UpdateAsync(new Dictionary<string, object>
+                {
+                    { "Status", "cancelling" },
+                });
+                _logger.LogInformation("Fusion {RunId} cancellation requested", runId);
+                return "cancelling";
+            }
+
+            // DB says running but no live CTS — the previous process died mid-run.
+            // Flip the row so the scheduler and UI stop treating it as active.
+            await docRef.UpdateAsync(new Dictionary<string, object>
+            {
+                { "Status",          "cancelled" },
+                { "ErrorMessage",    "Cancelled by user (run was not active in this process)" },
+                { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+            });
+            _logger.LogWarning("Fusion {RunId} marked cancelled (stale running state)", runId);
+            return "stale";
+        }
+
         // ── Trigger ───────────────────────────────────────────────────────────
 
         public FusionRunDto TriggerFusion(
@@ -67,9 +104,21 @@ namespace BetterPlacemaking.Services
             var gcs = _gcs;
             var db  = _db;
             var log = _logger;
+            var reg = _cancelRegistry;
 
             _ = Task.Run(async () =>
             {
+                // Hard timeout on the whole run. When this fires, cts.Token is cancelled,
+                // which FusionRunner observes at every I/O boundary (GCS, Firestore,
+                // ReadLineAsync, Parallel.ForEachAsync) and at the phase checkpoints.
+                using var timeoutCts = new CancellationTokenSource(FusionTimeout);
+                using var userCts    = new CancellationTokenSource();
+                using var linkedCts  = CancellationTokenSource.CreateLinkedTokenSource(
+                    timeoutCts.Token, userCts.Token);
+
+                reg.Register(runId, userCts);
+
+
                 try
                 {
                     var runner = new FusionRunner(gcs, db);
@@ -77,13 +126,16 @@ namespace BetterPlacemaking.Services
                     var fromUtc = DateTimeOffset.FromUnixTimeSeconds((long)fromUnix).UtcDateTime;
                     var toUtc   = DateTimeOffset.FromUnixTimeSeconds((long)toUnix).UtcDateTime;
 
-                    var result = await runner.RunAsync(new FusionRequest
-                    {
-                        From                = fromUtc,
-                        To                  = toUtc,
-                        InputStorageFolder  = projectId != null ? $"vision/tracks-raw/{projectId}"   : null,
-                        OutputStorageFolder = projectId != null ? $"vision/tracks-fused/{projectId}" : null,
-                    });
+                    var result = await runner.RunAsync(
+                        new FusionRequest
+                        {
+                            From                = fromUtc,
+                            To                  = toUtc,
+                            InputStorageFolder  = projectId != null ? $"vision/tracks-raw/{projectId}"   : null,
+                            OutputStorageFolder = projectId != null ? $"vision/tracks-fused/{projectId}" : null,
+                        },
+                        debug: false,
+                        ct: linkedCts.Token);
 
                     if (!result.Success)
                         throw new InvalidOperationException(result.Message);
@@ -104,6 +156,27 @@ namespace BetterPlacemaking.Services
                     });
 
                     log.LogInformation("Fusion {RunId} completed → {Output}", runId, outputKey);
+                }
+                catch (OperationCanceledException) when (userCts.IsCancellationRequested)
+                {
+                    log.LogWarning("Fusion {RunId} cancelled by user", runId);
+                    await docRef.UpdateAsync(new Dictionary<string, object>
+                    {
+                        { "Status",          "cancelled" },
+                        { "ErrorMessage",    "Cancelled by user" },
+                        { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+                    });
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+                {
+                    var msg = $"Fusion timed out after {FusionTimeout.TotalMinutes:0} minutes";
+                    log.LogError("Fusion {RunId} timed out after {Timeout}", runId, FusionTimeout);
+                    await docRef.UpdateAsync(new Dictionary<string, object>
+                    {
+                        { "Status",          "failed" },
+                        { "ErrorMessage",    msg },
+                        { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+                    });
                 }
                 catch (Exception ex)
                 {

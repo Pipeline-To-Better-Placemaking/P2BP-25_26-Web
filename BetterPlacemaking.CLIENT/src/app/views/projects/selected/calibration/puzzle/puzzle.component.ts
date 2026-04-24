@@ -68,7 +68,7 @@ export class PuzzleComponent implements AfterViewInit {
   error: string | null = null;
 
   // ── Dev flag: set to true to use local test images instead of the API ──
-  private readonly HARDCODE_PIECES = true;
+  private readonly HARDCODE_PIECES = false;
 
   private static readonly HARDCODED_CAMERAS = [
     { mac: 'd0:3b:f4:01:52:9a', deviceId: 'dev-hardcoded', img: 'test-puzzle/d0_3b_f4_01_52_9a.jpg', hLocalCanvas: [[478.67059918109902, 93.72391283749289, -776099.94435480505], [-59.532010441440306, 746.25038739208344, -706116.16342598724], [-0.0075507867073095992, 0.11294200201598935, 1.0]] },

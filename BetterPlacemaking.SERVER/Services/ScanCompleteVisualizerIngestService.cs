@@ -57,6 +57,124 @@ public sealed class ScanCompleteVisualizerIngestService
         CancellationToken cancellationToken = default) =>
         TryIngestFromHttpsObjUrlAsync(status, objUrl, cancellationToken);
 
+    /// <summary>
+    /// Returns the raw .xyz bytes for a scan. Prefers Firestore ObjUrl (HTTPS + host allowlist + size cap),
+    /// then falls back to the canonical GCS object at <see cref="CanonicalLidarXyzObjectName"/>.
+    /// Returns null when neither source resolves. Caller owns the returned stream.
+    /// </summary>
+    public async Task<MemoryStream?> DownloadScanXyzAsync(
+        string projectId,
+        string deviceId,
+        Dictionary<string, object>? scan,
+        CancellationToken cancellationToken = default)
+    {
+        if (scan == null || string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
+            return null;
+
+        var scanId = GetStringField(scan, "Id");
+        if (string.IsNullOrWhiteSpace(scanId))
+            return null;
+
+        var objUrl = GetStringField(scan, "ObjUrl");
+        var fromUrl = await TryDownloadXyzFromObjUrlAsync(objUrl, cancellationToken).ConfigureAwait(false);
+        if (fromUrl != null)
+            return fromUrl;
+
+        var objectName = CanonicalLidarXyzObjectName(projectId, deviceId, scanId);
+        var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
+
+        var ms = new MemoryStream();
+        try
+        {
+            await _cloudStorage.DownloadToStreamAsync(objectName, ms, cancellationToken).ConfigureAwait(false);
+            if (ms.Length > maxBytes)
+            {
+                _logger.LogWarning("Scan xyz: GCS object {Object} exceeded size cap.", objectName);
+                await ms.DisposeAsync().ConfigureAwait(false);
+                return null;
+            }
+            ms.Position = 0;
+            return ms;
+        }
+        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogWarning(ex, "Scan xyz: canonical GCS object not found {Object}.", objectName);
+            await ms.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Scan xyz: GCS fallback failed for {Object}.", objectName);
+            await ms.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+    }
+
+    private async Task<MemoryStream?> TryDownloadXyzFromObjUrlAsync(string? objUrl, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(objUrl))
+            return null;
+
+        if (!Uri.TryCreate(objUrl.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            _logger.LogWarning("Scan xyz download skipped: ObjUrl must be an absolute https URL.");
+            return null;
+        }
+
+        if (!IsHostAllowed(uri.Host))
+        {
+            _logger.LogWarning("Scan xyz download skipped: host {Host} not allowlisted.", uri.Host);
+            return null;
+        }
+
+        var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+
+        var ms = new MemoryStream();
+        try
+        {
+            using var response = await client
+                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await ms.DisposeAsync().ConfigureAwait(false);
+                return null;
+            }
+
+            var contentLength = response.Content.Headers.ContentLength;
+            if (contentLength.HasValue && contentLength.Value > maxBytes)
+            {
+                await ms.DisposeAsync().ConfigureAwait(false);
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var buffer = new byte[65536];
+            long total = 0;
+            int read;
+            while ((read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                total += read;
+                if (total > maxBytes)
+                {
+                    await ms.DisposeAsync().ConfigureAwait(false);
+                    return null;
+                }
+                await ms.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+            }
+            ms.Position = 0;
+            return ms;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Scan xyz download failed for ObjUrl host {Host}.", uri.Host);
+            await ms.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+    }
+
     public async Task<ScanIngestAttemptResult> TryIngestCompleteScanForVisualizerAsync(
         string projectId,
         string deviceId,

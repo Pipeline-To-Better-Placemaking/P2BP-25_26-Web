@@ -47,6 +47,16 @@ export class FusionService {
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to download fusion run')));
   }
 
+  cancelRun(runId: string): Observable<{ status: string }> {
+  return this.http
+    .post<{ status: string }>(
+      `${environment.apiBaseUrl}/api/fusion/${runId}/cancel`,
+      {},
+    )
+    .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to cancel fusion run')));
+}
+
+
   getConfig(projectId?: string): Observable<FusionConfigDto> {
     let params = new HttpParams();
     if (projectId) params = params.set('projectId', projectId);

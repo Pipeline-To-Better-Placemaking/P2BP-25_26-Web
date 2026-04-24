@@ -1,0 +1,132 @@
+<div class="flex flex-col gap-4 px-1 pb-1">
+
+  <!-- Title + notes -->
+  <div class="flex flex-col gap-2">
+    <label class="text-sm font-medium">Report title</label>
+    <input pInputText [(ngModel)]="title" placeholder="Default: project title" />
+  </div>
+  <div class="flex flex-col gap-2">
+    <label class="text-sm font-medium">Notes</label>
+    <textarea pInputText rows="2" [(ngModel)]="notes"
+              placeholder="Optional — included under the report header"></textarea>
+  </div>
+
+  <!-- Section toggles -->
+  <div class="flex flex-col gap-2">
+    <span class="text-sm font-semibold">Include sections</span>
+    <div class="flex flex-wrap gap-4">
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="sections.overview" [binary]="true" inputId="s-overview" />
+        <label for="s-overview" class="text-sm">Project Overview</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="sections.devices" [binary]="true" inputId="s-devices" />
+        <label for="s-devices" class="text-sm">Devices</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="sections.schedules" [binary]="true" inputId="s-schedules" />
+        <label for="s-schedules" class="text-sm">Scan Schedules</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="sections.currentPointCloud" [binary]="true" inputId="s-current" />
+        <label for="s-current" class="text-sm">Current Point Cloud</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="sections.scanCaptures" [binary]="true" inputId="s-captures" />
+        <label for="s-captures" class="text-sm">Scan Captures</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan selection panel -->
+  <div *ngIf="sections.scanCaptures" class="flex flex-col gap-3 border rounded p-3"
+       style="border-color: var(--p-content-border-color);">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium">From</label>
+        <p-datepicker [(ngModel)]="dateFrom" (onSelect)="onDateRangeChange()"
+                      [showIcon]="true" [showClear]="true" dateFormat="yy-mm-dd"
+                      placeholder="Any" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium">To</label>
+        <p-datepicker [(ngModel)]="dateTo" (onSelect)="onDateRangeChange()"
+                      [showIcon]="true" [showClear]="true" dateFormat="yy-mm-dd"
+                      placeholder="Any" />
+      </div>
+      <div class="flex flex-wrap gap-2 ml-auto">
+        <p-button *ngFor="let qp of quickPicks" [label]="qp.label" severity="secondary"
+                  size="small" (onClick)="applyQuickPick(qp.key)" />
+      </div>
+    </div>
+
+    <div *ngIf="loadingScans" class="text-sm opacity-70">Loading scans…</div>
+    <div *ngIf="scanLoadError" class="text-sm" style="color: var(--p-red-500);">
+      Failed to load scans for this project.
+    </div>
+
+    <p-table *ngIf="!loadingScans && !scanLoadError"
+             [value]="visibleScans" [(selection)]="selectedScans"
+             [scrollable]="true" scrollHeight="260px" dataKey="Id"
+             styleClass="p-datatable-sm" selectionMode="multiple">
+      <ng-template pTemplate="header">
+        <tr>
+          <th style="width: 3rem;"><p-tableHeaderCheckbox /></th>
+          <th>Device</th>
+          <th>Scan ID</th>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Status</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-scan>
+        <tr>
+          <td><p-tableCheckbox [value]="scan" /></td>
+          <td class="text-sm">{{ scan.DeviceName || scan.DeviceId }}</td>
+          <td class="text-xs font-mono">{{ shortId(scan.Id) }}</td>
+          <td class="text-xs">{{ formatTimestamp(scan.StartedAt) }}</td>
+          <td class="text-xs">{{ formatTimestamp(scan.FinishedAt) }}</td>
+          <td>
+            <p-tag [value]="scan.Status || '—'" [severity]="statusSeverity(scan.Status)" />
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6" class="text-center text-sm opacity-70 py-4">
+            No scans match the current filter.
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+
+    <div class="flex items-center justify-between">
+      <span class="text-xs opacity-70">
+        {{ selectionCount }} of {{ visibleScans.length }} visible scan(s) selected
+      </span>
+      <div class="flex items-center gap-2"
+           pTooltip="Available once flattened-scan calibration lands"
+           tooltipPosition="top">
+        <p-checkbox [(ngModel)]="includeOverlapComposite" [binary]="true"
+                    inputId="s-overlap" [disabled]="true" />
+        <label for="s-overlap" class="text-xs opacity-70">Include overlapped composite image</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="flex items-center justify-between pt-2 border-t"
+       style="border-color: var(--p-content-border-color);">
+    <span *ngIf="generating && progressTotal > 0" class="text-xs opacity-70">
+      Rendering scan {{ progressDone }} of {{ progressTotal }}
+      <span *ngIf="progressLabel"> · {{ shortId(progressLabel) }}</span>
+    </span>
+    <span *ngIf="!generating" class="text-xs opacity-60">PDF generates client-side and downloads directly.</span>
+
+    <div class="flex gap-2">
+      <p-button label="Cancel" severity="secondary" (onClick)="cancel()" [disabled]="generating" />
+      <p-button label="Generate PDF" icon="pi pi-download"
+                (onClick)="generate()" [disabled]="!canGenerate" [loading]="generating" />
+    </div>
+  </div>
+</div>
