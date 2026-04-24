@@ -273,6 +273,13 @@ namespace BetterPlacemaking.Services
                     if (!string.Equals(st, "complete", StringComparison.OrdinalIgnoreCase))
                         continue;
 
+                    // Exclude manually-uploaded calibration XYZ files and combined-scan outputs.
+                    // Those live on the server's local temp filesystem (see ScanCalibrationController)
+                    // and do not have a canonical GCS object at vision/lidar-scans/{pid}/{did}/{sid}.xyz,
+                    // so the visualizer ingest path (ObjUrl/GCS only) cannot load them.
+                    if (IsCalibrationOrCombinedScan(scan))
+                        continue;
+
                     var sortUtc = GetScanFinishedOrCreatedUtc(scan);
                     if (best == null || sortUtc > best.Value.SortUtc)
                         best = (deviceId, scan, sortUtc);
@@ -283,6 +290,28 @@ namespace BetterPlacemaking.Services
                 return null;
 
             return (best.Value.DeviceId, best.Value.Scan);
+        }
+
+        /// <summary>
+        /// Scans written by <c>ScanCalibrationController</c> carry <c>IsUploadedCalibrationScan</c>
+        /// or <c>IsCombinedCalibrationScan</c> and store <c>ObjUrl</c> as a local filesystem path
+        /// (not an HTTPS URL, and not uploaded to GCS). These are unusable by the 3D visualizer
+        /// ingest pipeline and should never be returned as the "latest complete Jetson scan".
+        /// </summary>
+        private static bool IsCalibrationOrCombinedScan(Dictionary<string, object> row)
+        {
+            return GetScanBoolField(row, "IsUploadedCalibrationScan")
+                || GetScanBoolField(row, "IsCombinedCalibrationScan");
+        }
+
+        private static bool GetScanBoolField(Dictionary<string, object> row, string key)
+        {
+            foreach (var k in new[] { key, char.ToLowerInvariant(key[0]) + key[1..] })
+            {
+                if (row.TryGetValue(k, out var v) && v is bool b)
+                    return b;
+            }
+            return false;
         }
 
         private static string? GetScanStringField(Dictionary<string, object> row, string key)

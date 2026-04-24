@@ -218,7 +218,75 @@ public sealed class ScanCompleteVisualizerIngestService
             return ScanIngestAttemptResult.Ok();
         }
 
-        var objectName = CanonicalLidarXyzObjectName(projectId, deviceId, scanId);
+        var canonicalObjectName = CanonicalLidarXyzObjectName(projectId, deviceId, scanId);
+        _logger.LogInformation(
+            "Scan ingest: attempting GCS canonical object {Object} for scan {ScanId}.",
+            canonicalObjectName,
+            scanId);
+
+        // 1) Try the canonical path first.
+        var canonicalAttempt = await DownloadAndIngestGcsObjectAsync(
+            canonicalObjectName,
+            ingestKey,
+            cancellationToken).ConfigureAwait(false);
+        if (canonicalAttempt.Loaded || canonicalAttempt.Reason != "xyz_not_found")
+            return canonicalAttempt;
+
+        // 2) Canonical 404. Scan didn't land at the expected path — list the device folder
+        //    and try (a) a file whose name starts with the scan id, (b) the newest .xyz,
+        //    then fall back to the project-wide folder.
+        var deviceFolder = $"vision/lidar-scans/{projectId.Trim().Trim('/')}/{deviceId.Trim().Trim('/')}";
+        var projectFolder = $"vision/lidar-scans/{projectId.Trim().Trim('/')}";
+
+        var fallbackMatch = await FindMatchingXyzInFolderAsync(deviceFolder, scanId, cancellationToken)
+            .ConfigureAwait(false);
+        if (fallbackMatch == null)
+        {
+            fallbackMatch = await FindMatchingXyzInFolderAsync(projectFolder, scanId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (fallbackMatch != null)
+        {
+            _logger.LogInformation(
+                "Scan ingest: canonical {Canonical} missing; attempting fallback GCS object {Fallback}.",
+                canonicalObjectName,
+                fallbackMatch);
+            var fallbackAttempt = await DownloadAndIngestGcsObjectAsync(
+                fallbackMatch,
+                ingestKey,
+                cancellationToken).ConfigureAwait(false);
+            if (fallbackAttempt.Loaded)
+            {
+                return fallbackAttempt with
+                {
+                    Message = $"Loaded scan from GCS fallback path {fallbackMatch} (canonical {canonicalObjectName} was missing).",
+                };
+            }
+            return fallbackAttempt;
+        }
+
+        _logger.LogWarning(
+            "Scan ingest: no .xyz found under {DeviceFolder} or {ProjectFolder} (canonical was {Canonical}).",
+            deviceFolder,
+            projectFolder,
+            canonicalObjectName);
+
+        return ScanIngestAttemptResult.Fail(
+            "xyz_not_found",
+            $"No reachable .xyz for scan {scanId}. Canonical path '{canonicalObjectName}' is missing and no matching .xyz was found under '{deviceFolder}/' or '{projectFolder}/'.");
+    }
+
+    /// <summary>
+    /// Downloads a single GCS object, parses it as XYZ, and replaces the session point cloud.
+    /// Returns <c>xyz_not_found</c> specifically when the object does not exist (HTTP 404) so
+    /// callers can probe alternate paths.
+    /// </summary>
+    private async Task<ScanIngestAttemptResult> DownloadAndIngestGcsObjectAsync(
+        string objectName,
+        string ingestKey,
+        CancellationToken cancellationToken)
+    {
         var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
         var units = string.IsNullOrWhiteSpace(_options.XyzUnits) ? "m" : _options.XyzUnits!;
         string? tempPath = null;
@@ -232,11 +300,11 @@ public sealed class ScanCompleteVisualizerIngestService
             }
 
             if (new FileInfo(tempPath).Length > maxBytes)
-                return ScanIngestAttemptResult.Fail("file_too_large", "Downloaded object exceeds configured max size.");
+                return ScanIngestAttemptResult.Fail("file_too_large", $"Downloaded object {objectName} exceeds configured max size.");
 
             var points = _xyzParser.ParseXyzFile(tempPath, sensorId: "device-scan", units: units);
             if (points.Count == 0)
-                return ScanIngestAttemptResult.Fail("no_points_parsed", "No valid points in GCS .xyz object.");
+                return ScanIngestAttemptResult.Fail("no_points_parsed", $"No valid points in GCS object {objectName}.");
 
             VisualizerController.ReplaceCurrentPointsFromIngest(points, _fastMesh);
             _logger.LogInformation(
@@ -253,15 +321,15 @@ public sealed class ScanCompleteVisualizerIngestService
         }
         catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
         {
-            _logger.LogWarning(ex, "GCS fallback: object not found {Object}.", objectName);
+            _logger.LogWarning("GCS object not found: {Object}.", objectName);
             return ScanIngestAttemptResult.Fail(
                 "xyz_not_found",
-                "No reachable .xyz (ObjUrl failed or expired, and canonical Storage object is missing).");
+                $"GCS object {objectName} does not exist.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GCS fallback ingest failed for {Object}.", objectName);
-            return ScanIngestAttemptResult.Fail("ingest_error", "Ingest failed; see server logs.");
+            _logger.LogError(ex, "GCS ingest failed for {Object}.", objectName);
+            return ScanIngestAttemptResult.Fail("ingest_error", $"Ingest of {objectName} failed; see server logs.");
         }
         finally
         {
@@ -278,6 +346,64 @@ public sealed class ScanCompleteVisualizerIngestService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Looks for an <c>.xyz</c> file under <paramref name="folder"/> whose basename begins with
+    /// <paramref name="scanId"/>. If no id-match is found, returns the newest <c>.xyz</c> in the
+    /// folder. Returns <c>null</c> when the folder contains no <c>.xyz</c> objects.
+    /// </summary>
+    private async Task<string?> FindMatchingXyzInFolderAsync(
+        string folder,
+        string scanId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<GcsFileInfo> files;
+        try
+        {
+            files = await _cloudStorage.ListFilesAsync(folder, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Scan ingest: failed to list GCS folder {Folder}.", folder);
+            return null;
+        }
+
+        var xyzFiles = files
+            .Where(f => f.StoragePath.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (xyzFiles.Count == 0)
+        {
+            _logger.LogInformation("Scan ingest: no .xyz files under {Folder}.", folder);
+            return null;
+        }
+
+        _logger.LogInformation(
+            "Scan ingest: {Count} .xyz file(s) under {Folder}; newest first: {Names}.",
+            xyzFiles.Count,
+            folder,
+            string.Join(", ", xyzFiles
+                .OrderByDescending(f => f.LastModified)
+                .Take(5)
+                .Select(f => f.StoragePath)));
+
+        // Prefer an exact scanId match (basename starts with the id).
+        var idTrim = scanId.Trim();
+        var idMatch = xyzFiles.FirstOrDefault(f =>
+        {
+            var baseName = System.IO.Path.GetFileNameWithoutExtension(f.StoragePath);
+            return string.Equals(baseName, idTrim, StringComparison.OrdinalIgnoreCase)
+                || baseName.StartsWith(idTrim, StringComparison.OrdinalIgnoreCase);
+        });
+        if (idMatch != null)
+            return idMatch.StoragePath;
+
+        // Otherwise return the most recently modified .xyz under the folder.
+        return xyzFiles
+            .OrderByDescending(f => f.LastModified)
+            .First()
+            .StoragePath;
     }
 
     private async Task<bool> TryIngestFromHttpsObjUrlAsync(
