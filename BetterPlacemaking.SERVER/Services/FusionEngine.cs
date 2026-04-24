@@ -22,18 +22,14 @@ public static class FusionEngineConfig
 
     public const double SimThreshold       = 0.75;
 
-    // World coordinates are in millimetres (homography output).
-    // 8 m/s ≈ fast jogging — anything faster is almost certainly a different person or a vehicle.
-    public const double MaxSpeedWorldPerS  = 4000.0;   // mm / s
 
-    // Hard absolute distance cap between gid endpoint and new track start,
-    // applied independently of the speed/time math. 30 m ≈ across a small plaza.
+    public const double MaxSpeedWorldPerS  = 4000.0;   // mm / s
     public const double MaxJumpFusion      = 15000.0;  // mm
 
     public const double MaxGapMs           = 12000.0;
     public const int    MinTrackPoints     = 8;
     public const double MinDurationS       = 1.0;
-    public const double MaxJumpClean       = 4000.0;   // mm — per-point jump filter
+    public const double MaxJumpClean       = 3000.0;   // mm — per-point jump filter
     public const double DupEps             = 1e-3;
     public const int    SmoothWin          = 2;
 }
@@ -526,7 +522,8 @@ public class FusionFirestoreLoader
         if (!TryParseMatrix3x3Flat(doc, "MatrixFlat", mac, out var matrix))
             return null;
 
-        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = false };
+        doc.TryGetValue("UsedUndistortedImage", out bool usedUndistortedImage);
+        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = usedUndistortedImage };
     }
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
@@ -1053,10 +1050,13 @@ public class FusionRunner
         {
             throw; // let FusionService see the real cancellation and log a clean timeout
         }
-        catch (Exception ex)
+       catch (Exception ex)
         {
-            Console.Error.WriteLine($"[ERROR] {ex.Message}");
-            return new FusionResult { Success = false, Message = ex.Message };
+            Console.Error.WriteLine($"[ERROR] {ex.GetType().FullName}: {ex.Message}");
+            Console.Error.WriteLine(ex.ToString());                  // ← full stack
+            if (ex.InnerException != null)
+                Console.Error.WriteLine("INNER: " + ex.InnerException);
+            return new FusionResult { Success = false, Message = $"{ex.GetType().Name}: {ex.Message}" };
         }
         finally
         {
@@ -1179,24 +1179,43 @@ public class FusionRunner
         await _gcs.UploadFromStreamAsync(storagePath, contentType, fs, ct);
     }
 
-    private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
+   private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
+{
+    long fromMs = new DateTimeOffset(from.ToUniversalTime()).ToUnixTimeMilliseconds();
+    long toMs   = new DateTimeOffset(to.ToUniversalTime()).ToUnixTimeMilliseconds();
+
+    string filteredPath = Path.Combine(tempDir, $"filtered_{Guid.NewGuid()}.jsonl");
+
+    using var reader = new StreamReader(path);
+    using var writer = new StreamWriter(filteredPath);
+
+    string? line;
+    while ((line = reader.ReadLine()) != null)
     {
-        long fromMs = new DateTimeOffset(from.ToUniversalTime()).ToUnixTimeMilliseconds();
-        long toMs   = new DateTimeOffset(to.ToUniversalTime()).ToUnixTimeMilliseconds();
+        if (string.IsNullOrWhiteSpace(line)) continue;
 
-        var filtered = File.ReadLines(path)
-            .Where(line =>
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+
+            // Keep non-track lines (vectors etc.) — they have no "time" field
+            // and must not be filtered out.
+            if (!doc.RootElement.TryGetProperty("time", out var t))
             {
-                if (string.IsNullOrWhiteSpace(line)) return false;
-                using var doc = JsonDocument.Parse(line);
-                return doc.RootElement.TryGetProperty("time", out var t)
-                       && t.GetInt64() >= fromMs
-                       && t.GetInt64() <= toMs;
-            })
-            .ToList();
+                writer.WriteLine(line);
+                continue;
+            }
 
-        string filteredPath = Path.Combine(tempDir, $"filtered_{Guid.NewGuid()}.jsonl");
-        File.WriteAllLines(filteredPath, filtered);
-        return filteredPath;
+            long time = t.GetInt64();
+            if (time >= fromMs && time <= toMs)
+                writer.WriteLine(line);
+        }
+        catch (JsonException)
+        {
+            // Skip malformed lines rather than abort the whole run.
+        }
     }
+
+    return filteredPath;
+}
 }
