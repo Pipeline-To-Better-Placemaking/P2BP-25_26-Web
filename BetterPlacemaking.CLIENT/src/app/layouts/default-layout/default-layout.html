@@ -21,10 +21,18 @@
         <nav class="px-3 mb-7 mt-3">
           <p-menu [model]="navItems">
             <ng-template #item let-item>
-              <a [routerLink]="item.routerLink" class="p-menu-item-link">
-                <fa-icon [icon]="item.faIcon"></fa-icon>
-                <span>{{ item.label }}</span>
-              </a>
+              <ng-container
+                *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
+              >
+                <a
+                  [routerLink]="item.routerLink || null"
+                  class="p-menu-item-link"
+                  (click)="handleMenuItemClick($event, item)"
+                >
+                  <fa-icon [icon]="item.faIcon"></fa-icon>
+                  <span>{{ item.label }}</span>
+                </a>
+              </ng-container>
             </ng-template>
           </p-menu>
         </nav>
@@ -34,10 +42,18 @@
         <nav class="px-3 mb-7">
           <p-menu [model]="navItemsIfSelected">
             <ng-template #item let-item>
-              <a [routerLink]="item.routerLink" class="p-menu-item-link">
-                <fa-icon [icon]="item.faIcon"></fa-icon>
-                <span>{{ item.label }}</span>
-              </a>
+              <ng-container
+                *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
+              >
+                <a
+                  [routerLink]="item.routerLink || null"
+                  class="p-menu-item-link"
+                  (click)="handleMenuItemClick($event, item)"
+                >
+                  <fa-icon [icon]="item.faIcon"></fa-icon>
+                  <span>{{ item.label }}</span>
+                </a>
+              </ng-container>
             </ng-template>
           </p-menu>
         </nav>
@@ -47,10 +63,18 @@
         <nav class="px-3 mb-7">
           <p-menu [model]="navItemsAdmin">
             <ng-template #item let-item>
-              <a [routerLink]="item.routerLink" class="p-menu-item-link">
-                <fa-icon [icon]="item.faIcon"></fa-icon>
-                <span>{{ item.label }}</span>
-              </a>
+              <ng-container
+                *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
+              >
+                <a
+                  [routerLink]="item.routerLink || null"
+                  class="p-menu-item-link"
+                  (click)="handleMenuItemClick($event, item)"
+                >
+                  <fa-icon [icon]="item.faIcon"></fa-icon>
+                  <span>{{ item.label }}</span>
+                </a>
+              </ng-container>
             </ng-template>
           </p-menu>
         </nav>

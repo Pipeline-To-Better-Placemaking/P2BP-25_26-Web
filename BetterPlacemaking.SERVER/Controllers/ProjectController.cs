@@ -1,6 +1,7 @@
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,7 +30,7 @@ namespace BetterPlacemaking.Controllers
         };
 
         [HttpGet]
-        [AllowAnonymous]
+        [RequirePermission(Permissions.Global.Projects.ReadAll)]
         public IActionResult GetProjects()
         {
             var projects = _projectService.GetAll();
@@ -39,7 +40,7 @@ namespace BetterPlacemaking.Controllers
 
 
         [HttpGet("{id}")]
-        [AllowAnonymous]
+        [RequirePermission(Permissions.Project.Read)]
         public IActionResult GetProject([FromRoute] string id)
         {
             var project = _projectService.GetById(id);
@@ -52,7 +53,7 @@ namespace BetterPlacemaking.Controllers
         }
 
         [HttpPost]
-        [AllowAnonymous]
+        [RequirePermission(Permissions.Global.Projects.Create)]
         public IActionResult CreateProject([FromBody] ProjectRequest request)
         {
             var project = new Project
@@ -68,7 +69,7 @@ namespace BetterPlacemaking.Controllers
         }
 
         [HttpPut("{id}")]
-        [AllowAnonymous]
+        [RequirePermission(Permissions.Project.Update)]
         public IActionResult UpdateProject(string id, [FromBody] Project request)
         {
             if (request == null)
@@ -84,7 +85,7 @@ namespace BetterPlacemaking.Controllers
         }
 
         [HttpDelete("{id}")]
-        [AllowAnonymous]
+        [RequirePermission(Permissions.Project.Delete)]
         public IActionResult DeleteProject(string id)
         {
             var success = _projectService.Delete(id);

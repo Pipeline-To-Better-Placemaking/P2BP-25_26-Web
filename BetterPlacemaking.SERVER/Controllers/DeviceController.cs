@@ -2,6 +2,7 @@ using BetterPlacemaking.Models;
 using BetterPlacemaking.Models.Dtos;
 using BetterPlacemaking.Models.JetsonDTOs;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Authorization;
 using Google.Cloud.Firestore;
 
 using Microsoft.AspNetCore.Authorization;
@@ -32,7 +33,7 @@ namespace BetterPlacemaking.Controllers
         }
 
 		[HttpGet("project/{projectId}")]
-		[Authorize(Policy = "UserJwt")]
+		[RequirePermission(Permissions.Project.DevicesRead)]
 		public IActionResult GetDevicesByProject([FromRoute] string projectId)
 		{
 			if (string.IsNullOrWhiteSpace(projectId))
@@ -50,15 +51,19 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-        [HttpGet("{id}")]
-		[Authorize(Policy = "UserJwt")]
-        public IActionResult GetDevice(string id)
+		[HttpGet("project/{projectId}/{id}")]
+		[RequirePermission(Permissions.Project.DevicesRead)]
+		public IActionResult GetDevice(string projectId, string id)
         {
             try
             {
 				Device? device = _deviceService.GetDevice(id);
 				if (device == null)
                     return NotFound();
+
+				if (!string.Equals(device.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+					return NotFound();
+
 				return Ok(ToDto(device));
             }
             catch (Exception)
@@ -67,17 +72,22 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
-		[HttpPost]
-		[Authorize(Policy = "UserJwt")]
-		public IActionResult AddDevice([FromBody] DeviceDto deviceDto)
+		[HttpPost("project/{projectId}")]
+		[RequirePermission(Permissions.Project.DevicesManage)]
+		public IActionResult AddDevice([FromRoute] string projectId, [FromBody] DeviceDto deviceDto)
 		{
 			if (deviceDto == null)
 				return BadRequest();
 
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest();
+
+			deviceDto.ProjectId = projectId;
+
 			try
 			{
 				var created = _deviceService.AddDevice(FromDto(deviceDto));
-				return CreatedAtAction(nameof(GetDevice), new { id = created?.Id }, ToDto(created!));
+				return CreatedAtAction(nameof(GetDevice), new { projectId, id = created?.Id }, ToDto(created!));
 			}
 			catch (Exception)
 			{
@@ -85,15 +95,27 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-		[HttpPut("{id}")]
-		[Authorize(Policy = "UserJwt")]
-		public IActionResult UpdateDevice(string id, [FromBody] DeviceDto deviceDto)
+		[HttpPut("project/{projectId}/{id}")]
+		[RequirePermission(Permissions.Project.DevicesManage)]
+		public IActionResult UpdateDevice(string projectId, string id, [FromBody] DeviceDto deviceDto)
 		{
 			if (deviceDto == null || id != deviceDto.Id)
 				return BadRequest();
 
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest();
+
+			deviceDto.ProjectId = projectId;
+
 			try
 			{
+				var existing = _deviceService.GetDevice(id);
+				if (existing == null)
+					return NotFound();
+
+				if (!string.Equals(existing.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+					return NotFound();
+
 				var updated = _deviceService.UpdateDevice(id, FromDto(deviceDto));
 				if (updated == null)
 					return NotFound();
@@ -105,12 +127,19 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-		[HttpDelete("{id}")]
-		[Authorize(Policy = "UserJwt")]
-		public IActionResult DeleteDevice(string id)
+		[HttpDelete("project/{projectId}/{id}")]
+		[RequirePermission(Permissions.Project.DevicesManage)]
+		public IActionResult DeleteDevice(string projectId, string id)
 		{
 			try
 			{
+				var existing = _deviceService.GetDevice(id);
+				if (existing == null)
+					return NotFound();
+
+				if (!string.Equals(existing.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+					return NotFound();
+
 				var deleted = _deviceService.DeleteDevice(id);
 				if (!deleted)
 					return NotFound();
@@ -147,12 +176,19 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-		[HttpPost("{id}/apikey")]
-		[Authorize(Policy = "UserJwt")]
-		public IActionResult GenerateApiKey(string id)
+		[HttpPost("project/{projectId}/{id}/apikey")]
+		[RequirePermission(Permissions.Project.DevicesManage)]
+		public IActionResult GenerateApiKey(string projectId, string id)
 		{
 			try
 			{
+				var existing = _deviceService.GetDevice(id);
+				if (existing == null)
+					return NotFound();
+
+				if (!string.Equals(existing.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+					return NotFound();
+
 				var apiKey = _deviceService.GenerateAndUpdateApiKey(id);
 				if (apiKey == null)
 					return NotFound();

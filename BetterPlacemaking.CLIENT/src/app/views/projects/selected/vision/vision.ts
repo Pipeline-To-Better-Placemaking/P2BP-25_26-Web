@@ -22,6 +22,7 @@ import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-
 import { interval, Subject } from 'rxjs';
 import { takeUntil, startWith } from 'rxjs/operators';
 import { VisionTutorialComponent } from './vision-tutorial/vision-tutorial';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
@@ -52,6 +53,7 @@ export interface CameraEntry {
     TooltipModule,
     DynamicDialogModule,
     VisionTutorialComponent,
+    PermissionDirective,
   ],
   templateUrl: './vision.html',
   styleUrls: ['./vision.scss'],
@@ -130,9 +132,9 @@ export class Vision implements OnInit, OnDestroy {
   }
 
   private loadDevices(): void {
-    this.deviceService.getDevices().subscribe({
+    this.deviceService.getDevicesByProject(this.projectId).subscribe({
       next: (all) => {
-        this.devices = all.filter((d) => d.ProjectId === this.projectId);
+        this.devices = all;
         this.loading = false;
         this.checkLocalHomographies();
       },
@@ -480,7 +482,7 @@ export class Vision implements OnInit, OnDestroy {
       modal: true,
       dismissableMask: true,
       closable: true,
-      data: {},
+      data: { projectId: this.projectId },
     });
     if (!ref) return;
 
@@ -542,6 +544,7 @@ export class Vision implements OnInit, OnDestroy {
       closable: true,
       data: {
         board,
+        projectId: this.projectId,
         onBoardUpdated: () => this.loadBoardLibrary(),
       },
     });

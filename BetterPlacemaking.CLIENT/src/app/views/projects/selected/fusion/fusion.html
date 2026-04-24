@@ -1,5 +1,5 @@
 
-<div class="fusion-page">
+<div *hasPermission="'Project.Scans.Read'; projectId: projectId" class="fusion-page">
 
   <div class="fusion-header">
     <div>
@@ -8,11 +8,13 @@
     </div>
     <div style="display:flex; gap:0.5rem; align-items:center;">
       <p-button
+        *hasPermission="'Project.ScanSchedules.Manage'; projectId: projectId"
         label="Change Auto-Fusion Time"
         icon="pi pi-clock"
         severity="secondary"
         (onClick)="openScheduleDialog()" />
       <p-button
+        *hasPermission="'Project.Scans.Start'; projectId: projectId"
         label="Run Manual Fusion"
         icon="pi pi-play"
         (onClick)="openFusionModal()"
@@ -84,7 +86,12 @@
       <i class="pi pi-database fusion-empty-icon"></i>
       <div class="fusion-empty-title">No fusion runs yet</div>
       <div class="fusion-empty-text">Click "Run Manual Fusion" above to start one.</div>
-      <p-button label="Run Manual Fusion" icon="pi pi-play" severity="secondary" (onClick)="openFusionModal()" />
+      <p-button
+        *hasPermission="'Project.Scans.Start'; projectId: projectId"
+        label="Run Manual Fusion"
+        icon="pi pi-play"
+        severity="secondary"
+        (onClick)="openFusionModal()" />
     </div>
 
     <p-table
@@ -126,38 +133,44 @@
           <td><p-tag severity="secondary" [value]="run.TriggeredBy | titlecase" /></td>
           <td>
             <div class="fusion-run-right">
-              <p-button
-                *ngIf="run.Status === 'running'"
-                icon="pi pi-stop-circle"
-                severity="warn"
-                size="small"
-                [loading]="cancellingRunId === run.Id"
-                pTooltip="Stop this fusion run"
-                tooltipPosition="top"
-                [text]="true"
-                (onClick)="cancelRun(run, $event)" />
+              <ng-container *hasPermission="'Project.Scans.Start'; projectId: projectId">
+                <p-button
+                  *ngIf="run.Status === 'running'"
+                  icon="pi pi-stop-circle"
+                  severity="warn"
+                  size="small"
+                  [loading]="cancellingRunId === run.Id"
+                  pTooltip="Stop this fusion run"
+                  tooltipPosition="top"
+                  [text]="true"
+                  (onClick)="cancelRun(run, $event)" />
+              </ng-container>
 
-              <p-button
-                *ngIf="run.Status === 'success' && run.OutputGcsPath"
-                icon="pi pi-download"
-                severity="secondary"
-                size="small"
-                [loading]="downloadingRunId === run.Id"
-                pTooltip="Download fused data (JSON)"
-                tooltipPosition="top"
-                [text]="true"
-                (onClick)="downloadRun(run, $event)" />
+              <ng-container *hasPermission="'Project.Export'; projectId: projectId">
+                <p-button
+                  *ngIf="run.Status === 'success' && run.OutputGcsPath"
+                  icon="pi pi-download"
+                  severity="secondary"
+                  size="small"
+                  [loading]="downloadingRunId === run.Id"
+                  pTooltip="Download fused data (JSON)"
+                  tooltipPosition="top"
+                  [text]="true"
+                  (onClick)="downloadRun(run, $event)" />
+              </ng-container>
 
-              <p-button
-                *ngIf="run.Status !== 'running' && run.Status !== 'cancelling'"
-                icon="pi pi-trash"
-                severity="danger"
-                size="small"
-                [loading]="deletingRunId === run.Id"
-                pTooltip="Delete this run"
-                tooltipPosition="top"
-                [text]="true"
-                (onClick)="deleteRun(run, $event)" />
+              <ng-container *hasPermission="'Project.Scans.Delete'; projectId: projectId">
+                <p-button
+                  *ngIf="run.Status !== 'running' && run.Status !== 'cancelling'"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  size="small"
+                  [loading]="deletingRunId === run.Id"
+                  pTooltip="Delete this run"
+                  tooltipPosition="top"
+                  [text]="true"
+                  (onClick)="deleteRun(run, $event)" />
+              </ng-container>
             </div>
           </td>
         </tr>
@@ -200,6 +213,7 @@
         [text]="true"
         (onClick)="scheduleDialogVisible = false" />
       <p-button
+        *hasPermission="'Project.ScanSchedules.Manage'; projectId: projectId"
         label="Save Time"
         icon="pi pi-check"
         [loading]="scheduleDialogSaving"

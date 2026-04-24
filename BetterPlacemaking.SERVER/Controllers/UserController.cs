@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using BetterPlacemaking.Models.Dtos;
+using BetterPlacemaking.Authorization;
 
 namespace BetterPlacemaking.Controllers
 {
@@ -137,6 +138,45 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
+		[HttpGet("me/permissions")]
+		public IActionResult GetMyGlobalPermissions()
+		{
+			try
+			{
+				var userId = ResolveCurrentUserId();
+				if (string.IsNullOrWhiteSpace(userId))
+					return Unauthorized("Missing user id claim.");
+
+				var permissions = _userService.GetEffectiveGlobalPermissions(userId);
+				return Ok(permissions);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving global permissions.");
+			}
+		}
+
+		[HttpGet("me/permissions/{projectId}")]
+		public IActionResult GetMyProjectPermissions([FromRoute] string projectId)
+		{
+			if (string.IsNullOrWhiteSpace(projectId))
+				return BadRequest("ProjectId is required.");
+
+			try
+			{
+				var userId = ResolveCurrentUserId();
+				if (string.IsNullOrWhiteSpace(userId))
+					return Unauthorized("Missing user id claim.");
+
+				var permissions = _userService.GetEffectiveProjectPermissions(userId, projectId);
+				return Ok(permissions);
+			}
+			catch (Exception)
+			{
+				return Problem("An unexpected error occurred while retrieving project permissions.");
+			}
+		}
+
 		[HttpGet("project-roles/options")]
 		public IActionResult GetProjectRoleOptions()
 		{
@@ -166,6 +206,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpPut("project-roles")]
+		[RequirePermission(Permissions.Global.Users.ManageGlobalRoles)]
 		public IActionResult SetProjectRoles([FromBody] UserProjectRoleAssignmentsUpdateDto request)
 		{
 			if (request == null || string.IsNullOrWhiteSpace(request.UserId))
@@ -203,6 +244,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpPut("project-roles/project/{projectId}")]
+		[RequirePermission(Permissions.Project.MembersAssignEditorViewer)]
 		public IActionResult SetProjectRoleForProject([FromRoute] string projectId, [FromBody] ProjectMemberRoleUpdateDto request)
 		{
 			if (string.IsNullOrWhiteSpace(projectId))

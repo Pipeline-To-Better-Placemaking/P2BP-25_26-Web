@@ -1,4 +1,5 @@
 using BetterPlacemaking.Services.Rplidar;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Numerics;
 using IOPath = System.IO.Path;
@@ -11,6 +12,7 @@ namespace BetterPlacemaking.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/rplidar")]
+[Authorize(Policy = "UserJwt")]
 public class RplidarController : ControllerBase
 {
     private readonly RplidarScanService _scanService;

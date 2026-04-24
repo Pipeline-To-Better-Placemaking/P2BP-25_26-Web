@@ -1,4 +1,4 @@
-<div class="fusion-page">
+<div *hasPermission="'Project.Scans.Read'; projectId: projectId" class="fusion-page">
 
   <div class="fusion-header">
     <div>
@@ -8,6 +8,7 @@
 
     <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap: wrap;">
       <p-button
+        *hasPermission="'Project.Scans.Start'; projectId: projectId"
         label="Reset to Base"
         icon="pi pi-refresh"
         severity="secondary"
@@ -16,6 +17,7 @@
       </p-button>
 
       <p-button
+        *hasPermission="'Project.Scans.Start'; projectId: projectId"
         label="Perform Scan"
         icon="pi pi-play"
         [loading]="scanning"
@@ -24,6 +26,7 @@
       </p-button>
 
       <p-button
+        *hasPermission="'Project.Update'; projectId: projectId"
         label="LiDAR Calibration"
         icon="pi pi-compass"
         severity="secondary"
@@ -93,7 +96,7 @@
     </div>
   </div>
 
-  <div class="fusion-history-card">
+  <div *hasPermission="'Project.Scans.Start'; projectId: projectId" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan Settings</span>
       <span class="fusion-history-subtitle">Current request configuration</span>
@@ -228,7 +231,7 @@
     </div>
   </div>
 
-  <div class="fusion-history-card">
+  <div *hasPermission="'Project.ScanSchedules.Read'; projectId: projectId" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan Scheduling</span>
       <span class="fusion-history-subtitle">Create and manage recurring scan jobs</span>
@@ -280,6 +283,7 @@
 
     <div class="fusion-actions-row">
       <p-button
+        *hasPermission="'Project.ScanSchedules.Manage'; projectId: projectId"
         [label]="editingScheduleId ? 'Update Schedule' : 'Schedule Scan'"
         [icon]="editingScheduleId ? 'pi pi-check' : 'pi pi-calendar-plus'"
         (onClick)="scheduleScan()">
@@ -321,6 +325,7 @@
           <td>
             <div class="fusion-run-right">
               <p-button
+                *hasPermission="'Project.ScanSchedules.Manage'; projectId: projectId"
                 icon="pi pi-pencil"
                 severity="secondary"
                 size="small"
@@ -329,6 +334,7 @@
               </p-button>
 
               <p-button
+                *hasPermission="'Project.ScanSchedules.Manage'; projectId: projectId"
                 icon="pi pi-times"
                 severity="danger"
                 size="small"
@@ -342,7 +348,7 @@
     </p-table>
   </div>
 
-  <div class="fusion-history-card">
+  <div *hasPermission="'Project.Update'; projectId: projectId" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">LiDAR Calibration</span>
       <span class="fusion-history-subtitle">Use the shared floorplan library and open calibration in a popout</span>
@@ -439,7 +445,7 @@
     </div>
   </div>
 
-  <div class="fusion-history-card">
+  <div *hasPermission="'Project.Scans.Read'; projectId: projectId" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">Scan History</span>
       <span class="fusion-history-subtitle">Recent LiDAR runs</span>
@@ -494,28 +500,32 @@
           </td>
           <td>
             <div class="fusion-run-right">
-              <a
-                *ngIf="scan.ObjUrl"
-                [href]="scan.ObjUrl"
-                target="_blank"
-                rel="noopener noreferrer">
-                <p-button
-                  icon="pi pi-download"
-                  severity="secondary"
-                  size="small"
-                  [text]="true">
-                </p-button>
-              </a>
+              <ng-container *hasPermission="'Project.Export'; projectId: projectId">
+                <a
+                  *ngIf="scan.ObjUrl"
+                  [href]="scan.ObjUrl"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <p-button
+                    icon="pi pi-download"
+                    severity="secondary"
+                    size="small"
+                    [text]="true">
+                  </p-button>
+                </a>
+              </ng-container>
 
-              <p-button
-                *ngIf="scan.Id"
-                icon="pi pi-trash"
-                severity="danger"
-                size="small"
-                [text]="true"
-                [loading]="deletingScanId === scan.Id"
-                (onClick)="deleteScan(scan)">
-              </p-button>
+              <ng-container *hasPermission="'Project.Scans.Delete'; projectId: projectId">
+                <p-button
+                  *ngIf="scan.Id"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  size="small"
+                  [text]="true"
+                  [loading]="deletingScanId === scan.Id"
+                  (onClick)="deleteScan(scan)">
+                </p-button>
+              </ng-container>
             </div>
           </td>
         </tr>

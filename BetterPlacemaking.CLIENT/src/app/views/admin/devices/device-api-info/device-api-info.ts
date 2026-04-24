@@ -13,6 +13,7 @@ import { DeviceService } from '../../../../services/device-service';
 })
 export class DeviceApiInfo {
   public deviceId: string | null = null;
+  public projectId: string | null = null;
   public apiKey: string | null = null;
   public isLoading = false;
   public copied = false;
@@ -24,10 +25,11 @@ export class DeviceApiInfo {
     private readonly config: DynamicDialogConfig
   ) {
     this.deviceId = (this.config.data as { deviceId?: string } | undefined)?.deviceId ?? null;
+    this.projectId = (this.config.data as { projectId?: string } | undefined)?.projectId ?? null;
   }
 
   public generateApiKey(): void {
-    if (!this.deviceId || this.isLoading) {
+    if (!this.deviceId || !this.projectId || this.isLoading) {
       return;
     }
 
@@ -36,7 +38,7 @@ export class DeviceApiInfo {
     this.apiKey = null;
     this.copied = false;
 
-    this.deviceService.getApiKey(this.deviceId).subscribe({
+    this.deviceService.getApiKey(this.projectId, this.deviceId).subscribe({
       next: (key) => {
         this.apiKey = key;
         this.isLoading = false;

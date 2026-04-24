@@ -1,4 +1,4 @@
-<div class="puzzle-container" tabindex="0" (keydown)="onKeyDown($event)">
+<div *hasPermission="'Project.Read'; projectId: projectId" class="puzzle-container" tabindex="0" (keydown)="onKeyDown($event)">
   <!-- Calibration banner -->
   <div *ngIf="mode === 'calibrate'" class="calibration-banner">
     <div class="cal-steps">
@@ -21,7 +21,13 @@
             (keydown.enter)="finishCalibration()"
             placeholder="e.g. 7391"
           />
-          <button type="button" (click)="finishCalibration()">Confirm</button>
+          <button
+            *hasPermission="'Project.Update'; projectId: projectId"
+            type="button"
+            (click)="finishCalibration()"
+          >
+            Confirm
+          </button>
         </div>
       </div>
     </div>
@@ -41,7 +47,11 @@
     <span>Rot: {{ layers[selectedIndex]?.angleDeg?.toFixed(1) }}°</span>
     <span>Scale: {{ layers[selectedIndex]?.scale?.toFixed(3) }}</span>
     <span *ngIf="saveError" class="save-error">{{ saveError }}</span>
-    <p-button label="Save" [loading]="saving" (onClick)="save()" />
+    <p-button
+      *hasPermission="'Project.Update'; projectId: projectId"
+      label="Save"
+      [loading]="saving"
+      (onClick)="save()" />
   </div>
 
   <!-- Controls panel -->

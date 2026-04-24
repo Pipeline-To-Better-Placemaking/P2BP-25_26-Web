@@ -17,6 +17,7 @@ import {
   ApiUser,
   ProjectMemberRoleDto,
 } from '../../../services/users-service';
+import { PermissionDirective } from '../../../directives/permission.directive';
 
 interface SelectOption {
   label: string;
@@ -35,7 +36,7 @@ type UserSelection = SelectOption | string | null;
 @Component({
   selector: 'app-project-permissions',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableModule, DialogModule, ConfirmDialogModule, AutoCompleteModule, SelectModule, ButtonModule, ToastModule],
+  imports: [CommonModule, FormsModule, TableModule, DialogModule, ConfirmDialogModule, AutoCompleteModule, SelectModule, ButtonModule, ToastModule, PermissionDirective],
   templateUrl: './project-permissions.html',
   styleUrls: ['./project-permissions.scss'],
 })

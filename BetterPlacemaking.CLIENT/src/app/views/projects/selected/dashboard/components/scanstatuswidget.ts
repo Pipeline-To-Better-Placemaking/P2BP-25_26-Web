@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 @Component({
   standalone: true,
   selector: 'app-scan-status-widget',
-  imports: [CommonModule, ButtonModule],
+  imports: [CommonModule, ButtonModule, PermissionDirective],
   template: `
     <div class="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
 
@@ -45,6 +46,7 @@ import { ButtonModule } from 'primeng/button';
 
       <div class="mt-6">
         <p-button
+          *hasPermission="'Project.Scans.Start'; projectId: projectId"
           label="Run Full Scan"
           icon="pi pi-search"
           styleClass="w-full"
@@ -62,6 +64,7 @@ import { ButtonModule } from 'primeng/button';
 export class ScanStatusWidget {
   @Input({ required: true }) lastScanTime!: Date;
   @Input({ required: true }) formatTimeAgoFn!: (date: Date) => string;
+  @Input() projectId: string | null = null;
 
   @Input() scanLoading = false;
   @Input() scanMessage: string | null = null;

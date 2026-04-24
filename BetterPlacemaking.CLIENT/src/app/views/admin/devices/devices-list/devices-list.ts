@@ -11,10 +11,11 @@ import { MenuItem } from 'primeng/api';
 import { DeviceApiInfo } from '../device-api-info/device-api-info';
 import { DeviceHealthReport } from '../device-health-report/device-health-report';
 import { ActivatedRoute } from '@angular/router';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 @Component({
   selector: 'app-devices-list',
-  imports: [TableModule, ButtonModule, MenuModule],
+  imports: [TableModule, ButtonModule, MenuModule, PermissionDirective],
   providers: [DialogService],
   templateUrl: './devices-list.html',
   styleUrl: './devices-list.scss',
@@ -99,15 +100,6 @@ export class DevicesList implements OnInit {
         },
       },
       {
-        label: 'Health Report',
-        icon: 'pi pi-heart',
-        command: () => {
-          if (this.selectedDevice) {
-            this.openHealthReport(this.selectedDevice);
-          }
-        },
-      },
-      {
         label: 'Delete',
         icon: 'pi pi-trash',
         command: () => {
@@ -128,7 +120,7 @@ export class DevicesList implements OnInit {
     ];
   }
 
-  private openHealthReport(device: DeviceDto): void {
+  public openHealthReport(device: DeviceDto): void {
     this.healthReportRef = this.dialogService.open(DeviceHealthReport, {
       header: `Health Report${device?.Name ? ` - ${device.Name}` : ''}`,
       width: '70vw',
@@ -149,7 +141,7 @@ export class DevicesList implements OnInit {
       header: 'Device API Key',
       width: '450px',
       modal: true,
-      data: { deviceId: id },
+      data: { deviceId: id, projectId: this.scopedProjectId ?? null },
       dismissableMask: true,
       closable: true,
     });
@@ -222,7 +214,13 @@ export class DevicesList implements OnInit {
       return;
     }
 
-    this.deviceService.deleteDevice(device.Id).subscribe({
+    const projectId = device.ProjectId ?? this.scopedProjectId;
+    if (!projectId) {
+      console.error('Cannot delete device without project id');
+      return;
+    }
+
+    this.deviceService.deleteDevice(projectId, device.Id).subscribe({
       next: () => {
         this.loadDevices();
       },
