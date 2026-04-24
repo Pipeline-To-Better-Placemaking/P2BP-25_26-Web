@@ -28,5 +28,8 @@ namespace BetterPlacemaking.Models.Homography
 
         [FirestoreProperty]
         public Timestamp ComputedAt { get; set; }
+
+        [FirestoreProperty]
+        public bool UsedUndistortedImage { get; set; }
     }
 }

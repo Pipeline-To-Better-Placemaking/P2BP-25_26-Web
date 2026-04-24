@@ -522,7 +522,8 @@ public class FusionFirestoreLoader
         if (!TryParseMatrix3x3Flat(doc, "MatrixFlat", mac, out var matrix))
             return null;
 
-        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = false };
+        doc.TryGetValue("UsedUndistortedImage", out bool usedUndistortedImage);
+        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = usedUndistortedImage };
     }
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)

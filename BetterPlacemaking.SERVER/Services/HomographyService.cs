@@ -397,6 +397,7 @@ namespace BetterPlacemaking.Services
                 CameraMac = mac,
                 Matrix = FromMatrix3x3(hLocked),
                 ComputedAt = Timestamp.GetCurrentTimestamp(),
+                UsedUndistortedImage = localH.UsedUndistortedImage ?? false,
             }).Wait();
             return 1;
         }
