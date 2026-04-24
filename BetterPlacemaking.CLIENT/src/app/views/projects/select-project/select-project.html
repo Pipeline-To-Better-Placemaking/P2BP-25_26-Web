@@ -1,4 +1,4 @@
-<div class="w-full flex flex-col content-background rounded-lg">
+<div *hasPermission="'Global.Projects.ReadAll'" class="w-full flex flex-col content-background rounded-lg">
   <p-table [value]="projects" class="rounded-lg overflow-hidden">
 
     <ng-template #caption>
@@ -24,7 +24,15 @@
         <td>{{ project.Description }}</td>
         <td>{{ project.Location }}</td>
         <td>
-          <a pButton type="button" class="p-button-sm p-button-outlined" [routerLink]="['/', project.Id]">Open</a>
+          <a
+            *hasPermission="'Project.Read'; projectId: project.Id"
+            pButton
+            type="button"
+            class="p-button-sm p-button-outlined"
+            [routerLink]="['/', project.Id]"
+          >
+            Open
+          </a>
         </td>
       </tr>
     </ng-template>

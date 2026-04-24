@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
 using BetterPlacemaking.Services;
+using BetterPlacemaking.Authorization;
 
 namespace BetterPlacemaking.Controllers;
 
@@ -14,6 +15,7 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
     private readonly ScanScheduleService _scheduleService = scheduleService;
 
     [HttpPost("{projectId}")]
+    [RequirePermission(Permissions.Project.ScanSchedulesManage)]
     public IActionResult Create(string projectId, [FromBody] ScanSchedule schedule)
     {
         try
@@ -29,6 +31,7 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
     }
 
     [HttpGet("{projectId}")]
+    [RequirePermission(Permissions.Project.ScanSchedulesRead)]
     public IActionResult GetAll(string projectId)
     {
         try
@@ -43,6 +46,7 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
     }
 
     [HttpDelete("{projectId}/{scheduleId}")]
+    [RequirePermission(Permissions.Project.ScanSchedulesManage)]
     public IActionResult Delete(string projectId, string scheduleId)
     {
         try
@@ -57,6 +61,7 @@ public class ScanScheduleController(ScanScheduleService scheduleService) : Contr
     }
 
     [HttpPut("{projectId}/{scheduleId}")]
+    [RequirePermission(Permissions.Project.ScanSchedulesManage)]
     public IActionResult Update(string projectId, string scheduleId, [FromBody] ScanSchedule schedule)
     {
         try

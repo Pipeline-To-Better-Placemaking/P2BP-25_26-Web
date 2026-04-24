@@ -1,4 +1,7 @@
-<div class="w-full flex flex-col content-background rounded-lg">
+<div
+  *hasPermission="'Project.Members.AssignEditorViewer'; projectId: projectId"
+  class="w-full flex flex-col content-background rounded-lg"
+>
   <p-toast key="projectPermissions" position="bottom-right"></p-toast>
   <p-confirmDialog></p-confirmDialog>
 

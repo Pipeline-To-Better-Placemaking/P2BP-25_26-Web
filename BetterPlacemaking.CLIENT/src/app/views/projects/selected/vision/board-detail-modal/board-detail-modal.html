@@ -55,11 +55,13 @@
               [loading]="downloading"
               [disabled]="!board || deleting || editing"
               (onClick)="downloadPdf()" />
-    <p-button label="Edit" icon="pi pi-pencil" severity="secondary"
+    <p-button *hasPermission="'Project.Update'; projectId: projectId"
+              label="Edit" icon="pi pi-pencil" severity="secondary"
               [loading]="editing"
               [disabled]="!board || deleting || downloading"
               (onClick)="editBoard()" />
-    <p-button label="Delete" icon="pi pi-trash" severity="danger"
+    <p-button *hasPermission="'Project.Update'; projectId: projectId"
+              label="Delete" icon="pi pi-trash" severity="danger"
               [loading]="deleting"
               [disabled]="!board || editing || downloading"
               (onClick)="deleteBoard()" />

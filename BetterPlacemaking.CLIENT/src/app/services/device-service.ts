@@ -26,34 +26,40 @@ export class DeviceService {
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load project devices')));
   }
 
-  public getDevice(id: string): Observable<DeviceDto> {
-  return this.http
-    .get<DeviceDto>(`${environment.apiBaseUrl}/api/device/${id}`)
-    .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load device')));
+  public getDevice(projectId: string | null | undefined, id: string): Observable<DeviceDto> {
+    return this.http
+      .get<DeviceDto>(`${environment.apiBaseUrl}/api/device/project/${projectId}/${id}`)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load device')));
   }
 
   public addDevice(device: DeviceDto): Observable<DeviceDto> {
-  return this.http
-    .post<DeviceDto>(`${environment.apiBaseUrl}/api/device`, device)
-    .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to add device')));
+    if (!device?.ProjectId)
+      throw new Error('ProjectId is required to add a device');
+
+    return this.http
+      .post<DeviceDto>(`${environment.apiBaseUrl}/api/device/project/${device.ProjectId}`, device)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to add device')));
   }
 
   public updateDevice(id: string, device: DeviceDto): Observable<DeviceDto> {
-  return this.http
-    .put<DeviceDto>(`${environment.apiBaseUrl}/api/device/${id}`, device)
-    .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to update device')));
+    if (!device?.ProjectId)
+      throw new Error('ProjectId is required to update a device');
+
+    return this.http
+      .put<DeviceDto>(`${environment.apiBaseUrl}/api/device/project/${device.ProjectId}/${id}`, device)
+      .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to update device')));
   }
 
-  public deleteDevice(id: string): Observable<void> {
+  public deleteDevice(projectId: string, id: string): Observable<void> {
     return this.http
-		.delete<void>(`${environment.apiBaseUrl}/api/device/${id}`)
+		.delete<void>(`${environment.apiBaseUrl}/api/device/project/${projectId}/${id}`)
 		.pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to delete device')));
   }
 
-  public getApiKey(id: string): Observable<string> {
+  public getApiKey(projectId: string, id: string): Observable<string> {
     return this.http
       .post<{ apiKey?: string; ApiKey?: string }>(
-        `${environment.apiBaseUrl}/api/device/${id}/apikey`,
+        `${environment.apiBaseUrl}/api/device/project/${projectId}/${id}/apikey`,
         null,
       )
       .pipe(

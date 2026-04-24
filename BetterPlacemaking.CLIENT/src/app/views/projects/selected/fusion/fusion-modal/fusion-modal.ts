@@ -7,14 +7,16 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { FusionService } from '../../../../../services/fusion-service';
 import { FusionRunDto } from '../../../../../models/FusionDtos';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 @Component({
   selector: 'app-fusion-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, MessageModule, DatePickerModule],
+  imports: [CommonModule, FormsModule, ButtonModule, MessageModule, DatePickerModule, PermissionDirective],
   templateUrl: './fusion-modal.html',
 })
 export class FusionModal implements OnInit {
+  projectId: string | null = null;
   fromDate: Date | null = null;
   toDate: Date | null = null;
   maxDate = new Date();
@@ -28,6 +30,7 @@ export class FusionModal implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.projectId = this.config.data?.projectId ?? null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const yesterday = new Date(today);
@@ -52,7 +55,7 @@ export class FusionModal implements OnInit {
 
     const FromDateUnix = this.fromDate.getTime() / 1000;
     const ToDateUnix   = this.toDate.getTime()   / 1000;
-    const ProjectId: string | undefined = this.config.data?.projectId;
+    const ProjectId: string | undefined = this.projectId ?? undefined;
 
     this.fusionService.triggerFusion({ FromDateUnix, ToDateUnix, ProjectId }).subscribe({
       next: (run: FusionRunDto) => {

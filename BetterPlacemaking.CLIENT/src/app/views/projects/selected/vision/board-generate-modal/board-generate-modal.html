@@ -106,7 +106,8 @@
 
   <!-- Action buttons -->
   <div class="flex gap-2 border-t border-surface-200 dark:border-surface-700 pt-4">
-    <p-button [label]="isEditing ? 'Save Changes' : 'Save to Library'" icon="pi pi-save" severity="primary"
+    <p-button *hasPermission="'Project.Update'; projectId: projectId"
+              [label]="isEditing ? 'Save Changes' : 'Save to Library'" icon="pi pi-save" severity="primary"
               [disabled]="!canSaveToLibrary"
               [loading]="savingLibrary"
               (onClick)="saveToLibrary()"

@@ -429,6 +429,101 @@ namespace BetterPlacemaking.Services
 
             return results;
         }
+
+        public List<string> GetEffectiveGlobalPermissions(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return [];
+
+            var globalAssignment = _db.Collection("user_global_roles")
+                .Document(userId)
+                .GetSnapshotAsync()
+                .Result;
+
+            var globalRoles = GetRolesFromDocument(globalAssignment);
+            return ResolvePermissionsForRoles("role_definitions_global", globalRoles);
+        }
+
+        public List<string> GetEffectiveProjectPermissions(string userId, string projectId)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(projectId))
+                return [];
+
+            var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var permission in GetEffectiveGlobalPermissions(userId))
+                permissions.Add(permission);
+
+            var projectMember = _db.Collection("projects")
+                .Document(projectId)
+                .Collection("members")
+                .Document(userId)
+                .GetSnapshotAsync()
+                .Result;
+
+            var projectRoles = GetRolesFromDocument(projectMember);
+            foreach (var permission in ResolvePermissionsForRoles("role_definitions_project", projectRoles))
+                permissions.Add(permission);
+
+            return permissions
+                .OrderBy(p => p)
+                .ToList();
+        }
+
+        private static HashSet<string> GetRolesFromDocument(DocumentSnapshot snapshot)
+        {
+            var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!snapshot.Exists)
+                return roles;
+
+            if (!snapshot.TryGetValue("roles", out IEnumerable<string> roleValues))
+                return roles;
+
+            foreach (var role in roleValues)
+            {
+                if (!string.IsNullOrWhiteSpace(role))
+                    roles.Add(role);
+            }
+
+            return roles;
+        }
+
+        private List<string> ResolvePermissionsForRoles(string roleDefinitionsCollection, IEnumerable<string> roles)
+        {
+            var roleList = roles
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (roleList.Count == 0)
+                return [];
+
+            var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var role in roleList)
+            {
+                var roleSnapshot = _db.Collection(roleDefinitionsCollection)
+                    .Document(role)
+                    .GetSnapshotAsync()
+                    .Result;
+
+                if (!roleSnapshot.Exists)
+                    continue;
+
+                if (!roleSnapshot.TryGetValue("permissions", out IEnumerable<string> rolePermissions))
+                    continue;
+
+                foreach (var permission in rolePermissions)
+                {
+                    if (!string.IsNullOrWhiteSpace(permission))
+                        permissions.Add(permission);
+                }
+            }
+
+            return permissions
+                .OrderBy(p => p)
+                .ToList();
+        }
     }
 
     public class ProjectMemberNotificationInfo

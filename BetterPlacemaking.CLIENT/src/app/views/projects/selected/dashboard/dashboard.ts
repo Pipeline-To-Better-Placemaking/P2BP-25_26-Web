@@ -17,6 +17,7 @@ import { DevicesWidget } from './components/deviceswidget';
 import { AlertsWidget } from './components/alertswidget';
 import { ScanStatusWidget } from './components/scanstatuswidget';
 import { ProjectChecklistWidget } from './components/projectchecklistwidget';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 import { DialogModule } from 'primeng/dialog';
 
@@ -51,10 +52,11 @@ export interface Alert {
     AlertsWidget,
     ScanStatusWidget,
     ProjectChecklistWidget,
-    DialogModule
+    DialogModule,
+    PermissionDirective
   ],
   template: `
-    <div class="rounded-xl">
+    <div *hasPermission="'Project.Read'; projectId: projectId" class="rounded-xl">
       <div class="grid grid-cols-12 gap-6">
 
         <app-stats-widget
@@ -72,6 +74,7 @@ export interface Alert {
 
         <div class="col-span-12 xl:col-span-6 flex flex-col gap-6">
           <app-devices-widget
+            *hasPermission="'Project.Devices.Read'; projectId: projectId"
             [devices]="devices"
             [loading]="loading"
             [error]="error"
@@ -82,6 +85,8 @@ export interface Alert {
           </app-devices-widget>
 
           <app-scan-status-widget
+            *hasPermission="'Project.Scans.Read'; projectId: projectId"
+            [projectId]="projectId"
             [lastScanTime]="lastScanTime"
             [formatTimeAgoFn]="formatTimeAgo.bind(this)"
             [scanLoading]="scanLoading"

@@ -12,33 +12,46 @@ namespace BetterPlacemaking.Authorization
         {
             await SeedRoleIfMissingAsync(
                 collection: "role_definitions_global",
+                roleName: "SuperAdmin",
+                permissions:
+                [
+                    ..Permissions.Global.All,
+                    ..Permissions.Project.All
+                ],
+                cancellationToken: cancellationToken);
+
+            await SeedRoleIfMissingAsync(
+                collection: "role_definitions_global",
                 roleName: "Admin",
-                permissions: Permissions.Global.Users.All,
+                permissions:
+                [
+                    ..Permissions.Global.All,
+                    ..Permissions.Project.All
+                ],
+                cancellationToken: cancellationToken);
+
+            await SeedRoleIfMissingAsync(
+                collection: "role_definitions_project",
+                roleName: "ProjectAdmin",
+                permissions: Permissions.Project.Admin,
                 cancellationToken: cancellationToken);
 
             await SeedRoleIfMissingAsync(
                 collection: "role_definitions_project",
                 roleName: "ProjectOwner",
-                permissions: Permissions.Project.All,
+                permissions: Permissions.Project.Admin,
                 cancellationToken: cancellationToken);
 
             await SeedRoleIfMissingAsync(
                 collection: "role_definitions_project",
                 roleName: "ProjectViewer",
-                permissions:
-                [
-                    Permissions.Project.Read
-                ],
+                permissions: Permissions.Project.Viewer,
                 cancellationToken: cancellationToken);
 
             await SeedRoleIfMissingAsync(
                 collection: "role_definitions_project",
                 roleName: "ProjectEditor",
-                permissions:
-                [
-                    Permissions.Project.Read,
-                    Permissions.Project.Update
-                ],
+                permissions: Permissions.Project.Editor,
                 cancellationToken: cancellationToken);
         }
 

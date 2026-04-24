@@ -5,10 +5,11 @@ import { ProjectService } from '../../../services/project-service';
 import { ButtonModule } from 'primeng/button';
 import { ProjectDto } from '../../../models/ProjectDto';
 import { catchError, finalize, of } from 'rxjs';
+import { PermissionDirective } from '../../../directives/permission.directive';
 
 @Component({
   selector: 'app-select-project',
-  imports: [TableModule, RouterModule, ButtonModule],
+  imports: [TableModule, RouterModule, ButtonModule, PermissionDirective],
   templateUrl: './select-project.html',
   styleUrl: './select-project.scss',
 })

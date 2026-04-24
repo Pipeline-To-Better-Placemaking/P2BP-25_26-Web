@@ -16,6 +16,7 @@ import { DeviceDto } from '../../../../../models/DeviceDto';
 import { ServiceStatus, SystemInfo } from '../../../../../models/jetson-dtos/HealthReport';
 import { BoardService } from '../../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../../models/BoardLibrary';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 interface ServiceRow {
   name: string;
@@ -37,6 +38,7 @@ interface ServiceRow {
     ToggleButtonModule,
     TooltipModule,
     SelectModule,
+    PermissionDirective,
   ],
   templateUrl: './device-modal.html',
 })

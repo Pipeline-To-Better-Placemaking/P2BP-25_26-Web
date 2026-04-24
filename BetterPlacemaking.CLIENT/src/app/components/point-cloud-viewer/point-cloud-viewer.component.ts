@@ -20,6 +20,7 @@ import { of } from 'rxjs';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { PermissionDirective } from '../../directives/permission.directive';
 
 interface QualitySettings {
   downsample: number;
@@ -35,7 +36,7 @@ interface ExportOption {
 @Component({
   selector: 'app-point-cloud-viewer',
   standalone: true,
-  imports: [CommonModule, FormsModule, CardModule, ButtonModule, SelectModule, MessageModule],
+  imports: [CommonModule, FormsModule, CardModule, ButtonModule, SelectModule, MessageModule, PermissionDirective],
   templateUrl: './point-cloud-viewer.component.html',
 })
 export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -111,6 +112,10 @@ export class PointCloudViewerComponent implements OnInit, AfterViewInit, OnDestr
 
   private effectiveProjectId(): string | undefined {
     return this.projectContextId?.trim() || this.routeProjectId;
+  }
+
+  public get permissionProjectId(): string | null {
+    return this.effectiveProjectId() ?? null;
   }
 
   ngAfterViewInit(): void {

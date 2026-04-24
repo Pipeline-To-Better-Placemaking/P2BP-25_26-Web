@@ -12,7 +12,7 @@
     <div class="flex flex-wrap items-end gap-y-4 gap-x-6">
 
       <!-- Upload File (.xyz manual upload + other formats) -->
-      <div class="flex flex-col gap-1.5 shrink-0">
+      <div *hasPermission="'Project.Scans.Start'; projectId: permissionProjectId" class="flex flex-col gap-1.5 shrink-0">
         <label class="text-sm font-medium whitespace-nowrap">Upload (.xyz, .obj, .ply…)</label>
         <div class="flex flex-wrap items-end gap-2">
           <div class="flex flex-col gap-1">
@@ -55,7 +55,7 @@
       </div>
 
       <!-- Export -->
-      <div class="flex flex-col gap-1.5 shrink-0">
+      <div *hasPermission="'Project.Export'; projectId: permissionProjectId" class="flex flex-col gap-1.5 shrink-0">
         <label class="text-sm font-medium whitespace-nowrap">Export:</label>
         <div class="flex items-center gap-2 flex-nowrap">
           <select
@@ -84,6 +84,7 @@
           (onClick)="refreshPointCloud()">
         </p-button>
         <p-button
+          *hasPermission="'Project.Scans.Delete'; projectId: permissionProjectId"
           label="Clear"
           icon="pi pi-trash"
           styleClass="p-button-sm p-button-danger p-button-outlined"

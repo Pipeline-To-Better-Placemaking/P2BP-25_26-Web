@@ -4,6 +4,7 @@ using BetterPlacemaking.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BetterPlacemaking.Models;
+using BetterPlacemaking.Authorization;
 using Google.Rpc;
 using System.Threading.Tasks;
 namespace BetterPlacemaking.Controllers
@@ -23,6 +24,7 @@ namespace BetterPlacemaking.Controllers
 		private readonly NotificationService _notificationService = notificationService;
 
 		[HttpPost("{projectId}/{deviceId}")]
+		[RequirePermission(Permissions.Project.ScansStart)]
 		public IActionResult StartScan(string projectId, string deviceId, [FromBody] ScanSettingsRequest? settings)
 		{
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
@@ -72,6 +74,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpGet("{projectId}/{deviceId}")]
+		[RequirePermission(Permissions.Project.ScansRead)]
 		public IActionResult GetScans(string projectId, string deviceId)
 		{
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId))
@@ -94,6 +97,7 @@ namespace BetterPlacemaking.Controllers
 		/// canonical GCS object. Returns 404 when the scan doc or its .xyz cannot be resolved.
 		/// </summary>
 		[HttpGet("{projectId}/{deviceId}/{scanId}/xyz")]
+		[RequirePermission(Permissions.Project.Export)]
 		public async Task<IActionResult> DownloadScanXyz(
 			string projectId,
 			string deviceId,
@@ -124,6 +128,7 @@ namespace BetterPlacemaking.Controllers
 		}
 
 		[HttpGet("{projectId}/{deviceId}/{scanId}")]
+		[RequirePermission(Permissions.Project.ScansRead)]
 		public IActionResult GetScan(string projectId, string deviceId, string scanId)
 		{
 			if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(scanId))
@@ -147,6 +152,7 @@ namespace BetterPlacemaking.Controllers
 		/// Tries Firestore <c>ObjUrl</c> then canonical GCS <c>vision/lidar-scans/{projectId}/{deviceId}/{scanId}.xyz</c>.
 		/// </summary>
 		[HttpPost("{projectId}/visualizer/latest")]
+		[RequirePermission(Permissions.Project.ScansRead)]
 		public async Task<IActionResult> LoadLatestCompleteScanIntoVisualizer(
 			string projectId,
 			CancellationToken cancellationToken)
@@ -185,30 +191,31 @@ namespace BetterPlacemaking.Controllers
 			}
 		}
 
-[HttpDelete("{projectId}/{deviceId}/{scanId}")]
-public async Task<IActionResult> DeleteScan(string projectId, string deviceId, string scanId)
-{
-    if (string.IsNullOrWhiteSpace(projectId) ||
-        string.IsNullOrWhiteSpace(deviceId) ||
-        string.IsNullOrWhiteSpace(scanId))
-    {
-        return BadRequest("Invalid parameters.");
-    }
+		[HttpDelete("{projectId}/{deviceId}/{scanId}")]
+		[RequirePermission(Permissions.Project.ScansDelete)]
+		public async Task<IActionResult> DeleteScan(string projectId, string deviceId, string scanId)
+		{
+			if (string.IsNullOrWhiteSpace(projectId) ||
+				string.IsNullOrWhiteSpace(deviceId) ||
+				string.IsNullOrWhiteSpace(scanId))
+			{
+				return BadRequest("Invalid parameters.");
+			}
 
-    try
-    {
-        var success = await _scanService.DeleteScan(projectId, deviceId, scanId);
+			try
+			{
+				var success = await _scanService.DeleteScan(projectId, deviceId, scanId);
 
-        if (!success)
-            return NotFound("Scan not found.");
+				if (!success)
+					return NotFound("Scan not found.");
 
-        return NoContent();
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, $"Failed to delete scan: {ex.Message}");
-    }
-}
+				return NoContent();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, $"Failed to delete scan: {ex.Message}");
+			}
+		}
 		[HttpPatch("{projectId}/{deviceId}/{scanId}/status")]
 		public async Task<IActionResult> UpdateScanStatus(
 			string projectId,

@@ -16,6 +16,7 @@
 			></p-button>
 
 			<p-button
+				*hasPermission="'Project.Devices.Manage'; projectId: projectId"
 				label="Generate"
 				icon="pi pi-key"
                 variant="outlined"

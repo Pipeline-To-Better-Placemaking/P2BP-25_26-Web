@@ -45,7 +45,8 @@
                 styleClass="w-full"
                 [showClear]="true" />
       <div class="flex items-center gap-2">
-        <p-button label="Scan" icon="pi pi-crosshairs" severity="secondary"
+        <p-button *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
+                  label="Scan" icon="pi pi-crosshairs" severity="secondary"
                   [loading]="arucoScanLoading"
                   [disabled]="!canScanAruco || arucoScanTriggered"
                   (onClick)="triggerArucoScan()"
@@ -61,7 +62,7 @@
   </div>
 
   <!-- Quick Settings (collapsible) -->
-  <p-panel header="Quick Settings" [toggleable]="true">
+  <p-panel *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null" header="Quick Settings" [toggleable]="true">
     <div class="flex flex-col gap-4">
 
       <div class="grid grid-cols-12 items-center gap-3">

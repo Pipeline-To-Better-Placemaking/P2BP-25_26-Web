@@ -134,6 +134,7 @@
         <div class="text-xs text-muted-color">Requires ChArUco board in camera view</div>
       </div>
       <p-button
+        *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
         [label]="intrinsicsButtonLabel"
         [icon]="intrinsicsButtonIcon"
         [severity]="intrinsicsButtonSeverity"
@@ -154,7 +155,8 @@
         <div class="text-sm font-medium">Homography</div>
         <div class="text-xs text-muted-color">Triggers scan on all project devices simultaneously</div>
       </div>
-      <p-button label="Run" icon="pi pi-play" severity="secondary"
+      <p-button *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
+                label="Run" icon="pi pi-play" severity="secondary"
                 [loading]="homographyLoading"
                 [disabled]="!canRunHomography || homographyTriggered"
                 (onClick)="triggerHomography()"

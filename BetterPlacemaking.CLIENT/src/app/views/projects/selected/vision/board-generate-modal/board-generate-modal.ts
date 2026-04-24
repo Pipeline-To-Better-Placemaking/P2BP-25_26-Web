@@ -16,6 +16,7 @@ import {
   BoardUnits,
   SaveBoardLibraryItemRequest,
 } from '../../../../../models/BoardLibrary';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 import { AR } from 'js-aruco2/src/aruco';
 import 'js-aruco2/src/dictionaries/aruco_4x4_1000';
 import 'js-aruco2/src/dictionaries/aruco_5x5_1000';
@@ -71,6 +72,7 @@ const MIN_PDF_EDGE_MM = 40;
     InputTextModule,
     SelectModule,
     TooltipModule,
+    PermissionDirective,
   ],
   templateUrl: './board-generate-modal.html',
 })
@@ -87,6 +89,7 @@ export class BoardGenerateModal implements OnInit {
 
   generatingPdf = false;
   savingLibrary = false;
+  projectId: string | null = null;
 
   dictionaries = DICTIONARIES;
   unitOptions = UNITS;
@@ -104,7 +107,10 @@ export class BoardGenerateModal implements OnInit {
     const data = (this.config.data ?? {}) as {
       existingBoard?: BoardLibraryItem;
       boardId?: string;
+      projectId?: string;
     };
+
+    this.projectId = data.projectId ?? null;
 
     const existing = data.existingBoard;
     if (!existing) {

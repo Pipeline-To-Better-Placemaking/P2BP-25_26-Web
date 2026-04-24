@@ -8,10 +8,11 @@ import { ProjectService } from '../../../../services/project-service';
 import { catchError, of } from 'rxjs';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { ProjectForm } from '../project-form/project-form';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 @Component({
   selector: 'app-projects-list',
-  imports: [TableModule, ButtonModule, ConfirmDialogModule],
+  imports: [TableModule, ButtonModule, ConfirmDialogModule, PermissionDirective],
   providers: [DialogService, ConfirmationService],
   templateUrl: './projects-list.html',
   styleUrl: './projects-list.scss',

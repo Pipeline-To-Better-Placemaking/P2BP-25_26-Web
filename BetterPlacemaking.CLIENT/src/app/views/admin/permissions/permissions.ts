@@ -16,6 +16,7 @@ import {
   ApiUser,
   UserProjectRoleAssignmentsDto,
 } from '../../../services/users-service';
+import { PermissionDirective } from '../../../directives/permission.directive';
 
 interface UserRow {
   id: string;
@@ -37,6 +38,7 @@ interface UserRow {
     InputTextModule,
     IconFieldModule,
     InputIconModule,
+    PermissionDirective,
   ],
   templateUrl: './permissions.html',
   styleUrls: ['./permissions.scss'],

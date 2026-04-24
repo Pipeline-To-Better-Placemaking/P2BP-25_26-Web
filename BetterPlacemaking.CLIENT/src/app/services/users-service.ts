@@ -63,6 +63,14 @@ export class UsersService {
     return this.http.get<string[]>(`${this.baseUrl}/api/User/project-roles/options`);
   }
 
+  getMyGlobalPermissions(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseUrl}/api/User/me/permissions`);
+  }
+
+  getMyProjectPermissions(projectId: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseUrl}/api/User/me/permissions/${projectId}`);
+  }
+
   getProjectRoleAssignments(): Observable<UserProjectRoleAssignmentsDto[]> {
     return this.http.get<UserProjectRoleAssignmentsDto[]>(`${this.baseUrl}/api/User/project-roles`);
   }

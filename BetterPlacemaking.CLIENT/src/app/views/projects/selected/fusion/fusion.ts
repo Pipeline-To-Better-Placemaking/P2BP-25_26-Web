@@ -16,6 +16,7 @@ import { ActivatedRoute } from '@angular/router';
 import { FusionService } from '../../../../services/fusion-service';
 import { FusionConfigDto, FusionRunDto } from '../../../../models/FusionDtos';
 import { FusionModal } from './fusion-modal/fusion-modal';
+import { PermissionDirective } from '../../../../directives/permission.directive';
 
 const POLL_INTERVAL_MS = 6_000;
 
@@ -35,11 +36,13 @@ const POLL_INTERVAL_MS = 6_000;
     DatePickerModule,     // NEW
     DialogModule,         // NEW
     DynamicDialogModule,
+    PermissionDirective,
   ],
   templateUrl: './fusion.html',
   styleUrls: ['./fusion.scss'],
 })
 export class Fusion implements OnInit, OnDestroy {
+  projectId = '';
   history: FusionRunDto[] = [];
   historyLoading = true;
   historyError = false;
@@ -82,8 +85,8 @@ export class Fusion implements OnInit, OnDestroy {
         },
       });
 
-    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
-    this.fusionService.getConfig(projectId).subscribe({
+    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+    this.fusionService.getConfig(this.projectId || undefined).subscribe({
       next: (cfg: FusionConfigDto) => (this.config = cfg),
       error: () => {},
     });
@@ -111,7 +114,6 @@ export class Fusion implements OnInit, OnDestroy {
   }
 
   openFusionModal(): void {
-    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
     const ref = this.dialogService.open(FusionModal, {
       header: 'Run Manual Fusion',
       width: '900px',
@@ -126,7 +128,7 @@ export class Fusion implements OnInit, OnDestroy {
       style: {
         'min-height': '600px'
       },
-      data: { projectId },
+      data: { projectId: this.projectId || undefined },
     });
     if (!ref) return;
     this.modalRef = ref;
@@ -144,8 +146,7 @@ openScheduleDialog(): void {
     this.scheduleDialogVisible = true;
     this.scheduleDialogTime    = null; // placeholder while we fetch
 
-    const projectId = this.route.snapshot.paramMap.get('projectId') ?? undefined;
-    this.fusionService.getConfig(projectId).subscribe({
+    this.fusionService.getConfig(this.projectId || undefined).subscribe({
       next: (cfg) => {
         this.config = cfg;
         const d = new Date();
@@ -161,7 +162,7 @@ openScheduleDialog(): void {
     this.scheduleDialogSaving = true;
     this.scheduleDialogError  = false;
 
-   const projectId = this.route.snapshot.paramMap.get('projectId') ?? this.config?.ProjectId;
+   const projectId = this.projectId || this.config?.ProjectId;
 
     this.fusionService.updateConfig({
       ScheduledHourUtc:   this.scheduleDialogTime.getHours(),
