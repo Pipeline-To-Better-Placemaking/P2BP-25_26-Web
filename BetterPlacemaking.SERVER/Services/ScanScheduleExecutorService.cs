@@ -8,16 +8,16 @@ using Microsoft.Extensions.Logging;
 namespace BetterPlacemaking.Services
 {
     /// <summary>
-    /// Polls scan_schedules across all projects every minute. When a schedule is due per its
-    /// Frequency (Never/Weekly/Monthly/Yearly) and has not already been fired for the current
-    /// slot, transactionally stamps LastRunAt and fires a scan via ScanService.CreateScan.
+    /// Polls scan_schedules across all projects every minute. Treats each schedule as a one-shot:
+    /// the first tick where StartDate+StartTime is in the past AND LastRunAt is null fires a scan
+    /// via ScanService.CreateScan (identical call to what the manual "Perform Scan" button uses).
+    /// Frequency and EndDate are ignored for now — recurrence is future work.
     ///
     /// Time semantics: StartDate (yyyy-MM-dd) and StartTime (HH:mm) are stored by the frontend
-    /// as the user's local wall-clock (scanner.ts formatDate/formatTime use getFullYear/getHours).
-    /// We therefore compare against DateTime.Now (server local) — works when the server TZ
-    /// matches users' TZ (localhost / co-located deploy). For a cloud deploy with a UTC server
-    /// and users in a non-UTC TZ, schedules will fire at the wrong wall-clock time; fix by
-    /// storing a per-schedule timezone or converting on the frontend before submit.
+    /// as the user's local wall-clock. We compare against DateTime.Now (server local) — correct
+    /// when the server TZ matches users' TZ (localhost / co-located deploy). A UTC cloud server
+    /// with users in a non-UTC TZ would fire at the wrong wall-clock time; fix later by storing
+    /// a per-schedule timezone or converting on the frontend before submit.
     /// </summary>
     public class ScanScheduleExecutorService(
         IServiceScopeFactory scopeFactory,
@@ -27,6 +27,8 @@ namespace BetterPlacemaking.Services
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
+            logger.LogInformation("Scan schedule executor started (tick every {TickSeconds}s)", Tick.TotalSeconds);
+
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -53,76 +55,60 @@ namespace BetterPlacemaking.Services
             var snap = await db.CollectionGroup("scan_schedules").GetSnapshotAsync(ct).ConfigureAwait(false);
             var now = DateTime.Now;
 
+            int total = 0, notYetDue = 0, alreadyFired = 0, fired = 0, skipped = 0;
+
             foreach (var doc in snap.Documents)
             {
+                total++;
                 try
                 {
-                    await ProcessOneAsync(doc, now, db, scanService, deviceService, ct).ConfigureAwait(false);
+                    var outcome = await ProcessOneAsync(doc, now, db, scanService, deviceService, ct).ConfigureAwait(false);
+                    switch (outcome)
+                    {
+                        case Outcome.NotYetDue: notYetDue++; break;
+                        case Outcome.AlreadyFired: alreadyFired++; break;
+                        case Outcome.Fired: fired++; break;
+                        case Outcome.Skipped: skipped++; break;
+                    }
                 }
                 catch (Exception ex)
                 {
+                    skipped++;
                     logger.LogError(ex, "Scan schedule {ScheduleId} failed to process", doc.Id);
                 }
             }
+
+            logger.LogInformation(
+                "Tick complete: {Total} schedules ({NotYetDue} not-yet-due, {AlreadyFired} already-fired, {Fired} fired, {Skipped} skipped)",
+                total, notYetDue, alreadyFired, fired, skipped);
         }
 
-        private async Task ProcessOneAsync(
+        private async Task<Outcome> ProcessOneAsync(
             DocumentSnapshot doc, DateTime now, FirestoreDb db,
             ScanService scanService, DeviceService deviceService, CancellationToken ct)
         {
             var schedule = doc.ConvertTo<ScanSchedule>();
             var scheduleId = doc.Id;
 
+            // One-shot guard: any non-null LastRunAt means "already fired, ever".
+            if (schedule.LastRunAt.HasValue)
+                return Outcome.AlreadyFired;
+
             if (!TryParseLocal(schedule.StartDate, schedule.StartTime, out var startAt))
             {
-                logger.LogWarning("Scan schedule {ScheduleId}: unparseable StartDate/StartTime", scheduleId);
-                return;
+                logger.LogWarning("Scan schedule {ScheduleId}: unparseable StartDate/StartTime ({StartDate} / {StartTime})",
+                    scheduleId, schedule.StartDate, schedule.StartTime);
+                return Outcome.Skipped;
             }
 
-            DateTime? endAt = null;
-            if (!string.IsNullOrWhiteSpace(schedule.EndDate) && !string.IsNullOrWhiteSpace(schedule.EndTime))
-            {
-                if (TryParseLocal(schedule.EndDate, schedule.EndTime, out var parsedEnd))
-                    endAt = parsedEnd;
-            }
+            if (now < startAt)
+                return Outcome.NotYetDue;
 
-            if (endAt.HasValue && now > endAt.Value)
-                return; // expired
-
-            var frequency = (schedule.Frequency ?? string.Empty).Trim();
-            var lastRun = schedule.LastRunAt?.ToDateTime().ToLocalTime();
-
-            // One-shot semantics: "Never" fires once at startAt, ever.
-            if (string.Equals(frequency, "Never", StringComparison.OrdinalIgnoreCase))
-            {
-                if (lastRun.HasValue) return;
-                if (now < startAt) return;
-                await FireAsync(doc, schedule, scheduleId, startAt, db, scanService, deviceService, ct).ConfigureAwait(false);
-                return;
-            }
-
-            // Recurring: compute the latest slot <= now.
-            if (!TryComputeDueSlot(startAt, frequency, now, out var dueAt))
-            {
-                logger.LogWarning("Scan schedule {ScheduleId}: unknown Frequency '{Frequency}'", scheduleId, frequency);
-                return;
-            }
-
-            if (dueAt > now) return;                               // not yet due
-            if (lastRun.HasValue && lastRun.Value >= dueAt) return; // this slot already fired
-
-            await FireAsync(doc, schedule, scheduleId, dueAt, db, scanService, deviceService, ct).ConfigureAwait(false);
-        }
-
-        private async Task FireAsync(
-            DocumentSnapshot doc, ScanSchedule schedule, string scheduleId, DateTime dueAt,
-            FirestoreDb db, ScanService scanService, DeviceService deviceService, CancellationToken ct)
-        {
             var projectId = doc.Reference.Parent.Parent?.Id;
             if (string.IsNullOrWhiteSpace(projectId))
             {
                 logger.LogWarning("Scan schedule {ScheduleId}: missing projectId from doc path", scheduleId);
-                return;
+                return Outcome.Skipped;
             }
 
             var device = deviceService.GetDevicesByProjectId(projectId)
@@ -130,22 +116,30 @@ namespace BetterPlacemaking.Services
             if (device == null || string.IsNullOrWhiteSpace(device.Id))
             {
                 logger.LogWarning(
-                    "Scan schedule {ScheduleId} due at {DueAt:O}: no lidar device in project {ProjectId}",
-                    scheduleId, dueAt, projectId);
-                return;
+                    "Scan schedule {ScheduleId}: no lidar device in project {ProjectId}; retry next tick",
+                    scheduleId, projectId);
+                return Outcome.Skipped;
             }
 
-            // Multi-replica safe: re-read LastRunAt inside the tx. If another replica already
-            // claimed this slot since we decided to fire, abort without creating a duplicate scan.
+            // Mirror the manual "Perform Scan" button's 409 guard: don't fire on top of an active scan.
+            var inFlight = scanService.HasPendingOrRunningScan(projectId, device.Id!);
+            if (inFlight.Exists)
+            {
+                logger.LogInformation(
+                    "Scan schedule {ScheduleId}: deferred, scan {ActiveScanId} already {Status}",
+                    scheduleId, inFlight.ScanId, inFlight.Status);
+                return Outcome.Skipped;
+            }
+
+            // Transactional one-shot claim: re-read LastRunAt inside the tx so concurrent replicas
+            // can't both fire the same schedule.
             var claimed = await db.RunTransactionAsync<bool>(async tx =>
             {
                 var fresh = await tx.GetSnapshotAsync(doc.Reference).ConfigureAwait(false);
                 if (!fresh.Exists) return false;
 
                 var latest = fresh.ConvertTo<ScanSchedule>();
-                var lastRun = latest.LastRunAt?.ToDateTime().ToLocalTime();
-                if (lastRun.HasValue && lastRun.Value >= dueAt)
-                    return false;
+                if (latest.LastRunAt.HasValue) return false;
 
                 tx.Update(doc.Reference, new Dictionary<string, object>
                 {
@@ -154,7 +148,8 @@ namespace BetterPlacemaking.Services
                 return true;
             }, cancellationToken: ct).ConfigureAwait(false);
 
-            if (!claimed) return;
+            if (!claimed)
+                return Outcome.AlreadyFired;
 
             try
             {
@@ -166,20 +161,21 @@ namespace BetterPlacemaking.Services
 
                 var scanId = result.GetType().GetProperty("Id")?.GetValue(result)?.ToString() ?? "<unknown>";
                 logger.LogInformation(
-                    "Scheduler fired scan {ScanId} for project {ProjectId} device {DeviceId} schedule {ScheduleId} (due {DueAt:O})",
-                    scanId, projectId, device.Id, scheduleId, dueAt);
+                    "Scheduler fired scan {ScanId} for project {ProjectId} device {DeviceId} schedule {ScheduleId}",
+                    scanId, projectId, device.Id, scheduleId);
+                return Outcome.Fired;
             }
             catch (Exception ex)
             {
-                // LastRunAt is already stamped, so we won't re-fire this slot. That is intentional:
-                // repeated CreateScan failures in a tight loop would be worse than a single missed slot.
+                // LastRunAt is already stamped; we won't auto-retry. Intentional: a stuck CreateScan
+                // failing in a tight loop is worse than leaving the schedule in "ran, no scan doc"
+                // state. User can manually re-trigger via Perform Scan.
                 logger.LogError(ex,
-                    "Scheduler stamped LastRunAt for schedule {ScheduleId} but CreateScan failed; user must retry manually",
+                    "Scheduler stamped LastRunAt for schedule {ScheduleId} but CreateScan failed; manual retry required",
                     scheduleId);
+                return Outcome.Skipped;
             }
         }
-
-        // --- helpers ---
 
         private static bool TryParseLocal(string? date, string? time, out DateTime value)
         {
@@ -194,40 +190,12 @@ namespace BetterPlacemaking.Services
                 out value);
         }
 
-        private static bool TryComputeDueSlot(DateTime startAt, string frequency, DateTime now, out DateTime dueAt)
+        private enum Outcome
         {
-            dueAt = startAt;
-            if (now < startAt) return true; // will be skipped by caller (dueAt > now)
-
-            switch (frequency.ToLowerInvariant())
-            {
-                case "weekly":
-                {
-                    var days = (int)Math.Floor((now - startAt).TotalDays);
-                    var weeks = days / 7;
-                    dueAt = startAt.AddDays(weeks * 7);
-                    return true;
-                }
-                case "monthly":
-                {
-                    var months = ((now.Year - startAt.Year) * 12) + (now.Month - startAt.Month);
-                    // Back off if the day-of-month for this candidate hasn't arrived yet.
-                    var candidate = startAt.AddMonths(months);
-                    if (candidate > now) candidate = startAt.AddMonths(months - 1);
-                    dueAt = candidate;
-                    return true;
-                }
-                case "yearly":
-                {
-                    var years = now.Year - startAt.Year;
-                    var candidate = startAt.AddYears(years);
-                    if (candidate > now) candidate = startAt.AddYears(years - 1);
-                    dueAt = candidate;
-                    return true;
-                }
-                default:
-                    return false;
-            }
+            NotYetDue,
+            AlreadyFired,
+            Fired,
+            Skipped,
         }
     }
 }

@@ -431,7 +431,7 @@ export class Scanner implements OnInit, OnDestroy {
           if (!scans?.length) return;
 
           const latest = this.getLatestScan(scans);
-          this.scanHistory = [...scans];
+          this.scanHistory = this.sortScansNewestFirst(scans);
 
           let status = (latest?.Status ?? '').toLowerCase();
 
@@ -466,12 +466,16 @@ export class Scanner implements OnInit, OnDestroy {
   private loadScanHistory(deviceId: string): void {
     this.scanService.getScans(this.projectId, deviceId).subscribe({
       next: (scans: ScanRecordDto[]) => {
-        this.scanHistory = [...(scans ?? [])];
+        this.scanHistory = this.sortScansNewestFirst(scans ?? []);
       },
       error: () => {
         this.scanHistory = [];
       }
     });
+  }
+
+  private sortScansNewestFirst(scans: ScanRecordDto[]): ScanRecordDto[] {
+    return [...scans].sort((a, b) => this.getSortTimestamp(b) - this.getSortTimestamp(a));
   }
 
   private getLatestScan(scans: ScanRecordDto[]): ScanRecordDto {
