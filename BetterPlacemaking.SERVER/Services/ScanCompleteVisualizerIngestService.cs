@@ -22,6 +22,9 @@ public sealed class ScanCompleteVisualizerIngestService
     private readonly CloudStorageService _cloudStorage;
     private readonly ILogger<ScanCompleteVisualizerIngestService> _logger;
     private readonly ScanIngestOptions _options;
+    private readonly object _latestIngestLock = new();
+    private string? _latestIngestKey;
+    private long _latestIngestRevision = -1;
 
     public ScanCompleteVisualizerIngestService(
         IHttpClientFactory httpClientFactory,
@@ -190,9 +193,30 @@ public sealed class ScanCompleteVisualizerIngestService
         if (string.IsNullOrWhiteSpace(scanId))
             return ScanIngestAttemptResult.Fail("no_scan_id", "Scan document has no Id.");
 
+        // Fast path: if this exact scan was already ingested and the visualizer session
+        // revision has not changed since, skip re-download/re-parse/re-mesh.
+        var ingestKey = $"{projectId.Trim()}/{deviceId.Trim()}/{scanId.Trim()}";
+        var (_, currentRevision) = VisualizerController.GetSessionMetaSnapshot();
+        lock (_latestIngestLock)
+        {
+            if (string.Equals(_latestIngestKey, ingestKey, StringComparison.Ordinal)
+                && _latestIngestRevision == currentRevision)
+            {
+                return ScanIngestAttemptResult.AlreadyCurrent("Latest auto-uploaded scan already loaded.");
+            }
+        }
+
         var objUrl = GetStringField(scan, "ObjUrl");
         if (await TryIngestFromHttpsObjUrlAsync(status, objUrl, cancellationToken).ConfigureAwait(false))
+        {
+            var (_, revisionAfterIngest) = VisualizerController.GetSessionMetaSnapshot();
+            lock (_latestIngestLock)
+            {
+                _latestIngestKey = ingestKey;
+                _latestIngestRevision = revisionAfterIngest;
+            }
             return ScanIngestAttemptResult.Ok();
+        }
 
         var objectName = CanonicalLidarXyzObjectName(projectId, deviceId, scanId);
         var maxBytes = _options.MaxDownloadBytes > 0 ? _options.MaxDownloadBytes : 200L * 1024 * 1024;
@@ -219,6 +243,12 @@ public sealed class ScanCompleteVisualizerIngestService
                 "Scan ingest from GCS {Object} loaded {Count} points (revision bumped).",
                 objectName,
                 points.Count);
+            var (_, revisionAfterIngest) = VisualizerController.GetSessionMetaSnapshot();
+            lock (_latestIngestLock)
+            {
+                _latestIngestKey = ingestKey;
+                _latestIngestRevision = revisionAfterIngest;
+            }
             return ScanIngestAttemptResult.Ok();
         }
         catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
