@@ -202,6 +202,41 @@ namespace BetterPlacemaking.Services
 
             return true;
         }
+
+        /// <summary>
+        /// Clear the lidar one-shot trigger (BeginScanning + ScanSettings) on the device.
+        /// Invoked by <see cref="ScanService.UpdateScanStatus"/> the moment a scan transitions
+        /// to "running", meaning the Jetson has successfully claimed the scan. Until this is
+        /// called, the flag stays true in Firestore and every heartbeat re-delivers it, which
+        /// makes lidar scans self-heal from transient claim failures (PATCH 500s, next-pending
+        /// 404s, dropped heartbeats). No-op if the flag is already false.
+        /// </summary>
+        public void ClearLidarScanOneShotIfSet(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return;
+
+            var docRef = _db.Collection(collectionName).Document(deviceId);
+            var snap = docRef.GetSnapshotAsync().Result;
+            if (!snap.Exists)
+                return;
+
+            var device = snap.ConvertTo<Device>();
+            if (device.Config?.LidarScan?.BeginScanning != true)
+                return;
+
+            docRef.UpdateAsync(new Dictionary<string, object?>
+            {
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.BeginScanning)}", false },
+                { $"{nameof(Device.Config)}.{nameof(Config.LidarScan)}.{nameof(LidarScanConfig.ScanSettings)}",  null },
+            }).Wait();
+
+            // Drop the cached device so the next heartbeat re-reads from Firestore (authoritative).
+            // We intentionally do NOT prime the cache here: a concurrent heartbeat could otherwise
+            // overwrite our cleared copy with its stale in-memory BeginScanning=true.
+            InvalidateApiKeyHash(device.ApiKeyHash);
+        }
+
         public Device? GetDeviceByApiKey(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -440,29 +475,24 @@ namespace BetterPlacemaking.Services
             }
 
             // Clear one-shot trigger flags on first delivery.
-            // Intrinsics is different: keep BeginCalibration=true while calibration is in progress,
-            // and only clear when the heartbeat reports a terminal status.
+            //
+            // Camera scans (Charuco/Aruco) and Intrinsics still use the "clear-on-first-delivery"
+            // pattern because their device-side work is short enough that an edge-triggered signal
+            // is fine.
+            //
+            // Lidar scans do NOT clear here any more: their flag is level-triggered and stays true
+            // in Firestore until the Jetson successfully patches the scan to "running". See
+            // ScanService.UpdateScanStatus -> DeviceService.ClearLidarScanOneShotIfSet.
+            // This is what makes lidar scans self-heal from transient claim failures.
             bool charucoBeginScanning = device.Config.CharucoBoard?.BeginScanning == true;
             bool arucoBeginScanning = device.Config.ArucoLock?.BeginScanning == true;
-            bool lidarBeginScanning = device.Config.LidarScan?.BeginScanning == true;
             bool intrinsicsBeginCalibration = device.Config.Intrinsics?.BeginCalibration == true;
             bool clearIntrinsicsBeginCalibration =
                 intrinsicsBeginCalibration && ShouldClearIntrinsicsBeginCalibration(healthReport);
 
-            // Snapshot the one-shot ScanSettings payload before we clear it so it can be
-            // restored on the return object — the Jetson must receive it exactly once,
-            // identical to the BeginScanning restore pattern below.
-            Dictionary<string, object>? lidarScanSettingsSnapshot =
-                lidarBeginScanning ? device.Config.LidarScan?.ScanSettings : null;
-
             var flagsToClear = new Dictionary<string, object>();
             if (charucoBeginScanning) flagsToClear["Config.CharucoBoard.BeginScanning"] = false;
             if (arucoBeginScanning) flagsToClear["Config.ArucoLock.BeginScanning"] = false;
-            if (lidarBeginScanning)
-            {
-                flagsToClear["Config.LidarScan.BeginScanning"] = false;
-                flagsToClear["Config.LidarScan.ScanSettings"] = null!;
-            }
             if (clearIntrinsicsBeginCalibration) flagsToClear["Config.Intrinsics.BeginCalibration"] = false;
 
             if (flagsToClear.Count > 0)
@@ -472,11 +502,6 @@ namespace BetterPlacemaking.Services
                 // Clear in-memory and refresh Redis so the next heartbeat auth sees false.
                 if (device.Config.CharucoBoard != null) device.Config.CharucoBoard.BeginScanning = false;
                 if (device.Config.ArucoLock != null) device.Config.ArucoLock.BeginScanning = false;
-                if (device.Config.LidarScan != null)
-                {
-                    device.Config.LidarScan.BeginScanning = false;
-                    device.Config.LidarScan.ScanSettings = null;
-                }
                 if (clearIntrinsicsBeginCalibration && device.Config.Intrinsics != null)
                     device.Config.Intrinsics.BeginCalibration = false;
 
@@ -494,11 +519,6 @@ namespace BetterPlacemaking.Services
                     device.Config.CharucoBoard.BeginScanning = true;
                 if (arucoBeginScanning && device.Config.ArucoLock != null)
                     device.Config.ArucoLock.BeginScanning = true;
-                if (lidarBeginScanning && device.Config.LidarScan != null)
-                {
-                    device.Config.LidarScan.BeginScanning = true;
-                    device.Config.LidarScan.ScanSettings = lidarScanSettingsSnapshot;
-                }
             }
 
             return device.Config;
