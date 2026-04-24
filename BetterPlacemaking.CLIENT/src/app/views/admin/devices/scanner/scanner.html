@@ -313,11 +313,11 @@
       </ng-template>
       <ng-template #body let-s>
         <tr>
-          <td>{{ s.StartDate }} {{ s.StartTime }}</td>
+          <td>{{ formatScheduleDateTime(s.StartDate, s.StartTime) }}</td>
           <td><p-tag severity="secondary" [value]="getScheduleFrequencyName(s.Frequency)"></p-tag></td>
           <td>
             <ng-container *ngIf="s.EndDate; else noEndDate">
-              {{ s.EndDate }} {{ s.EndTime }}
+              {{ formatScheduleDateTime(s.EndDate, s.EndTime) }}
             </ng-container>
             <ng-template #noEndDate>-</ng-template>
           </td>

@@ -579,19 +579,26 @@ private getScheduleLastRunMs(value: any): number {
     }
   }
 
+  /** M/D/YYYY H:MM:SS AM/PM, en-US locale. Used by scan history and schedule tables for visual consistency. */
   public formatScanDateTime(value: any): string {
     if (!value) return '-';
 
+    let date: Date | null = null;
     if (typeof value === 'string') {
       const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+      if (!Number.isNaN(parsed.getTime())) date = parsed;
+    } else if (value?.seconds) {
+      date = new Date(value.seconds * 1000);
     }
 
-    if (value?.seconds) {
-      return new Date(value.seconds * 1000).toLocaleString();
-    }
+    return date ? formatUsSlashesSeconds(date) : (typeof value === 'string' ? value : '-');
+  }
 
-    return '-';
+  /** Display-only: combine ScanSchedule's "yyyy-MM-dd" + "HH:mm" strings in the same M/D/YYYY H:MM:SS AM/PM format. */
+  public formatScheduleDateTime(dateStr?: string, timeStr?: string): string {
+    if (!dateStr || !timeStr) return '-';
+    const parsed = new Date(`${dateStr}T${timeStr}`);
+    return Number.isNaN(parsed.getTime()) ? `${dateStr} ${timeStr}` : formatUsSlashesSeconds(parsed);
   }
 
   public deleteScan(scan: ScanRecordDto): void {
@@ -747,7 +754,7 @@ private getScheduleLastRunMs(value: any): number {
       const s = (value as any)?.seconds ?? (value as any)?._seconds;
       if (typeof s === 'number') ms = s * 1000;
     }
-    return ms > 0 ? new Date(ms).toLocaleString() : '—';
+    return ms > 0 ? formatUsSlashesSeconds(new Date(ms)) : '—';
   }
 
   private loadSchedules(): void {
@@ -950,3 +957,7 @@ private getScheduleLastRunMs(value: any): number {
   }
 }
 
+/** Explicit en-US: M/D/YYYY H:MM:SS AM/PM, space between date and time. */
+function formatUsSlashesSeconds(date: Date): string {
+  return `${date.toLocaleDateString('en-US')} ${date.toLocaleTimeString('en-US')}`;
+}
