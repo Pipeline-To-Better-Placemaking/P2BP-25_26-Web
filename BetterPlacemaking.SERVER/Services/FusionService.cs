@@ -61,6 +61,51 @@ namespace BetterPlacemaking.Services
             return docs.Select(d => ToDto(d.ConvertTo<FusionRun>())).ToList();
         }
 
+        // ── Sweep stale / orphaned runs ───────────────────────────────────────
+
+        /// <summary>
+        /// Finds fusion_runs still marked "running" whose StartedAtUnix is older than
+        /// the timeout window — those are orphans left behind when a process crashed,
+        /// was OOM-killed, or was rolled out mid-run. A live instance would have
+        /// written a terminal status within FusionTimeout. Flips them to "failed"
+        /// so the UI stops polling and the scheduler stops treating them as active.
+        /// Safe to call repeatedly — idempotent.
+        /// </summary>
+        public async Task SweepStaleRunsAsync()
+        {
+            // Add a 5-minute grace buffer past the timeout — in case a run exited at
+            // the very edge of the timeout window and hasn't flushed its final write.
+            var cutoffUnix = DateTimeOffset.UtcNow
+                .Subtract(FusionTimeout + TimeSpan.FromMinutes(5))
+                .ToUnixTimeMilliseconds() / 1000.0;
+
+            // Single WhereEqualTo — no composite index needed. We filter the
+            // StartedAtUnix cutoff in memory after the fetch.
+            var running = await _db.Collection(ColFusionRuns)
+                .WhereEqualTo("Status", "running")
+                .GetSnapshotAsync();
+
+            var swept = 0;
+            foreach (var doc in running.Documents)
+            {
+                var run = doc.ConvertTo<FusionRun>();
+                if (run.StartedAtUnix is not double started || started >= cutoffUnix)
+                    continue;
+
+                await doc.Reference.UpdateAsync(new Dictionary<string, object>
+                {
+                    { "Status",          "failed" },
+                    { "ErrorMessage",    "Run abandoned (process exited before completion — likely OOM, restart, or crash)" },
+                    { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
+                });
+                swept++;
+                _logger.LogWarning("Swept stale fusion run {RunId} → failed", doc.Id);
+            }
+
+            if (swept > 0)
+                _logger.LogInformation("Fusion stale-run sweep completed: {Swept} run(s) marked failed", swept);
+        }
+
         // ── Delete a run ──────────────────────────────────────────────────────
 
         public async Task DeleteRunAsync(string runId)

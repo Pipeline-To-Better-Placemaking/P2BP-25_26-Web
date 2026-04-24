@@ -307,6 +307,24 @@ using (var seedScope = app.Services.CreateScope())
     await roleSeeder.SeedAsync();
 }
 
+// Clean up any fusion_runs left in "running" state by a previous instance that
+// was OOM-killed, restarted, or crashed. Fire-and-forget so app startup isn't
+// blocked by Firestore latency (Cloud Run has a startup deadline).
+_ = Task.Run(async () =>
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var fusionService = scope.ServiceProvider.GetRequiredService<FusionService>();
+        await fusionService.SweepStaleRunsAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Startup fusion stale-run sweep failed");
+    }
+});
+
 // Middleware
 
 // Needed for Cloud Run / reverse proxies so scheme/remote IP are correct.
