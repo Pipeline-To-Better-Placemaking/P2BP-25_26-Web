@@ -54,6 +54,7 @@ namespace BetterPlacemaking.Authorization
             public const string Update = "Project.Update";
             public const string Delete = "Project.Delete";
             public const string Export = "Project.Export";
+            public const string VisionRead = "Project.Vision.Read";
             public const string DevicesRead = "Project.Devices.Read";
             public const string DevicesManage = "Project.Devices.Manage";
             public const string MembersRead = "Project.Members.Read";
@@ -70,6 +71,7 @@ namespace BetterPlacemaking.Authorization
                 Update,
                 Delete,
                 Export,
+                VisionRead,
                 DevicesRead,
                 DevicesManage,
                 MembersRead,
@@ -95,9 +97,9 @@ namespace BetterPlacemaking.Authorization
             public static readonly string[] Editor =
             [
                 ..Viewer,
+                VisionRead,
                 Update,
                 DevicesManage,
-                ScansStart,
                 ScansDelete,
                 ScanSchedulesManage
             ];

@@ -4,12 +4,11 @@ import { RouterModule } from '@angular/router';
 import { ProjectService } from '../../../services/project-service';
 import { ButtonModule } from 'primeng/button';
 import { ProjectDto } from '../../../models/ProjectDto';
-import { catchError, finalize, of } from 'rxjs';
-import { PermissionDirective } from '../../../directives/permission.directive';
+import { finalize } from 'rxjs';
 
 @Component({
   selector: 'app-select-project',
-  imports: [TableModule, RouterModule, ButtonModule, PermissionDirective],
+  imports: [TableModule, RouterModule, ButtonModule],
   templateUrl: './select-project.html',
   styleUrl: './select-project.scss',
 })

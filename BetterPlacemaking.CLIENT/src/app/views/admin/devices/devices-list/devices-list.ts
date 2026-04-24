@@ -100,6 +100,15 @@ export class DevicesList implements OnInit {
         },
       },
       {
+        label: 'Health Report',
+        icon: 'pi pi-heart',
+        command: () => {
+          if (this.selectedDevice) {
+            this.openHealthReport(this.selectedDevice);
+          }
+        },
+      },
+      {
         label: 'Delete',
         icon: 'pi pi-trash',
         command: () => {
@@ -120,7 +129,7 @@ export class DevicesList implements OnInit {
     ];
   }
 
-  public openHealthReport(device: DeviceDto): void {
+  private openHealthReport(device: DeviceDto): void {
     this.healthReportRef = this.dialogService.open(DeviceHealthReport, {
       header: `Health Report${device?.Name ? ` - ${device.Name}` : ''}`,
       width: '70vw',

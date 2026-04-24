@@ -53,6 +53,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
   public readonly projectSectionPermissions = [
     'Project.Read',
     'Project.Scans.Read',
+    'Project.Vision.Read',
     'Project.Devices.Read',
     'Project.Export',
     'Project.Members.AssignEditorViewer',
@@ -150,7 +151,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
           items: [
             { label: 'Dashboard', faIcon: faChartLine, routerLink: `/${base}/dashboard`, permission: 'Project.Read', permissionProjectId: base },
             { label: '3D Model', faIcon: faCube, routerLink: `/${base}/model`, permission: 'Project.Scans.Read', permissionProjectId: base },
-            { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision`, permission: 'Project.Read', permissionProjectId: base },
+            { label: 'Vision', faIcon: faEye, routerLink: `/${base}/vision`, permission: 'Project.Vision.Read', permissionProjectId: base },
             { label: 'Fusion', faIcon: faCodeMerge, routerLink: `/${base}/fusion`, permission: 'Project.Scans.Read', permissionProjectId: base },
             { label: 'Permissions', faIcon: faUserShield, routerLink: `/${base}/admin/permissions`, permission: 'Project.Members.AssignEditorViewer', permissionProjectId: base },
             { label: 'Devices', faIcon: faMicrochip, routerLink: `/${base}/devices`, permission: 'Project.Devices.Read', permissionProjectId: base },

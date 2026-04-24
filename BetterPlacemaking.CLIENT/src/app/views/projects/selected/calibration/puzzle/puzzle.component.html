@@ -1,4 +1,4 @@
-<div *hasPermission="'Project.Read'; projectId: projectId" class="puzzle-container" tabindex="0" (keydown)="onKeyDown($event)">
+<div *hasPermission="'Project.Vision.Read'; projectId: projectId" class="puzzle-container" tabindex="0" (keydown)="onKeyDown($event)">
   <!-- Calibration banner -->
   <div *ngIf="mode === 'calibrate'" class="calibration-banner">
     <div class="cal-steps">

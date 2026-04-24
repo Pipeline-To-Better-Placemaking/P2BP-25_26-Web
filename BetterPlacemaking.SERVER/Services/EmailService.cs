@@ -113,12 +113,15 @@ namespace BetterPlacemaking.Services
 
         private MailjetClient? CreateClient()
         {
-            var apiKey =
+            var apiKey = CleanSecret(
                 Environment.GetEnvironmentVariable("MAILJET_KEY")
-                ?? _config["Mailjet:ApiKey"];
-            var apiSecret =
+                ?? _config["Mailjet:ApiKey"]
+            );
+
+            var apiSecret = CleanSecret(
                 Environment.GetEnvironmentVariable("SECRET_KEY")
-                ?? _config["Mailjet:ApiSecret"];
+                ?? _config["Mailjet:ApiSecret"]
+            );
 
             if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
             {
@@ -127,6 +130,23 @@ namespace BetterPlacemaking.Services
             }
 
             return new MailjetClient(apiKey, apiSecret);
+        }
+
+        private static string? CleanSecret(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            value = value.Trim();
+
+            if (value.Length >= 2 &&
+                ((value.StartsWith("\"") && value.EndsWith("\"")) ||
+                 (value.StartsWith("'") && value.EndsWith("'"))))
+            {
+                value = value.Substring(1, value.Length - 2).Trim();
+            }
+
+            return string.IsNullOrWhiteSpace(value) ? null : value;
         }
 
         private string ResolveApiBaseUrl()

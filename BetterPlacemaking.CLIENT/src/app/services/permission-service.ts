@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, Subscription, catchError, map, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, catchError, map, of, tap } from 'rxjs';
 import { AuthService } from './auth-service';
 import { UsersService } from './users-service';
 
@@ -34,6 +34,18 @@ export class PermissionService {
     );
   }
 
+  public hasGlobalPermissionFresh$(permission: string | string[], mode: 'all' | 'any' = 'all'): Observable<boolean> {
+    return this.usersService.getMyGlobalPermissions().pipe(
+      catchError(() => of([] as string[])),
+      map((permissions) => this.toPermissionSet(permissions)),
+      tap((permissions) => {
+        this.globalPermissionsLoaded = true;
+        this.globalPermissionsSubject.next(permissions);
+      }),
+      map((permissions) => this.evaluate(permissions, permission, mode)),
+    );
+  }
+
   public hasProjectPermission$(
     projectId: string | null | undefined,
     permission: string | string[],
@@ -47,6 +59,27 @@ export class PermissionService {
     this.ensureProjectPermissionsLoaded(normalizedProjectId);
     const subject = this.getProjectPermissionSubject(normalizedProjectId);
     return subject.pipe(map((permissions) => this.evaluate(permissions, permission, mode)));
+  }
+
+  public hasProjectPermissionFresh$(
+    projectId: string | null | undefined,
+    permission: string | string[],
+    mode: 'all' | 'any' = 'all',
+  ): Observable<boolean> {
+    const normalizedProjectId = projectId?.trim();
+    if (!normalizedProjectId) {
+      return of(false);
+    }
+
+    return this.usersService.getMyProjectPermissions(normalizedProjectId).pipe(
+      catchError(() => of([] as string[])),
+      map((permissions) => this.toPermissionSet(permissions)),
+      tap((permissions) => {
+        this.loadedProjectPermissions.add(normalizedProjectId);
+        this.getProjectPermissionSubject(normalizedProjectId).next(permissions);
+      }),
+      map((permissions) => this.evaluate(permissions, permission, mode)),
+    );
   }
 
   public hasGlobalPermissionSync(permission: string): boolean {

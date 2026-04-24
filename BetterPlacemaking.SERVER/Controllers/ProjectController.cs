@@ -43,7 +43,7 @@ namespace BetterPlacemaking.Controllers
                 return Unauthorized();
 
             var projects = await _projectService.GetAllAsync(cancellationToken);
-            var canReadAll = await _authorizationDataService.HasGlobalPermissionAsync(
+            var canReadAll = await _authorizationDataService.HasGlobalPermissionFreshAsync(
                 userId,
                 User,
                 Permissions.Global.Projects.ReadAll,

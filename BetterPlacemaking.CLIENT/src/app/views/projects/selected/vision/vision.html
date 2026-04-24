@@ -1,4 +1,4 @@
-<div *hasPermission="'Project.Read'; projectId: projectId" class="w-full flex flex-col content-background rounded-lg">
+<div *hasPermission="'Project.Vision.Read'; projectId: projectId" class="w-full flex flex-col content-background rounded-lg">
 
   <!-- Recommended action bar -->
   <p-message *ngIf="recommendedAction" severity="warn" [text]="recommendedAction" styleClass="w-full" />
@@ -360,7 +360,7 @@
             </div>
           </div>
           <p-button
-            *hasPermission="'Project.Read'; projectId: projectId"
+            *hasPermission="'Project.Vision.Read'; projectId: projectId"
             label="Open Puzzle"
             icon="pi pi-map"
             severity="contrast"

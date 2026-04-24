@@ -1,7 +1,4 @@
-<div
-  *hasPermission="'Project.Devices.Read'; projectId: scopedProjectId"
-  class="w-full flex flex-col content-background rounded-lg"
->
+<div class="w-full flex flex-col content-background rounded-lg">
   <p-table [value]="devices" class="rounded-lg overflow-hidden">
     <ng-template #caption>
       <div class="w-full flex flex-col gap-3">
@@ -44,23 +41,13 @@
         <td>{{ device?.Config?.Tracking?.Enabled ? 'Yes' : 'No' }}</td>
         <td>{{ device?.Config?.HeartbeatInterval ? device.Config.HeartbeatInterval : '—' }}</td>
         <td>
-          <div class="flex justify-end gap-1">
-            <p-button
-              *hasPermission="'Project.Devices.Read'; projectId: scopedProjectId"
-              icon="pi pi-heart"
-              severity="secondary"
-              styleClass="p-button-text p-button-rounded p-button-plain"
-              (onClick)="openHealthReport(device)"
-            >
-            </p-button>
-            <p-button
-              *hasPermission="'Project.Devices.Manage'; projectId: scopedProjectId"
-              icon="pi pi-ellipsis-v"
-              styleClass="p-button-text p-button-rounded p-button-plain"
-              (onClick)="onRowMenuClick($event, device, rowMenu)"
-            >
-            </p-button>
-          </div>
+          <p-button
+            *hasPermission="'Project.Devices.Manage'; projectId: scopedProjectId"
+            icon="pi pi-ellipsis-v"
+            styleClass="p-button-text p-button-rounded p-button-plain"
+            (onClick)="onRowMenuClick($event, device, rowMenu)"
+          >
+          </p-button>
         </td>
       </tr>
     </ng-template>

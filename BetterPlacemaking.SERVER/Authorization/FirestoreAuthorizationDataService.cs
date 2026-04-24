@@ -12,7 +12,6 @@ namespace BetterPlacemaking.Authorization
         ILogger<FirestoreAuthorizationDataService> logger)
     {
         private static readonly TimeSpan GlobalCacheDuration = TimeSpan.FromMinutes(10);
-        private static readonly TimeSpan ProjectCacheDuration = TimeSpan.FromMinutes(5);
 
         private readonly FirestoreDb _db = db;
         private readonly IDistributedCache _cache = cache;
@@ -29,6 +28,18 @@ namespace BetterPlacemaking.Authorization
             if (cached.HasValue)
                 return cached.Value;
 
+            var allowed = await HasGlobalPermissionFreshAsync(userId, principal, permission, cancellationToken);
+
+            await SetCachedAsync(cacheKey, allowed, GlobalCacheDuration, cancellationToken);
+            return allowed;
+        }
+
+        public async Task<bool> HasGlobalPermissionFreshAsync(
+            string userId,
+            ClaimsPrincipal principal,
+            string permission,
+            CancellationToken cancellationToken = default)
+        {
             var roleSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var role in principal.FindAll(ClaimTypes.Role).Select(c => c.Value))
@@ -44,14 +55,11 @@ namespace BetterPlacemaking.Authorization
                     if (!string.IsNullOrWhiteSpace(role))
                         roleSet.Add(role);
 
-            var allowed = await RoleSetContainsPermissionAsync(
+            return await RoleSetContainsPermissionAsync(
                 collectionName: "role_definitions_global",
                 roles: roleSet,
                 permission: permission,
                 cancellationToken: cancellationToken);
-
-            await SetCachedAsync(cacheKey, allowed, GlobalCacheDuration, cancellationToken);
-            return allowed;
         }
 
         public async Task<bool> HasProjectPermissionAsync(
@@ -60,11 +68,6 @@ namespace BetterPlacemaking.Authorization
             string permission,
             CancellationToken cancellationToken = default)
         {
-            var cacheKey = $"authz:project:user:{userId}:project:{projectId}:permission:{permission}";
-            var cached = await TryGetCachedAsync(cacheKey, cancellationToken);
-            if (cached.HasValue)
-                return cached.Value;
-
             // Super-admin style global roles can carry project permissions and should short-circuit project checks.
             var globalAssignmentSnapshot = await _db.Collection("user_global_roles")
                 .Document(userId)
@@ -90,7 +93,6 @@ namespace BetterPlacemaking.Authorization
 
                 if (globallyAllowed)
                 {
-                    await SetCachedAsync(cacheKey, true, ProjectCacheDuration, cancellationToken);
                     return true;
                 }
             }
@@ -103,7 +105,6 @@ namespace BetterPlacemaking.Authorization
 
             if (!memberSnapshot.Exists)
             {
-                await SetCachedAsync(cacheKey, false, ProjectCacheDuration, cancellationToken);
                 return false;
             }
 
@@ -119,7 +120,6 @@ namespace BetterPlacemaking.Authorization
                 permission: permission,
                 cancellationToken: cancellationToken);
 
-            await SetCachedAsync(cacheKey, allowed, ProjectCacheDuration, cancellationToken);
             return allowed;
         }
 
