@@ -11,7 +11,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
-import { ActivatedRoute } from '@angular/router';
 
 import { ScanRecordDto } from '../../../../services/scan-service';
 import { FloorplanItem } from '../../../../services/floorplan-service';
@@ -34,6 +33,7 @@ interface ScanOverlay {
   xTranslation: number;
   yTranslation: number;
   theta: number;
+  scale: number;
   opacity: number;
   visible: boolean;
 }
@@ -91,9 +91,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
   private floorplanImg = new Image();
   public floorplanLoaded = false;
 
-  constructor(private scanCalibrationService: ScanCalibrationService,
-    private route: ActivatedRoute,
-  ) {}
+  constructor(private scanCalibrationService: ScanCalibrationService) {}
 
   ngAfterViewInit(): void {
     this.initCanvas();
@@ -260,6 +258,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
             xTranslation: 0,
             yTranslation: 0,
             theta: 0,
+            scale: 1,
             opacity: 0.75,
             visible: true
           });
@@ -281,6 +280,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
           xTranslation: 0,
           yTranslation: 0,
           theta: 0,
+          scale: 1,
           opacity: 0.75,
           visible: true
         });
@@ -295,6 +295,16 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
     }
 
     this.mode = 'align';
+    this.draw();
+  }
+
+  public selectOverlay(index: number): void {
+    this.selectedOverlayIndex = index;
+
+    this.overlays.forEach((o, i) => {
+      o.opacity = i === index ? 1 : 0.75;
+    });
+
     this.draw();
   }
 
@@ -313,15 +323,73 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
     this.draw();
   }
 
-  public selectOverlay(index: number): void {
-    this.selectedOverlayIndex = index;
+  public scaleSelected(delta: number): void {
+  if (!this.selectedOverlay) return;
 
-    this.overlays.forEach((o, i) => {
-      o.opacity = i === index ? 1 : 0.75;
-    });
+  this.selectedOverlay.scale = Math.max(
+    0.05,
+    Number((this.selectedOverlay.scale + delta).toFixed(3))
+  );
 
-    this.draw();
+  this.draw();
+}
+
+  public onWorkspaceKeyDown(event: KeyboardEvent): void {
+  if (!this.selectedOverlay) return;
+
+  const move = event.shiftKey ? 10 : 2;
+  const rotate = event.shiftKey ? 10 : 2;
+  const scale = event.shiftKey ? 0.1 : 0.025;
+
+  switch (event.key) {
+    case 'ArrowLeft':
+      this.selectedOverlay.xTranslation -= move;
+      break;
+
+    case 'ArrowRight':
+      this.selectedOverlay.xTranslation += move;
+      break;
+
+    case 'ArrowUp':
+      this.selectedOverlay.yTranslation += move;
+      break;
+
+    case 'ArrowDown':
+      this.selectedOverlay.yTranslation -= move;
+      break;
+
+    case '[':
+      this.selectedOverlay.theta -= rotate;
+      break;
+
+    case ']':
+      this.selectedOverlay.theta += rotate;
+      break;
+
+    case '+':
+    case '=':
+      this.selectedOverlay.scale += scale;
+      break;
+
+    case '-':
+    case '_':
+      this.selectedOverlay.scale = Math.max(0.05, this.selectedOverlay.scale - scale);
+      break;
+
+    case '0':
+      this.selectedOverlay.xTranslation = 0;
+      this.selectedOverlay.yTranslation = 0;
+      this.selectedOverlay.theta = 0;
+      this.selectedOverlay.scale = 1;
+      break;
+
+    default:
+      return;
   }
+
+  event.preventDefault();
+  this.draw();
+}
 
   public onCanvasMouseDown(event: MouseEvent): void {
     if (!this.workspaceCanvas) return;
@@ -617,7 +685,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
     }
   }
 
-  private draw(): void {
+  public draw(): void {
     const canvas = this.workspaceCanvas?.nativeElement;
     if (!canvas) return;
 
@@ -633,7 +701,7 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
 
     ctx.clearRect(0, 0, w, h);
 
-    ctx.fillStyle = '#637282';
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
 
     if (this.floorplanLoaded && this.floorplanImg) {
@@ -668,8 +736,8 @@ export class MultiLidarCalibration implements AfterViewInit, OnChanges {
       ctx.globalAlpha = overlay.opacity;
 
       const img = overlay.image;
-      const drawW = img.width;
-      const drawH = img.height;
+      const drawW = img.width * overlay.scale;
+      const drawH = img.height * overlay.scale;
 
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
 

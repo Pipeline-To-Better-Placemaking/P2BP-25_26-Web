@@ -1,7 +1,7 @@
 <div *hasPermission="'Project.Update'; projectId: projectId" class="flex flex-col gap-4 p-1">
 
   <p class="text-sm text-muted-color">
-    Calibrate the floorplan first, then select two or more successful scans or uploaded XYZ files, load their flattened overlays, and align them before saving the combined calibration.
+    Calibrate the floorplan first, then select two or more uploaded XYZ files, load their flattened overlays, and align them before saving the combined calibration.
   </p>
 
   <div *ngIf="saveError" class="rounded border border-red-300 bg-red-50 text-red-700 px-3 py-2 text-sm">
@@ -37,34 +37,8 @@
 
   <div class="flex gap-6 items-start">
 
-    <!-- LEFT -->
     <div class="flex flex-col gap-4 flex-1 min-w-0">
 
-      <!-- HISTORY SCANS -->
-      <!--<div class="flex flex-col gap-2 border rounded p-3">
-        <div class="text-sm font-semibold">Successful History Scans</div>
-
-        <div *ngIf="successfulScans.length === 0" class="text-sm text-muted-color border rounded p-3">
-          No successful scans are available yet.
-        </div>
-
-        <div *ngFor="let scan of successfulScans"
-             class="flex items-center justify-between p-3 border rounded">
-          <div class="min-w-0">
-            <div class="font-medium text-sm">Scan {{ scan.Id }}</div>
-            <div class="text-xs text-muted-color">{{ scan.Status }}</div>
-          </div>
-
-          <p-button
-            [label]="isScanSelected(scan.Id!) ? 'Selected' : 'Select'"
-            size="small"
-            [severity]="isScanSelected(scan.Id!) ? 'primary' : 'secondary'"
-            (onClick)="toggleScanSelection(scan.Id!)">
-          </p-button>
-        </div>
-      </div>-->
-
-      <!-- UPLOADED SCANS -->
       <div class="flex flex-col gap-2 border rounded p-3">
         <div class="text-sm font-semibold">Upload XYZ Scans</div>
 
@@ -102,8 +76,7 @@
         </div>
       </div>
 
-      <!-- ACTIONS -->
-      <div class="flex gap-2">
+      <div class="flex gap-2 flex-wrap">
         <p-button
           label="Calibrate Floorplan"
           icon="pi pi-compass"
@@ -113,24 +86,18 @@
         </p-button>
 
         <p-button
-          label="Load Selected / Uploaded Scans"
+          label="Load Selected Scans"
           icon="pi pi-images"
-          [disabled]="(selectedScanIds.length + selectedUploadedFileIds.length) < 2 || !scalarMmPerPixel"
+          [disabled]="selectedUploadedFileIds.length < 2 || !scalarMmPerPixel"
           (onClick)="loadSelectedScans()">
         </p-button>
       </div>
 
-      <!-- SELECTED SUMMARY -->
       <div class="flex flex-col gap-3 border rounded p-3">
         <div class="text-sm font-semibold">Selected Scans</div>
 
-        <div *ngIf="selectedScans.length === 0 && selectedUploadedFileIds.length === 0"
-             class="text-sm text-muted-color">
+        <div *ngIf="selectedUploadedFileIds.length === 0" class="text-sm text-muted-color">
           No scans selected.
-        </div>
-
-        <div *ngFor="let scan of selectedScans" class="text-sm">
-          History Scan {{ scan.Id }}
         </div>
 
         <div *ngFor="let file of uploadedFiles" class="text-sm">
@@ -140,15 +107,18 @@
         </div>
 
         <div class="text-xs text-muted-color pt-2">
-          Select at least two total scans.
+          Select at least two uploaded scans.
         </div>
       </div>
 
-      <!-- DETAILS -->
       <div class="flex flex-col gap-2 border rounded p-3">
         <div class="text-sm font-semibold">Calibration Details</div>
-        <div class="text-sm"><span class="font-medium">Floorplan:</span> {{ floorPlan?.Nickname || 'None' }}</div>
-        <div class="text-sm"><span class="font-medium">Scalar (mm/pixel):</span> {{ scalarMmPerPixel ?? '—' }}</div>
+        <div class="text-sm">
+          <span class="font-medium">Floorplan:</span> {{ floorPlan?.Nickname || 'None' }}
+        </div>
+        <div class="text-sm">
+          <span class="font-medium">Scalar (mm/pixel):</span> {{ scalarMmPerPixel ?? '—' }}
+        </div>
 
         <div>
           <label class="text-xs">Output Name</label>
@@ -157,8 +127,11 @@
       </div>
     </div>
 
-    <!-- RIGHT -->
-    <div class="w-[40rem] flex-shrink-0 flex flex-col gap-2">
+    <div
+      class="w-[40rem] flex-shrink-0 flex flex-col gap-2"
+      tabindex="0"
+      (keydown)="onWorkspaceKeyDown($event)">
+
       <div class="text-sm font-semibold">Workspace (center is 0,0)</div>
 
       <canvas
@@ -172,7 +145,7 @@
       </canvas>
 
       <div class="text-xs text-muted-color">
-        Drag the selected overlay across the XY plane. Positive X is right, positive Y is up.
+        Click an overlay below, then use arrow keys to move, [ / ] to rotate, + / - to scale, and 0 to reset.
       </div>
 
       <div class="flex flex-col gap-3 border rounded p-3 mt-2" *ngIf="overlays.length > 0">
@@ -184,7 +157,10 @@
              (click)="selectOverlay(i)">
           <div class="text-sm">{{ overlay.label }}</div>
           <div class="text-xs text-muted-color">
-            X {{ overlay.xTranslation }}, Y {{ overlay.yTranslation }}, θ {{ overlay.theta }}
+            X {{ overlay.xTranslation }},
+            Y {{ overlay.yTranslation }},
+            θ {{ overlay.theta }},
+            S {{ overlay.scale }}
           </div>
         </div>
 
@@ -201,19 +177,26 @@
               <label class="text-xs">Y Translation</label>
               <input pInputText type="number" [(ngModel)]="selectedOverlay.yTranslation" class="w-full" />
             </div>
+
+            <div>
+              <label class="text-xs">Theta</label>
+              <input pInputText type="number" [(ngModel)]="selectedOverlay.theta" class="w-full" />
+            </div>
+
+            <div>
+              <label class="text-xs">Scale</label>
+              <input pInputText type="number" step="0.025" [(ngModel)]="selectedOverlay.scale" class="w-full" />
+            </div>
           </div>
 
-          <div>
-            <label class="text-xs">Theta</label>
-            <input pInputText type="number" [(ngModel)]="selectedOverlay.theta" class="w-full" />
+          <div class="flex gap-2 flex-wrap">
+            <p-button label="-5°" severity="secondary" (onClick)="rotateSelected(-5)"></p-button>
+            <p-button label="+5°" severity="secondary" (onClick)="rotateSelected(5)"></p-button>
+            <p-button label="Scale -" severity="secondary" (onClick)="scaleSelected(-0.05)"></p-button>
+            <p-button label="Scale +" severity="secondary" (onClick)="scaleSelected(0.05)"></p-button>
           </div>
 
-          <div class="flex gap-2">
-            <p-button label="-5°" (onClick)="rotateSelected(-5)"></p-button>
-            <p-button label="+5°" (onClick)="rotateSelected(5)"></p-button>
-          </div>
-
-          <div class="flex gap-2">
+          <div class="flex gap-2 flex-wrap">
             <p-button label="←" severity="secondary" (onClick)="nudgeSelected(-5, 0)"></p-button>
             <p-button label="→" severity="secondary" (onClick)="nudgeSelected(5, 0)"></p-button>
             <p-button label="↑" severity="secondary" (onClick)="nudgeSelected(0, 5)"></p-button>
@@ -224,7 +207,6 @@
     </div>
   </div>
 
-  <!-- FOOTER ACTIONS -->
   <div class="flex gap-2 border-t pt-4">
     <p-button
       label="Save Calibration"
