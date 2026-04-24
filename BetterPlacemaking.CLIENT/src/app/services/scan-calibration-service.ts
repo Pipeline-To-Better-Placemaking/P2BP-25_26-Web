@@ -26,6 +26,10 @@ export class ScanCalibrationService {
     return `${this.baseUrl}/api/ScanCalibration/${projectId}/${deviceId}/${scanId}/preview`;
   }
 
+  public getDownloadUrl(projectId: string, deviceId: string, scanId: string): string {
+  return `${this.baseUrl}/api/ScanCalibration/${projectId}/${deviceId}/${scanId}/download`;
+}
+
   public uploadXyz(projectId: string, deviceId: string, file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);

@@ -505,17 +505,16 @@
             <div class="fusion-run-right">
               <ng-container *hasPermission="'Project.Export'; projectId: projectId">
                 <a
-                  *ngIf="scan.ObjUrl"
-                  [href]="scan.ObjUrl"
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <p-button
-                    icon="pi pi-download"
-                    severity="secondary"
-                    size="small"
-                    [text]="true">
-                  </p-button>
-                </a>
+  *ngIf="scan.Id"
+  [href]="getCalibrationDownloadUrl(scan.Id)"
+  download>
+  <p-button
+    icon="pi pi-download"
+    severity="secondary"
+    size="small"
+    [text]="true">
+  </p-button>
+</a>
               </ng-container>
 
               <ng-container *hasPermission="'Project.Scans.Delete'; projectId: projectId">

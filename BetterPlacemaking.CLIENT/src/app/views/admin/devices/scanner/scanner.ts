@@ -21,6 +21,7 @@ import { TooltipModule } from 'primeng/tooltip';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
+import { ScanCalibrationService } from '../../../../services/scan-calibration-service';
 import {
   BASE_SCAN_SETTINGS,
   SCAN_PRESETS,
@@ -28,7 +29,7 @@ import {
   ScanRecordDto,
   ScanScheduleDto,
   ScanService,
-  ScanSettingsPayload
+  ScanSettingsPayload,
 } from '../../../../services/scan-service';
 import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 
@@ -175,8 +176,10 @@ export class Scanner implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private deviceService: DeviceService,
     private scanService: ScanService,
-    private floorplanService: FloorplanService
+    private floorplanService: FloorplanService,
+  private scanCalibrationService: ScanCalibrationService
   ) {}
+
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
@@ -214,6 +217,16 @@ export class Scanner implements OnInit, OnDestroy {
   public get currentLidarDeviceName(): string | null {
     return this._currentLidarDeviceName;
   }
+
+  public getCalibrationDownloadUrl(scanId: string): string {
+  if (!this.projectId || !this.currentLidarDeviceId) return '#';
+
+  return this.scanCalibrationService.getDownloadUrl(
+    this.projectId,
+    this.currentLidarDeviceId,
+    scanId
+  );
+}
 
   public setVisualMode(mode: ScannerVisualMode): void {
     this.visualMode = mode;

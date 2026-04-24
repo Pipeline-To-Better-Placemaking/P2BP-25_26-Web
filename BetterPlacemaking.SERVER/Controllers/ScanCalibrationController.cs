@@ -94,6 +94,30 @@ namespace BetterPlacemaking.Controllers
             }
         }
 
+        [HttpGet("{projectId}/{deviceId}/{scanId}/download")]
+public IActionResult DownloadScanFile(string projectId, string deviceId, string scanId)
+{
+    try
+    {
+        var localPath = ResolveLocalXyzPath(projectId, deviceId, scanId);
+
+        if (!System.IO.File.Exists(localPath))
+            return NotFound("File not found.");
+
+        var fileName = Path.GetFileName(localPath);
+
+        return PhysicalFile(
+            localPath,
+            "application/octet-stream",
+            fileName
+        );
+    }
+    catch (Exception ex)
+    {
+        return Problem(ex.Message);
+    }
+}
+
         [HttpPost("{projectId}/{deviceId}/combine")]
         public async Task<IActionResult> CombineScans(
             string projectId,
