@@ -18,6 +18,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { DialogModule } from 'primeng/dialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { startWith } from 'rxjs/operators';
 
 import { DeviceService } from '../../../../services/device-service';
 import { DeviceDto } from '../../../../models/DeviceDto';
@@ -104,6 +105,10 @@ export class Scanner implements OnInit, OnDestroy {
   public scanSettings: ScanSettingsPayload = structuredClone(BASE_SCAN_SETTINGS);
   public selectedPreset: ScanPreset | null = 'base';
 
+  private scheduleWatcherSub?: Subscription;
+private runningScheduleIds = new Set<string>();
+private readonly schedulePollMs = 15000;
+
   public presetOptions: SelectOption<ScanPreset>[] = [
     { label: 'Base Quality', value: 'base' },
     { label: 'Medium Quality', value: 'medium' },
@@ -185,6 +190,7 @@ export class Scanner implements OnInit, OnDestroy {
     this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
     if (this.projectId) {
       this.loadSchedules();
+      this.startScheduleWatcher();
       this.resolveLidarDeviceAndLoadHistory();
       this.loadFloorplans();
     }
@@ -192,11 +198,178 @@ export class Scanner implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopScanStatusPolling();
+    this.scheduleWatcherSub?.unsubscribe();
   }
 
   public get selectedFloorplan(): FloorplanItem | null {
     return this.floorplans.find((f) => f.Id === this.selectedFloorplanId) ?? null;
   }
+  private startScheduleWatcher(): void {
+  this.scheduleWatcherSub?.unsubscribe();
+
+  this.scheduleWatcherSub = interval(this.schedulePollMs)
+    .pipe(startWith(0))
+    .subscribe(() => {
+      this.checkSchedulesAndRunScans();
+    });
+}
+
+private checkSchedulesAndRunScans(): void {
+  if (!this.projectId || this.scanning || !this.schedules?.length) {
+    return;
+  }
+
+  const now = new Date();
+
+  for (const schedule of this.schedules) {
+    if (!schedule.Id) continue;
+    if (this.runningScheduleIds.has(schedule.Id)) continue;
+
+    if (this.isScheduleDue(schedule, now)) {
+      this.runScheduledScan(schedule);
+      break;
+    }
+  }
+}
+
+private isScheduleDue(schedule: ScanScheduleDto, now: Date): boolean {
+  const start = this.parseScheduleDateTime(schedule.StartDate, schedule.StartTime);
+  if (!start) return false;
+
+  const end = this.parseScheduleDateTime(schedule.EndDate, schedule.EndTime);
+  if (now < start) return false;
+  if (end && now > end) return false;
+
+  const lastRunMs = this.getScheduleLastRunMs(schedule.LastRunAt);
+
+  // Prevent duplicate triggering within the same minute.
+  if (lastRunMs && now.getTime() - lastRunMs < 60_000) {
+    return false;
+  }
+
+  const frequency = schedule.Frequency;
+
+  if (frequency === 'Never') {
+    return !lastRunMs && this.isWithinDueWindow(now, start);
+  }
+
+  const occurrence = this.getCurrentOccurrenceForSchedule(schedule, now);
+  if (!occurrence) return false;
+
+  if (!this.isWithinDueWindow(now, occurrence)) {
+    return false;
+  }
+
+  if (lastRunMs && lastRunMs >= occurrence.getTime()) {
+    return false;
+  }
+
+  return true;
+}
+
+private getCurrentOccurrenceForSchedule(schedule: ScanScheduleDto, now: Date): Date | null {
+  const start = this.parseScheduleDateTime(schedule.StartDate, schedule.StartTime);
+  if (!start) return null;
+
+  const occurrence = new Date(now);
+  occurrence.setHours(start.getHours(), start.getMinutes(), 0, 0);
+
+  switch (schedule.Frequency) {
+    case 'Daily':
+      return occurrence;
+
+    case 'Weekly':
+      return now.getDay() === start.getDay() ? occurrence : null;
+
+    case 'Monthly':
+      return now.getDate() === start.getDate() ? occurrence : null;
+
+    case 'Yearly':
+      return now.getMonth() === start.getMonth() && now.getDate() === start.getDate()
+        ? occurrence
+        : null;
+
+    default:
+      return null;
+  }
+}
+
+private isWithinDueWindow(now: Date, target: Date): boolean {
+  const diff = Math.abs(now.getTime() - target.getTime());
+  return diff <= this.schedulePollMs;
+}
+
+private runScheduledScan(schedule: ScanScheduleDto): void {
+  if (!schedule.Id) return;
+
+  this.runningScheduleIds.add(schedule.Id);
+  this.scanMessage = `Scheduled scan started for ${schedule.StartDate} ${schedule.StartTime}.`;
+  this.scanMessageSeverity = 'info';
+
+  this.performScan();
+
+  const lastRunAt = new Date().toISOString();
+
+  const updatedSchedule: ScanScheduleDto = {
+    ...schedule,
+    LastRunAt: lastRunAt,
+  };
+
+  this.scanService.updateSchedule(this.projectId!, schedule.Id, updatedSchedule).subscribe({
+    next: () => {
+      schedule.LastRunAt = lastRunAt;
+      this.runningScheduleIds.delete(schedule.Id!);
+      this.loadSchedules();
+    },
+    error: () => {
+      this.runningScheduleIds.delete(schedule.Id!);
+    },
+  });
+}
+
+private parseScheduleDateTime(date?: string | null, time?: string | null): Date | null {
+  if (!date || !time) return null;
+
+  const normalizedTime = this.normalizeScheduleTime(time);
+  if (!normalizedTime) return null;
+
+  const parsed = new Date(`${date}T${normalizedTime}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+private normalizeScheduleTime(time: string): string | null {
+  const trimmed = time.trim();
+
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? 0);
+  const meridian = match[4]?.toUpperCase();
+
+  if (meridian === 'PM' && hour < 12) hour += 12;
+  if (meridian === 'AM' && hour === 12) hour = 0;
+
+  return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+private getScheduleLastRunMs(value: any): number {
+  if (!value) return 0;
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  if (value.seconds) {
+    return value.seconds * 1000;
+  }
+
+  return 0;
+}
 
   public get successCount(): number {
     return this.scanHistory.filter(

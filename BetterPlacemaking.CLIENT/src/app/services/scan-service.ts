@@ -147,12 +147,16 @@ export class ScanService {
     );
   }
 
-  updateSchedule(projectId: string, scheduleId: string, schedule: ScanScheduleDto): Observable<void> {
-    return this.http.put<void>(
-      `${this.baseUrl}/api/scan-schedule/${projectId}/${scheduleId}`,
-      schedule
-    );
-  }
+  public updateSchedule(
+  projectId: string,
+  scheduleId: string,
+  payload: ScanScheduleDto
+): Observable<ScanScheduleDto> {
+  return this.http.put<ScanScheduleDto>(
+    `${this.baseUrl}/api/scan-schedule/${projectId}/${scheduleId}`,
+    payload
+  );
+}
 
   loadLatestCompleteScanIntoVisualizer(projectId: string): Observable<LoadLatestScanVisualizerResponse> {
     return this.http.post<LoadLatestScanVisualizerResponse>(
