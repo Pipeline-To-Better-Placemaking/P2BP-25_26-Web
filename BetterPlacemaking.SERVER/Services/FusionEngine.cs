@@ -1049,10 +1049,13 @@ public class FusionRunner
         {
             throw; // let FusionService see the real cancellation and log a clean timeout
         }
-        catch (Exception ex)
+       catch (Exception ex)
         {
-            Console.Error.WriteLine($"[ERROR] {ex.Message}");
-            return new FusionResult { Success = false, Message = ex.Message };
+            Console.Error.WriteLine($"[ERROR] {ex.GetType().FullName}: {ex.Message}");
+            Console.Error.WriteLine(ex.ToString());                  // ← full stack
+            if (ex.InnerException != null)
+                Console.Error.WriteLine("INNER: " + ex.InnerException);
+            return new FusionResult { Success = false, Message = $"{ex.GetType().Name}: {ex.Message}" };
         }
         finally
         {
