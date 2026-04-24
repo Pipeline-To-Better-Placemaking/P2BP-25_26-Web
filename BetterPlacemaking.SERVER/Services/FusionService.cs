@@ -27,10 +27,15 @@ namespace BetterPlacemaking.Services
 
         // Max wall-clock time a single fusion run is allowed to take before we cancel it
         // and mark it as failed. Keep this in sync with FusionSchedulerService.FusionTimeout.
-        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan FusionTimeout = TimeSpan.FromMinutes(30);
 
         // ── History ──────────────────────────────────────────────────────────
 
+        // Project-scoped history. Uses a server-side WhereEqualTo filter (which only
+        // needs a single-field index — auto-created by Firestore — not a composite one)
+        // and sorts/limits in memory. Fine at small/medium scale; if a single project
+        // ever accumulates hundreds of thousands of runs, switch to server-side
+        // OrderByDescending + Limit and add the composite index.
         public List<FusionRunDto> GetHistory(string projectId, int limit = 50)
         {
             var docs = _db.Collection(ColFusionRuns)
@@ -44,6 +49,8 @@ namespace BetterPlacemaking.Services
                 .ToList();
         }
 
+        // Unfiltered history across all projects. Uses Firestore's single-field
+        // auto-index on StartedAtUnix — no composite index required.
         public List<FusionRunDto> GetHistory(int limit = 50)
         {
             var docs = _db.Collection(ColFusionRuns)
@@ -72,12 +79,18 @@ namespace BetterPlacemaking.Services
 
             if (_cancelRegistry.TryCancel(runId))
             {
-                // Optimistic UI hint: the task itself will write "cancelled" on exit.
+                // Write the terminal state immediately so the UI stops polling this run.
+                // The background task will also write the same "failed" status when it
+                // unwinds the OperationCanceledException — that second write is a no-op
+                // (identical values), and if the process dies before the task unwinds we
+                // already have a correct terminal row.
                 await docRef.UpdateAsync(new Dictionary<string, object>
                 {
-                    { "Status", "cancelling" },
+                    { "Status",          "failed" },
+                    { "ErrorMessage",    "Cancelled by user" },
+                    { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                 });
-                _logger.LogInformation("Fusion {RunId} cancellation requested", runId);
+                _logger.LogInformation("Fusion {RunId} cancellation requested (marked failed)", runId);
                 return "cancelling";
             }
 
@@ -85,11 +98,11 @@ namespace BetterPlacemaking.Services
             // Flip the row so the scheduler and UI stop treating it as active.
             await docRef.UpdateAsync(new Dictionary<string, object>
             {
-                { "Status",          "cancelled" },
+                { "Status",          "failed" },
                 { "ErrorMessage",    "Cancelled by user (run was not active in this process)" },
                 { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
             });
-            _logger.LogWarning("Fusion {RunId} marked cancelled (stale running state)", runId);
+            _logger.LogWarning("Fusion {RunId} marked failed (stale running state, cancelled by user)", runId);
             return "stale";
         }
 
@@ -131,7 +144,6 @@ namespace BetterPlacemaking.Services
 
                 reg.Register(runId, userCts);
 
-
                 try
                 {
                     var runner = new FusionRunner(gcs, db);
@@ -172,10 +184,13 @@ namespace BetterPlacemaking.Services
                 }
                 catch (OperationCanceledException) when (userCts.IsCancellationRequested)
                 {
-                    log.LogWarning("Fusion {RunId} cancelled by user", runId);
+                    // User-initiated cancellation is treated as a failure so downstream
+                    // callers (scheduler, UI) only have one terminal state to handle.
+                    // The descriptive message distinguishes it from a "real" failure.
+                    log.LogWarning("Fusion {RunId} cancelled by user (marked failed)", runId);
                     await docRef.UpdateAsync(new Dictionary<string, object>
                     {
-                        { "Status",          "cancelled" },
+                        { "Status",          "failed" },
                         { "ErrorMessage",    "Cancelled by user" },
                         { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                     });
@@ -200,6 +215,10 @@ namespace BetterPlacemaking.Services
                         { "ErrorMessage",    ex.Message },
                         { "CompletedAtUnix", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 },
                     });
+                }
+                finally
+                {
+                    reg.Unregister(runId);
                 }
             });
 
