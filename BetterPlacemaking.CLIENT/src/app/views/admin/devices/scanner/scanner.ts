@@ -1,3 +1,5 @@
+
+
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -28,10 +30,11 @@ import {
   ScanService,
   ScanSettingsPayload
 } from '../../../../services/scan-service';
+import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
+
 import { PointCloudViewerComponent } from '../../../../components/point-cloud-viewer/point-cloud-viewer.component';
 import { SolidObjectsViewComponent } from '../../../../solid-objects/solid-objects-view.component';
 import { MultiLidarCalibration } from '../multi-lidar-calibration/multi-lidar-calibration';
-import { FloorplanService, FloorplanItem } from '../../../../services/floorplan-service';
 import { PermissionDirective } from '../../../../directives/permission.directive';
 
 export type ScannerVisualMode = '3d' | 'solids';
@@ -158,12 +161,12 @@ export class Scanner implements OnInit, OnDestroy {
 
   public lidarCalibrationVisible = false;
 
+  public floorplans: FloorplanItem[] = [];
   public floorplansLoading = false;
   public uploadingFloorplan = false;
-  public floorplans: FloorplanItem[] = [];
   public selectedFloorplanId: string | null = null;
 
-  private currentLidarDeviceId: string | null = null;
+  public currentLidarDeviceId: string | null = null;
   private scanStatusPollSub: Subscription | null = null;
   private _lidarConnected = false;
   private _currentLidarDeviceName: string | null = null;
@@ -172,7 +175,7 @@ export class Scanner implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private deviceService: DeviceService,
     private scanService: ScanService,
-    private floorplanService: FloorplanService,
+    private floorplanService: FloorplanService
   ) {}
 
   ngOnInit(): void {
@@ -186,6 +189,30 @@ export class Scanner implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopScanStatusPolling();
+  }
+
+  public get selectedFloorplan(): FloorplanItem | null {
+    return this.floorplans.find((f) => f.Id === this.selectedFloorplanId) ?? null;
+  }
+
+  public get successCount(): number {
+    return this.scanHistory.filter(
+      s => (s.Status ?? '').toLowerCase() === 'complete' || (s.Status ?? '').toLowerCase() === 'done'
+    ).length;
+  }
+
+  public get failedCount(): number {
+    return this.scanHistory.filter(
+      s => (s.Status ?? '').toLowerCase() === 'error' || (s.Status ?? '').toLowerCase() === 'failed'
+    ).length;
+  }
+
+  public get lidarConnected(): boolean {
+    return this._lidarConnected;
+  }
+
+  public get currentLidarDeviceName(): string | null {
+    return this._currentLidarDeviceName;
   }
 
   public setVisualMode(mode: ScannerVisualMode): void {
@@ -211,30 +238,6 @@ export class Scanner implements OnInit, OnDestroy {
     return this.scanSettings.orientation_mode === 'custom'
       ? 'Custom orientation is selectable, but extra axis controls may still depend on backend support.'
       : '';
-  }
-
-  public get successCount(): number {
-    return this.scanHistory.filter(
-      s => (s.Status ?? '').toLowerCase() === 'complete' || (s.Status ?? '').toLowerCase() === 'done'
-    ).length;
-  }
-
-  public get failedCount(): number {
-    return this.scanHistory.filter(
-      s => (s.Status ?? '').toLowerCase() === 'error' || (s.Status ?? '').toLowerCase() === 'failed'
-    ).length;
-  }
-
-  public get lidarConnected(): boolean {
-    return this._lidarConnected;
-  }
-
-  public get currentLidarDeviceName(): string | null {
-    return this._currentLidarDeviceName;
-  }
-
-  public get selectedFloorplan(): FloorplanItem | null {
-    return this.floorplans.find((f) => f.Id === this.selectedFloorplanId) ?? null;
   }
 
   public performScan(): void {
@@ -403,6 +406,47 @@ export class Scanner implements OnInit, OnDestroy {
     }
 
     return '-';
+  }
+
+  public deleteScan(scan: ScanRecordDto): void {
+    if (!this.projectId || !this.currentLidarDeviceId || !scan.Id) return;
+
+    this.deletingScanId = scan.Id;
+
+    this.scanService.deleteScan(this.projectId, this.currentLidarDeviceId, scan.Id).subscribe({
+      next: () => {
+        this.scanHistory = this.scanHistory.filter(s => s.Id !== scan.Id);
+
+        if (this.currentScanRecord?.Id === scan.Id) {
+          this.currentScanRecord = null;
+          this.currentScanStatus = null;
+        }
+
+        this.deletingScanId = null;
+        this.scanMessage = 'Scan history entry deleted.';
+        this.scanMessageSeverity = 'success';
+
+        setTimeout(() => {
+          this.scanMessage = null;
+          this.scanMessageSeverity = 'info';
+        }, 3000);
+      },
+      error: () => {
+        this.deletingScanId = null;
+        this.scanMessage = 'Failed to delete scan history entry.';
+        this.scanMessageSeverity = 'error';
+      }
+    });
+  }
+
+  public openLidarCalibration(): void {
+    if (!this.selectedFloorplan) {
+      this.scanMessage = 'Select a floorplan before opening LiDAR calibration.';
+      this.scanMessageSeverity = 'error';
+      return;
+    }
+
+    this.lidarCalibrationVisible = true;
   }
 
   private resolveLidarDeviceAndLoadHistory(): void {
@@ -637,53 +681,10 @@ export class Scanner implements OnInit, OnDestroy {
     return freq ? freq.name : code;
   }
 
-  public deleteScan(scan: ScanRecordDto): void {
-    if (!this.projectId || !this.currentLidarDeviceId || !scan.Id) {
-      return;
-    }
-
-    this.deletingScanId = scan.Id;
-
-    this.scanService.deleteScan(this.projectId, this.currentLidarDeviceId, scan.Id).subscribe({
-      next: () => {
-        this.scanHistory = this.scanHistory.filter(s => s.Id !== scan.Id);
-
-        if (this.currentScanRecord?.Id === scan.Id) {
-          this.currentScanRecord = null;
-          this.currentScanStatus = null;
-        }
-
-        this.deletingScanId = null;
-        this.scanMessage = 'Scan history entry deleted.';
-        this.scanMessageSeverity = 'success';
-
-        setTimeout(() => {
-          this.scanMessage = null;
-          this.scanMessageSeverity = 'info';
-        }, 3000);
-      },
-      error: () => {
-        this.deletingScanId = null;
-        this.scanMessage = 'Failed to delete scan history entry.';
-        this.scanMessageSeverity = 'error';
-      }
-    });
-  }
-
-  public openLidarCalibration(): void {
-    if (!this.selectedFloorplan) {
-      this.scanMessage = 'Select a floorplan before opening LiDAR calibration.';
-      this.scanMessageSeverity = 'error';
-      return;
-    }
-
-    this.lidarCalibrationVisible = true;
-  }
-
   private loadFloorplans(): void {
     this.floorplansLoading = true;
     this.floorplanService.getLibrary(this.projectId).subscribe({
-      next: (items: FloorplanItem[]) => {
+      next: (items) => {
         this.floorplans = items;
         this.floorplansLoading = false;
 
@@ -712,6 +713,7 @@ export class Scanner implements OnInit, OnDestroy {
 
     const nickname = file.name.replace(/\.[^.]+$/, '');
     this.uploadingFloorplan = true;
+
     this.floorplanService.upload(file, nickname, this.projectId).subscribe({
       next: () => {
         this.uploadingFloorplan = false;
@@ -725,7 +727,10 @@ export class Scanner implements OnInit, OnDestroy {
 
   public deleteFloorplan(id: string): void {
     this.floorplanService.delete(id).subscribe({
-      next: () => this.loadFloorplans(),
+      next: () => {
+        this.loadFloorplans();
+      },
+      error: () => {}
     });
   }
 
@@ -758,3 +763,4 @@ export class Scanner implements OnInit, OnDestroy {
     return 'Failed to start scan.';
   }
 }
+

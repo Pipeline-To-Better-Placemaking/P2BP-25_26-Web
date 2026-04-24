@@ -25,7 +25,7 @@
         (onClick)="performScan()">
       </p-button>
 
-      <p-button
+      <!--<p-button
         *hasPermission="'Project.Update'; projectId: projectId"
         label="LiDAR Calibration"
         icon="pi pi-compass"
@@ -34,7 +34,7 @@
         [pTooltip]="!selectedFloorplan ? 'Select a floorplan first' : ''"
         tooltipPosition="left"
         (onClick)="openLidarCalibration()">
-      </p-button>
+      </p-button>-->
     </div>
   </div>
 
@@ -546,9 +546,11 @@
     styleClass="lidar-calibration-dialog">
 
     <app-multi-lidar-calibration
-      [projectId]="projectId"
-      [floorPlan]="selectedFloorplan">
-    </app-multi-lidar-calibration>
+  [projectId]="projectId"
+  [deviceId]="currentLidarDeviceId"
+  [floorPlan]="selectedFloorplan"
+  [scanHistory]="scanHistory">
+</app-multi-lidar-calibration>
   </p-dialog>
 
   <div class="mt-6 flex flex-col min-h-[min(70vh,640px)]">

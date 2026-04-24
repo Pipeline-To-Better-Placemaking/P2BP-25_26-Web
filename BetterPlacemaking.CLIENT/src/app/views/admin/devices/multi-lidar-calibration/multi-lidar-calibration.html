@@ -1,122 +1,252 @@
 <div *hasPermission="'Project.Update'; projectId: projectId" class="flex flex-col gap-4 p-1">
 
   <p class="text-sm text-muted-color">
-    Drag and rotate LiDAR devices to define their relative positions for scan stitching.
+    Calibrate the floorplan first, then select two or more successful scans or uploaded XYZ files, load their flattened overlays, and align them before saving the combined calibration.
   </p>
+
+  <div *ngIf="saveError" class="rounded border border-red-300 bg-red-50 text-red-700 px-3 py-2 text-sm">
+    {{ saveError }}
+  </div>
+
+  <div *ngIf="uploadMessage" class="rounded border border-blue-300 bg-blue-50 text-blue-700 px-3 py-2 text-sm">
+    {{ uploadMessage }}
+  </div>
+
+  <div *ngIf="saveSuccess" class="rounded border border-green-300 bg-green-50 text-green-700 px-3 py-2 text-sm">
+    Calibration done.
+  </div>
+
+  <div *ngIf="mode === 'calibrate'" class="rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 p-4">
+    <div class="flex flex-col gap-3">
+      <div class="font-semibold text-sm">Floorplan Scale Calibration</div>
+      <div class="text-sm">1. Click the first reference point on the floorplan.</div>
+      <div class="text-sm">2. Click the second reference point.</div>
+
+      <div class="flex gap-2 items-center">
+        <input
+          pInputText
+          type="number"
+          [(ngModel)]="calDistanceMm"
+          (keydown.enter)="finishCalibration()"
+          placeholder="Real-world distance in mm"
+          class="w-full" />
+        <p-button label="Confirm" (onClick)="finishCalibration()"></p-button>
+      </div>
+    </div>
+  </div>
 
   <div class="flex gap-6 items-start">
 
-    <!-- LEFT: DEVICE LIST + CONTROLS -->
-    <div class="flex flex-col gap-3 flex-1 min-w-0">
+    <!-- LEFT -->
+    <div class="flex flex-col gap-4 flex-1 min-w-0">
 
-      <div>
-        <div class="text-sm font-semibold mb-2">LiDAR Devices</div>
+      <!-- HISTORY SCANS -->
+      <!--<div class="flex flex-col gap-2 border rounded p-3">
+        <div class="text-sm font-semibold">Successful History Scans</div>
 
-        <div *ngFor="let p of placements"
-             class="flex items-center justify-between p-2 border rounded cursor-pointer"
-             [class.bg-primary-50]="selected?.deviceId === p.deviceId"
-             (click)="select(p)">
+        <div *ngIf="successfulScans.length === 0" class="text-sm text-muted-color border rounded p-3">
+          No successful scans are available yet.
+        </div>
 
-          <span>{{ p.name }}</span>
+        <div *ngFor="let scan of successfulScans"
+             class="flex items-center justify-between p-3 border rounded">
+          <div class="min-w-0">
+            <div class="font-medium text-sm">Scan {{ scan.Id }}</div>
+            <div class="text-xs text-muted-color">{{ scan.Status }}</div>
+          </div>
 
-          <span class="text-xs text-muted-color">
-            ({{ p.x | number:'1.0-0' }}, {{ p.y | number:'1.0-0' }})
-          </span>
+          <p-button
+            [label]="isScanSelected(scan.Id!) ? 'Selected' : 'Select'"
+            size="small"
+            [severity]="isScanSelected(scan.Id!) ? 'primary' : 'secondary'"
+            (onClick)="toggleScanSelection(scan.Id!)">
+          </p-button>
+        </div>
+      </div>-->
+
+      <!-- UPLOADED SCANS -->
+      <div class="flex flex-col gap-2 border rounded p-3">
+        <div class="text-sm font-semibold">Upload XYZ Scans</div>
+
+        <label class="cursor-pointer">
+          <p-button
+            label="Upload XYZ"
+            icon="pi pi-upload"
+            severity="secondary"
+            (onClick)="xyzInput.click()">
+          </p-button>
+
+          <input
+            #xyzInput
+            type="file"
+            accept=".xyz"
+            multiple
+            class="hidden"
+            (change)="onXyzFilesSelected($event)" />
+        </label>
+
+        <div *ngIf="uploadedFiles.length === 0" class="text-sm text-muted-color">
+          No uploaded XYZ scans.
+        </div>
+
+        <div *ngFor="let file of uploadedFiles"
+             class="flex items-center justify-between p-2 border rounded">
+          <div class="text-sm truncate">{{ file.name }}</div>
+
+          <p-button
+            [label]="isUploadedFileSelected(file.id) ? 'Selected' : 'Select'"
+            size="small"
+            [severity]="isUploadedFileSelected(file.id) ? 'primary' : 'secondary'"
+            (onClick)="toggleUploadedFileSelection(file.id)">
+          </p-button>
         </div>
       </div>
 
-      <!-- SELECTED DEVICE CONTROLS -->
-      <div *ngIf="selected" class="flex flex-col gap-2">
+      <!-- ACTIONS -->
+      <div class="flex gap-2">
+        <p-button
+          label="Calibrate Floorplan"
+          icon="pi pi-compass"
+          severity="secondary"
+          [disabled]="!floorPlan"
+          (onClick)="startScaleCalibration()">
+        </p-button>
 
-        <div class="text-sm font-semibold">Selected: {{ selected.name }}</div>
+        <p-button
+          label="Load Selected / Uploaded Scans"
+          icon="pi pi-images"
+          [disabled]="(selectedScanIds.length + selectedUploadedFileIds.length) < 2 || !scalarMmPerPixel"
+          (onClick)="loadSelectedScans()">
+        </p-button>
+      </div>
 
-        <div class="grid grid-cols-2 gap-2">
+      <!-- SELECTED SUMMARY -->
+      <div class="flex flex-col gap-3 border rounded p-3">
+        <div class="text-sm font-semibold">Selected Scans</div>
 
-          <div>
-            <label class="text-xs">X</label>
-            <input pInputText type="number" [(ngModel)]="selected.x" class="w-full" />
-          </div>
-
-          <div>
-            <label class="text-xs">Y</label>
-            <input pInputText type="number" [(ngModel)]="selected.y" class="w-full" />
-          </div>
-
+        <div *ngIf="selectedScans.length === 0 && selectedUploadedFileIds.length === 0"
+             class="text-sm text-muted-color">
+          No scans selected.
         </div>
+
+        <div *ngFor="let scan of selectedScans" class="text-sm">
+          History Scan {{ scan.Id }}
+        </div>
+
+        <div *ngFor="let file of uploadedFiles" class="text-sm">
+          <ng-container *ngIf="isUploadedFileSelected(file.id)">
+            Uploaded Scan {{ file.name }}
+          </ng-container>
+        </div>
+
+        <div class="text-xs text-muted-color pt-2">
+          Select at least two total scans.
+        </div>
+      </div>
+
+      <!-- DETAILS -->
+      <div class="flex flex-col gap-2 border rounded p-3">
+        <div class="text-sm font-semibold">Calibration Details</div>
+        <div class="text-sm"><span class="font-medium">Floorplan:</span> {{ floorPlan?.Nickname || 'None' }}</div>
+        <div class="text-sm"><span class="font-medium">Scalar (mm/pixel):</span> {{ scalarMmPerPixel ?? '—' }}</div>
 
         <div>
-          <label class="text-xs">Rotation (°)</label>
-          <input pInputText type="number" [(ngModel)]="selected.yawDeg" class="w-full" />
+          <label class="text-xs">Output Name</label>
+          <input pInputText type="text" [(ngModel)]="outputName" class="w-full" />
         </div>
-
-        <div class="flex gap-2">
-          <p-button label="-5°" (onClick)="rotateSelected(-5)" />
-          <p-button label="+5°" (onClick)="rotateSelected(5)" />
-        </div>
-
       </div>
-
     </div>
 
-    <!-- RIGHT: CANVAS -->
-    <div class="w-96 flex-shrink-0 flex flex-col gap-2">
+    <!-- RIGHT -->
+    <div class="w-[40rem] flex-shrink-0 flex flex-col gap-2">
+      <div class="text-sm font-semibold">Workspace (center is 0,0)</div>
 
-      <div class="text-sm font-semibold">Layout</div>
+      <canvas
+        #workspaceCanvas
+        class="border rounded bg-surface-100 dark:bg-surface-800 w-full"
+        style="height: 520px;"
+        (mousedown)="onCanvasMouseDown($event)"
+        (mousemove)="onCanvasMouseMove($event)"
+        (mouseup)="onCanvasMouseUp()"
+        (mouseleave)="onCanvasMouseUp()">
+      </canvas>
 
-      <div class="relative border rounded bg-surface-100 dark:bg-surface-800"
-           style="height: 400px;"
-           (mousemove)="onDrag($event)"
-           (mouseup)="stopDrag()"
-           (mouseleave)="stopDrag()">
+      <div class="text-xs text-muted-color">
+        Drag the selected overlay across the XY plane. Positive X is right, positive Y is up.
+      </div>
 
-        <div *ngFor="let p of placements"
-             class="absolute flex flex-col items-center cursor-pointer"
-             [style.left.px]="p.x"
-             [style.top.px]="p.y"
-             (mousedown)="startDrag($event, p)"
-             (click)="select(p)">
+      <div class="flex flex-col gap-3 border rounded p-3 mt-2" *ngIf="overlays.length > 0">
+        <div class="text-sm font-semibold">Overlay Controls</div>
 
-          <!-- LIDAR NODE -->
-          <div class="w-8 h-8 rounded-full border flex items-center justify-center bg-surface-0 shadow"
-               [class.border-primary]="selected?.deviceId === p.deviceId">
+        <div *ngFor="let overlay of overlays; let i = index"
+             class="flex items-center justify-between p-2 border rounded cursor-pointer"
+             [class.bg-primary-50]="selectedOverlayIndex === i"
+             (click)="selectOverlay(i)">
+          <div class="text-sm">{{ overlay.label }}</div>
+          <div class="text-xs text-muted-color">
+            X {{ overlay.xTranslation }}, Y {{ overlay.yTranslation }}, θ {{ overlay.theta }}
+          </div>
+        </div>
 
-            <!-- DIRECTION ARROW -->
-            <div class="w-0.5 h-5 bg-black dark:bg-white"
-                 [style.transform]="'rotate(' + p.yawDeg + 'deg)'">
+        <div *ngIf="selectedOverlay" class="flex flex-col gap-2 pt-2">
+          <div class="text-sm font-semibold">Selected Overlay</div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs">X Translation</label>
+              <input pInputText type="number" [(ngModel)]="selectedOverlay.xTranslation" class="w-full" />
             </div>
 
+            <div>
+              <label class="text-xs">Y Translation</label>
+              <input pInputText type="number" [(ngModel)]="selectedOverlay.yTranslation" class="w-full" />
+            </div>
           </div>
 
-          <span class="text-xs mt-1 text-center">
-            {{ p.name }}
-          </span>
+          <div>
+            <label class="text-xs">Theta</label>
+            <input pInputText type="number" [(ngModel)]="selectedOverlay.theta" class="w-full" />
+          </div>
 
+          <div class="flex gap-2">
+            <p-button label="-5°" (onClick)="rotateSelected(-5)"></p-button>
+            <p-button label="+5°" (onClick)="rotateSelected(5)"></p-button>
+          </div>
+
+          <div class="flex gap-2">
+            <p-button label="←" severity="secondary" (onClick)="nudgeSelected(-5, 0)"></p-button>
+            <p-button label="→" severity="secondary" (onClick)="nudgeSelected(5, 0)"></p-button>
+            <p-button label="↑" severity="secondary" (onClick)="nudgeSelected(0, 5)"></p-button>
+            <p-button label="↓" severity="secondary" (onClick)="nudgeSelected(0, -5)"></p-button>
+          </div>
         </div>
-
       </div>
-
     </div>
-
   </div>
 
-  <!-- ACTIONS -->
+  <!-- FOOTER ACTIONS -->
   <div class="flex gap-2 border-t pt-4">
+    <p-button
+      label="Save Calibration"
+      icon="pi pi-save"
+      severity="primary"
+      [loading]="saving"
+      (onClick)="save()">
+    </p-button>
 
-    <p-button label="Save Calibration"
-              icon="pi pi-save"
-              severity="primary"
-              (onClick)="save()" />
+    <p-button
+      label="Load"
+      icon="pi pi-refresh"
+      severity="secondary"
+      (onClick)="load()">
+    </p-button>
 
-    <p-button label="Load"
-              icon="pi pi-refresh"
-              severity="secondary"
-              (onClick)="load()" />
-
-    <p-button label="Reset"
-              icon="pi pi-times"
-              severity="secondary"
-              (onClick)="reset()" />
-
+    <p-button
+      label="Reset"
+      icon="pi pi-times"
+      severity="secondary"
+      (onClick)="reset()">
+    </p-button>
   </div>
 
 </div>

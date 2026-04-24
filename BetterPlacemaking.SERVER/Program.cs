@@ -1,6 +1,7 @@
 using BetterPlacemaking.Controllers;
 using BetterPlacemaking.Services;
 using BetterPlacemaking.Authorization;
+using BetterPlacemaking.Services.ScanCombine;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
@@ -59,7 +60,10 @@ builder.Services.AddScoped<FloorplanLibraryService>();
 builder.Services.AddScoped<LidarService>();
 builder.Services.AddScoped<ScanService>();
 builder.Services.AddScoped<ScanScheduleService>();
+builder.Services.AddScoped<CombineCloudsService>();
+builder.Services.AddScoped<ScanFlattenPreviewService>();
 builder.Services.AddHostedService<ScanScheduleExecutorService>();
+
 
 
 //Fusion services
