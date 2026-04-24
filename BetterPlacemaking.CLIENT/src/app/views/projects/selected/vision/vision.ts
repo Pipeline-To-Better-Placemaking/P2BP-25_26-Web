@@ -100,7 +100,9 @@ export class Vision implements OnInit, OnDestroy {
 
 
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+    this.projectId = this.route.snapshot.pathFromRoot
+      .map(s => s.paramMap.get('projectId'))
+      .find((id): id is string => !!id?.trim()) ?? '';
 
     interval(POLL_INTERVAL_MS).pipe(
       startWith(0),
