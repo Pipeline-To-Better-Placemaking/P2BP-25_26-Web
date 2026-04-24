@@ -22,14 +22,18 @@ public static class FusionEngineConfig
 
     public const double SimThreshold       = 0.75;
 
+    // World coordinates are in millimetres (homography output).
+    // 8 m/s ≈ fast jogging — anything faster is almost certainly a different person or a vehicle.
+    public const double MaxSpeedWorldPerS  = 8000.0;   // mm / s
 
-    public const double MaxSpeedWorldPerS  = 4000.0;   // mm / s
-    public const double MaxJumpFusion      = 15000.0;  // mm
+    // Hard absolute distance cap between gid endpoint and new track start,
+    // applied independently of the speed/time math. 30 m ≈ across a small plaza.
+    public const double MaxJumpFusion      = 30000.0;  // mm
 
     public const double MaxGapMs           = 12000.0;
     public const int    MinTrackPoints     = 8;
     public const double MinDurationS       = 1.0;
-    public const double MaxJumpClean       = 3000.0;   // mm — per-point jump filter
+    public const double MaxJumpClean       = 6000.0;   // mm — per-point jump filter
     public const double DupEps             = 1e-3;
     public const int    SmoothWin          = 2;
 }
@@ -151,112 +155,209 @@ public static class VectorMath
 // ─────────────────────────────────────────────
 public class Kalman2D
 {
-    private double[]   _x = new double[4];
-    private double[,]  _P = new double[4, 4];
-    private readonly double[,] _H;
-    private readonly double[,] _Q;
-    private readonly double[,] _R;
+    // State
+    private readonly double[]  _x = new double[4];
+    private readonly double[,] _P = new double[4, 4];
+
+    // Constant matrices
+    private readonly double[,] _H  = new double[2, 4];
+    private readonly double[,] _Ht = new double[4, 2];  // transpose of H, constant
+    private readonly double[,] _Q  = new double[4, 4];
+    private readonly double[,] _R  = new double[2, 2];
+
+    // Scratch buffers — preallocated once, reused every Update() call.
+    // The original implementation allocated ~10 small matrices per Update,
+    // which is ~O(millions) tiny heap allocations across a full fusion run
+    // and is the single biggest source of invisible GC pressure in this file.
+    private readonly double[,] _F    = new double[4, 4];
+    private readonly double[,] _Ft   = new double[4, 4];
+    private readonly double[,] _FP   = new double[4, 4];
+    private readonly double[,] _FPFt = new double[4, 4];
+    private readonly double[,] _Pnew = new double[4, 4];
+    private readonly double[]  _xNew = new double[4];
+    private readonly double[]  _Hx   = new double[2];
+    private readonly double[]  _y    = new double[2];
+    private readonly double[,] _HP   = new double[2, 4];
+    private readonly double[,] _HPHt = new double[2, 2];
+    private readonly double[,] _S    = new double[2, 2];
+    private readonly double[,] _Sinv = new double[2, 2];
+    private readonly double[,] _PHt  = new double[4, 2];
+    private readonly double[,] _K    = new double[4, 2];
+    private readonly double[,] _KH   = new double[4, 4];
+    private readonly double[,] _IKH  = new double[4, 4];
 
     public Kalman2D()
     {
         for (int i = 0; i < 4; i++) _P[i, i] = 100.0;
-        _H = new double[2, 4];
+
         _H[0, 0] = 1; _H[1, 1] = 1;
-        _Q = new double[4, 4];
+        // H^T is constant since H is constant.
+        _Ht[0, 0] = 1; _Ht[1, 1] = 1;
+
         for (int i = 0; i < 4; i++) _Q[i, i] = 0.01;
-        _R = new double[2, 2];
         _R[0, 0] = 5.0; _R[1, 1] = 5.0;
+
+        // F is mostly identity. Only F[0,2] and F[1,3] (the dt cells) change per call.
+        _F[0, 0] = 1; _F[1, 1] = 1; _F[2, 2] = 1; _F[3, 3] = 1;
+        // F^T is identity except for two dt cells that change per call (F[0,2] -> Ft[2,0], etc.).
+        _Ft[0, 0] = 1; _Ft[1, 1] = 1; _Ft[2, 2] = 1; _Ft[3, 3] = 1;
     }
 
     public (double x, double y) Update(double zx, double zy, double dt)
     {
-        var F = new double[4, 4];
-        F[0, 0] = 1; F[0, 2] = dt;
-        F[1, 1] = 1; F[1, 3] = dt;
-        F[2, 2] = 1; F[3, 3] = 1;
+        // ── Predict ──
+        _F[0, 2] = dt;   _F[1, 3] = dt;
+        _Ft[2, 0] = dt;  _Ft[3, 1] = dt;
 
-        _x = MatVec(F, _x);
-        _P = MatAdd(MatMul(MatMul(F, _P), Transpose(F)), _Q);
+        // x = F · x   (write to scratch, then copy into _x)
+        MatVec4x4(_F, _x, _xNew);
+        Array.Copy(_xNew, _x, 4);
 
-        double[] z  = { zx, zy };
-        double[] Hx = MatVec(_H, _x);
-        double[] y  = { z[0] - Hx[0], z[1] - Hx[1] };
+        // P = F · P · F^T + Q
+        MatMul4x4(_F,  _P,  _FP);
+        MatMul4x4(_FP, _Ft, _FPFt);
+        AddInto4x4(_FPFt, _Q, _P);   // safe: _P is only written, not read
 
-        var S    = MatAdd(MatMul(MatMul(_H, _P), Transpose(_H)), _R);
-        var PH   = MatMul(_P, Transpose(_H));
-        var Sinv = Invert2x2(S);
-        var K    = MatMul(PH, Sinv);
+        // ── Update ──
+        // Hx = H · x
+        MatVec2x4(_H, _x, _Hx);
+        _y[0] = zx - _Hx[0];
+        _y[1] = zy - _Hx[1];
 
-        double[] Ky = {
-            K[0,0]*y[0] + K[0,1]*y[1],
-            K[1,0]*y[0] + K[1,1]*y[1],
-            K[2,0]*y[0] + K[2,1]*y[1],
-            K[3,0]*y[0] + K[3,1]*y[1]
-        };
-        _x[0] += Ky[0]; _x[1] += Ky[1];
-        _x[2] += Ky[2]; _x[3] += Ky[3];
+        // S = H · P · H^T + R     (2×2)
+        MatMul2x4_4x4(_H,  _P,  _HP);
+        MatMul2x4_4x2(_HP, _Ht, _HPHt);
+        _S[0, 0] = _HPHt[0, 0] + _R[0, 0];
+        _S[0, 1] = _HPHt[0, 1] + _R[0, 1];
+        _S[1, 0] = _HPHt[1, 0] + _R[1, 0];
+        _S[1, 1] = _HPHt[1, 1] + _R[1, 1];
 
-        var KH  = MatMul(K, _H);
-        var IKH = new double[4, 4];
-        for (int i = 0; i < 4; i++) IKH[i, i] = 1;
+        Invert2x2Into(_S, _Sinv);
+
+        // K = P · H^T · S^-1      (4×2)
+        MatMul4x4_4x2(_P,   _Ht,   _PHt);
+        MatMul4x2_2x2(_PHt, _Sinv, _K);
+
+        // x += K · y
+        _x[0] += _K[0, 0] * _y[0] + _K[0, 1] * _y[1];
+        _x[1] += _K[1, 0] * _y[0] + _K[1, 1] * _y[1];
+        _x[2] += _K[2, 0] * _y[0] + _K[2, 1] * _y[1];
+        _x[3] += _K[3, 0] * _y[0] + _K[3, 1] * _y[1];
+
+        // P = (I - K · H) · P
+        MatMul4x2_2x4(_K, _H, _KH);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
-                IKH[i, j] -= KH[i, j];
-        _P = MatMul(IKH, _P);
+                _IKH[i, j] = (i == j ? 1.0 : 0.0) - _KH[i, j];
+        MatMul4x4(_IKH, _P, _Pnew);
+        Array.Copy(_Pnew, _P, 16);
 
         return (_x[0], _x[1]);
     }
 
-    private static double[,] MatMul(double[,] A, double[,] B)
+    // ─── In-place matrix/vector ops (no allocations) ────────────────────
+
+    private static void MatMul4x4(double[,] A, double[,] B, double[,] R)
     {
-        int r = A.GetLength(0), k = A.GetLength(1), c = B.GetLength(1);
-        var R = new double[r, c];
-        for (int i = 0; i < r; i++)
-            for (int j = 0; j < c; j++)
-                for (int m = 0; m < k; m++)
-                    R[i, j] += A[i, m] * B[m, j];
-        return R;
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 4; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
     }
 
-    private static double[] MatVec(double[,] A, double[] v)
+    private static void MatMul2x4_4x4(double[,] A, double[,] B, double[,] R)
     {
-        int r = A.GetLength(0), c = A.GetLength(1);
-        var R = new double[r];
-        for (int i = 0; i < r; i++)
-            for (int j = 0; j < c; j++)
-                R[i] += A[i, j] * v[j];
-        return R;
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 4; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 4; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
     }
 
-    private static double[,] MatAdd(double[,] A, double[,] B)
+    private static void MatMul2x4_4x2(double[,] A, double[,] B, double[,] R)
     {
-        int r = A.GetLength(0), c = A.GetLength(1);
-        var R = new double[r, c];
-        for (int i = 0; i < r; i++)
-            for (int j = 0; j < c; j++)
-                R[i, j] = A[i, j] + B[i, j];
-        return R;
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 4; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
     }
 
-    private static double[,] Transpose(double[,] A)
+    private static void MatMul4x4_4x2(double[,] A, double[,] B, double[,] R)
     {
-        int r = A.GetLength(0), c = A.GetLength(1);
-        var R = new double[c, r];
-        for (int i = 0; i < r; i++)
-            for (int j = 0; j < c; j++)
-                R[j, i] = A[i, j];
-        return R;
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 4; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
     }
 
-    private static double[,] Invert2x2(double[,] M)
+    private static void MatMul4x2_2x2(double[,] A, double[,] B, double[,] R)
     {
-        double det = M[0,0]*M[1,1] - M[0,1]*M[1,0];
-        if (Math.Abs(det) < 1e-12) det = 1e-12;
-        return new double[,]
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 2; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
+    }
+
+    private static void MatMul4x2_2x4(double[,] A, double[,] B, double[,] R)
+    {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 2; k++) s += A[i, k] * B[k, j];
+                R[i, j] = s;
+            }
+    }
+
+    private static void MatVec4x4(double[,] A, double[] v, double[] R)
+    {
+        for (int i = 0; i < 4; i++)
         {
-            {  M[1,1]/det, -M[0,1]/det },
-            { -M[1,0]/det,  M[0,0]/det }
-        };
+            double s = 0;
+            for (int j = 0; j < 4; j++) s += A[i, j] * v[j];
+            R[i] = s;
+        }
+    }
+
+    private static void MatVec2x4(double[,] A, double[] v, double[] R)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            double s = 0;
+            for (int j = 0; j < 4; j++) s += A[i, j] * v[j];
+            R[i] = s;
+        }
+    }
+
+    private static void AddInto4x4(double[,] A, double[,] B, double[,] R)
+    {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                R[i, j] = A[i, j] + B[i, j];
+    }
+
+    private static void Invert2x2Into(double[,] M, double[,] R)
+    {
+        double det = M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0];
+        if (Math.Abs(det) < 1e-12) det = 1e-12;
+        R[0, 0] =  M[1, 1] / det;
+        R[0, 1] = -M[0, 1] / det;
+        R[1, 0] = -M[1, 0] / det;
+        R[1, 1] =  M[0, 0] / det;
     }
 }
 
@@ -522,8 +623,7 @@ public class FusionFirestoreLoader
         if (!TryParseMatrix3x3Flat(doc, "MatrixFlat", mac, out var matrix))
             return null;
 
-        doc.TryGetValue("UsedUndistortedImage", out bool usedUndistortedImage);
-        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = usedUndistortedImage };
+        return new HomographyEntry { Matrix = matrix, UsedUndistortedImage = false };
     }
 
     private static FusionCameraIntrinsics? ParseIntrinsicsDoc(DocumentSnapshot doc, string mac)
@@ -915,31 +1015,58 @@ public static class FusionExporter
 {
     public static void Export(List<FusedIdentity> gids, string outputPath)
     {
-        var out_ = new Dictionary<string, object>();
-        int idx  = 0;
+        // Stream JSON directly to disk via Utf8JsonWriter instead of materializing the
+        // entire result object graph and serializing in one shot. Peak memory during
+        // export drops from roughly "full output × 2" (graph + serialized string) to
+        // the footprint of one gid at a time.
+        using var fs     = File.Create(outputPath);
+        using var writer = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = true });
+
+        writer.WriteStartObject();
+        int idx = 0;
 
         foreach (var g in gids)
         {
+            // Flatten once, clean once, release the temp before writing.
             var flatEvents = g.Tracks.SelectMany(t => t).ToList();
             var cleaned    = TrackCleaner.Clean(flatEvents);
+            flatEvents     = null!;  // let the flat list get collected before we build the string-ish JSON
             if (cleaned == null) continue;
 
-            var trajectory = cleaned.Select(e => new
-            {
-                x = e.X, y = e.Y, t = e.Time, cam = e.Cam
-            }).ToList();
+            writer.WriteStartObject(idx.ToString());
 
-            out_[idx.ToString()] = new
+            writer.WriteStartArray("sources");
+            foreach (var s in g.Sources)
             {
-                sources    = g.Sources.Select(s => new { cam = s.Cam, sid = s.Sid }),
-                num_events = trajectory.Count,
-                tracks     = trajectory
-            };
+                writer.WriteStartObject();
+                writer.WriteString("cam", s.Cam);
+                writer.WriteNumber("sid", s.Sid);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteNumber("num_events", cleaned.Count);
+
+            writer.WriteStartArray("tracks");
+            foreach (var e in cleaned)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("x",  e.X);
+                writer.WriteNumber("y",  e.Y);
+                writer.WriteNumber("t",  e.Time);
+                writer.WriteString("cam", e.Cam);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
+
+            cleaned = null;
             idx++;
         }
 
-        var json = JsonSerializer.Serialize(out_, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(outputPath, json);
+        writer.WriteEndObject();
+        writer.Flush();
     }
 }
 
@@ -1003,6 +1130,18 @@ public class FusionRunner
             var (vectors, tracks) = JsonlLoader.Load(localInputPath);
             var trackObjs         = TrackBuilder.Build(vectors, tracks);
 
+            // The raw `vectors` dict holds List<float[]> per (cam,sid) that's been
+            // reduced to a single averaged Rep[] inside TrackBuilder — it's not needed
+            // anymore. Null it out so GC can reclaim potentially hundreds of MB of
+            // embedding vectors before the world-transform + fusion phases.
+            // `tracks` is largely shared-reference with trackObjs.Events, but dropping
+            // the dictionary header still helps a little.
+            vectors = null!;
+            tracks  = null!;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
             // ── 4. Collect the unique camera MACs present in this batch ─────────
             var activeMacs = trackObjs
                 .Select(t => t.Cam.ToLower())
@@ -1041,22 +1180,19 @@ public class FusionRunner
 
             Console.WriteLine($"[DONE] {gids.Count} fused identities written to {outputStoragePath}");
 
-            var json = File.ReadAllText(localOutputPath);
-            var data = JsonSerializer.Deserialize<object>(json);
-
-            return new FusionResult { Success = true, Data = data };
+            // Previously this re-read the output file into RAM and deserialized it into a
+            // generic object graph just to stuff into result.Data — pure memory waste.
+            // FusionService only ever looks at result.Success / result.Message.
+            return new FusionResult { Success = true };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw; // let FusionService see the real cancellation and log a clean timeout
         }
-       catch (Exception ex)
+        catch (Exception ex)
         {
-            Console.Error.WriteLine($"[ERROR] {ex.GetType().FullName}: {ex.Message}");
-            Console.Error.WriteLine(ex.ToString());                  // ← full stack
-            if (ex.InnerException != null)
-                Console.Error.WriteLine("INNER: " + ex.InnerException);
-            return new FusionResult { Success = false, Message = $"{ex.GetType().Name}: {ex.Message}" };
+            Console.Error.WriteLine($"[ERROR] {ex.Message}");
+            return new FusionResult { Success = false, Message = ex.Message };
         }
         finally
         {
@@ -1179,43 +1315,24 @@ public class FusionRunner
         await _gcs.UploadFromStreamAsync(storagePath, contentType, fs, ct);
     }
 
-   private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
-{
-    long fromMs = new DateTimeOffset(from.ToUniversalTime()).ToUnixTimeMilliseconds();
-    long toMs   = new DateTimeOffset(to.ToUniversalTime()).ToUnixTimeMilliseconds();
-
-    string filteredPath = Path.Combine(tempDir, $"filtered_{Guid.NewGuid()}.jsonl");
-
-    using var reader = new StreamReader(path);
-    using var writer = new StreamWriter(filteredPath);
-
-    string? line;
-    while ((line = reader.ReadLine()) != null)
+    private static string FilterByTime(string path, string tempDir, DateTime from, DateTime to)
     {
-        if (string.IsNullOrWhiteSpace(line)) continue;
+        long fromMs = new DateTimeOffset(from.ToUniversalTime()).ToUnixTimeMilliseconds();
+        long toMs   = new DateTimeOffset(to.ToUniversalTime()).ToUnixTimeMilliseconds();
 
-        try
-        {
-            using var doc = JsonDocument.Parse(line);
-
-            // Keep non-track lines (vectors etc.) — they have no "time" field
-            // and must not be filtered out.
-            if (!doc.RootElement.TryGetProperty("time", out var t))
+        var filtered = File.ReadLines(path)
+            .Where(line =>
             {
-                writer.WriteLine(line);
-                continue;
-            }
+                if (string.IsNullOrWhiteSpace(line)) return false;
+                using var doc = JsonDocument.Parse(line);
+                return doc.RootElement.TryGetProperty("time", out var t)
+                       && t.GetInt64() >= fromMs
+                       && t.GetInt64() <= toMs;
+            })
+            .ToList();
 
-            long time = t.GetInt64();
-            if (time >= fromMs && time <= toMs)
-                writer.WriteLine(line);
-        }
-        catch (JsonException)
-        {
-            // Skip malformed lines rather than abort the whole run.
-        }
+        string filteredPath = Path.Combine(tempDir, $"filtered_{Guid.NewGuid()}.jsonl");
+        File.WriteAllLines(filteredPath, filtered);
+        return filteredPath;
     }
-
-    return filteredPath;
-}
 }
