@@ -50,6 +50,19 @@ export class DefaultLayout implements OnInit, OnDestroy {
   private routerSub?: Subscription;
   private exportDialogRef?: DynamicDialogRef;
 
+  public readonly projectSectionPermissions = [
+    'Project.Read',
+    'Project.Scans.Read',
+    'Project.Devices.Read',
+    'Project.Export',
+    'Project.Members.AssignEditorViewer',
+  ];
+
+  public readonly adminSectionPermissions = [
+    'Global.Users.Read',
+    'Global.Projects.ReadAll',
+  ];
+
   public readonly faMoon = faMoon;
   public readonly faUser = faUser;
 
@@ -72,6 +85,10 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   footerItems: MenuItem[] = [];
   userMenuItems: MenuItem[] = [];
+
+  public get selectedProjectId(): string | null {
+    return this.projectId ?? null;
+  }
 
   @ViewChild('userMenu') private userMenu?: Menu;
 
@@ -167,7 +184,7 @@ export class DefaultLayout implements OnInit, OnDestroy {
 
   private buildProjectSelectorNav(projectId?: string): void {
     const link = projectId ? `/${projectId}/projects` : '/projects';
-    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: link, permission: 'Global.Projects.ReadAll' }];
+    this.navItems = [{ label: 'Select Project', faIcon: faFolder, routerLink: link }];
   }
 
   private buildUserMenuItems(projectId?: string): void {

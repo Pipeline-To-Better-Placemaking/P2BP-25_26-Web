@@ -12,9 +12,11 @@
       <div class="text-xs text-muted-color">{{ camInfo?.Ip }} &nbsp;·&nbsp; {{ resolution }}</div>
     </div>
     <div class="flex-shrink-0">
-      <p-button *ngIf="!editingNickname" icon="pi pi-pencil" severity="secondary"
-                pTooltip="Edit nickname" tooltipPosition="left"
-                [text]="true" (onClick)="startEditNickname()" />
+      <ng-container *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null">
+        <p-button *ngIf="!editingNickname" icon="pi pi-pencil" severity="secondary"
+                  pTooltip="Edit nickname" tooltipPosition="left"
+                  [text]="true" (onClick)="startEditNickname()" />
+      </ng-container>
     </div>
   </div>
 

@@ -62,16 +62,18 @@
   </div>
 
   <!-- Quick Settings (collapsible) -->
-  <p-panel *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null" header="Quick Settings" [toggleable]="true">
+  <p-panel *hasPermission="'Project.Devices.Read'; projectId: device?.ProjectId ?? null" header="Quick Settings" [toggleable]="true">
     <div class="flex flex-col gap-4">
 
       <div class="grid grid-cols-12 items-center gap-3">
         <div class="col-span-8 min-w-0">
           <div class="text-sm font-medium">Tracking</div>
           <div class="text-xs text-muted-color">Enable or disable person detection</div>
+          <div class="text-xs text-muted-color mt-1">Current: {{ trackingEnabled ? 'Enabled' : 'Disabled' }}</div>
         </div>
         <div class="col-span-4 flex justify-end">
           <p-togglebutton
+            *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
             [(ngModel)]="trackingEnabled"
             onLabel="Enabled"
             offLabel="Disabled"
@@ -84,9 +86,11 @@
         <div class="col-span-8 min-w-0">
           <div class="text-sm font-medium">Heartbeat Interval</div>
           <div class="text-xs text-muted-color">How often the device reports health (seconds)</div>
+          <div class="text-xs text-muted-color mt-1">Current: {{ heartbeatInterval }} seconds</div>
         </div>
         <div class="col-span-4 flex justify-end">
           <p-inputnumber
+            *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
             [(ngModel)]="heartbeatInterval"
             [min]="5"
             [max]="300"
@@ -102,6 +106,7 @@
 
       <div class="flex items-center gap-2">
         <p-button
+          *hasPermission="'Project.Devices.Manage'; projectId: device?.ProjectId ?? null"
           label="Save Changes"
           icon="pi pi-save"
           [loading]="settingsLoading"

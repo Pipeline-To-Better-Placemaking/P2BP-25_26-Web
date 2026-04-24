@@ -31,6 +31,19 @@ namespace BetterPlacemaking.Services
 
         // ── History ──────────────────────────────────────────────────────────
 
+        public List<FusionRunDto> GetHistory(string projectId, int limit = 50)
+        {
+            var docs = _db.Collection(ColFusionRuns)
+                .WhereEqualTo(nameof(FusionRun.ProjectId), projectId)
+                .GetSnapshotAsync().Result.Documents;
+
+            return docs
+                .Select(d => ToDto(d.ConvertTo<FusionRun>()))
+                .OrderByDescending(r => r.StartedAtUnix ?? 0)
+                .Take(limit)
+                .ToList();
+        }
+
         public List<FusionRunDto> GetHistory(int limit = 50)
         {
             var docs = _db.Collection(ColFusionRuns)

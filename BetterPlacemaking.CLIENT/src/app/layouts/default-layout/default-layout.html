@@ -38,47 +38,51 @@
         </nav>
       </div>
 
-      <div *ngIf="navItemsIfSelected?.length">
-        <nav class="px-3 mb-7">
-          <p-menu [model]="navItemsIfSelected">
-            <ng-template #item let-item>
-              <ng-container
-                *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
-              >
-                <a
-                  [routerLink]="item.routerLink || null"
-                  class="p-menu-item-link"
-                  (click)="handleMenuItemClick($event, item)"
+      <ng-container *ngIf="navItemsIfSelected?.length">
+        <div *hasPermission="projectSectionPermissions; projectId: selectedProjectId; mode: 'any'">
+          <nav class="px-3 mb-7">
+            <p-menu [model]="navItemsIfSelected">
+              <ng-template #item let-item>
+                <ng-container
+                  *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
                 >
-                  <fa-icon [icon]="item.faIcon"></fa-icon>
-                  <span>{{ item.label }}</span>
-                </a>
-              </ng-container>
-            </ng-template>
-          </p-menu>
-        </nav>
-      </div>
+                  <a
+                    [routerLink]="item.routerLink || null"
+                    class="p-menu-item-link"
+                    (click)="handleMenuItemClick($event, item)"
+                  >
+                    <fa-icon [icon]="item.faIcon"></fa-icon>
+                    <span>{{ item.label }}</span>
+                  </a>
+                </ng-container>
+              </ng-template>
+            </p-menu>
+          </nav>
+        </div>
+      </ng-container>
 
-      <div *ngIf="navItemsAdmin?.length">
-        <nav class="px-3 mb-7">
-          <p-menu [model]="navItemsAdmin">
-            <ng-template #item let-item>
-              <ng-container
-                *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
-              >
-                <a
-                  [routerLink]="item.routerLink || null"
-                  class="p-menu-item-link"
-                  (click)="handleMenuItemClick($event, item)"
+      <ng-container *ngIf="navItemsAdmin?.length">
+        <div *hasPermission="adminSectionPermissions; mode: 'any'">
+          <nav class="px-3 mb-7">
+            <p-menu [model]="navItemsAdmin">
+              <ng-template #item let-item>
+                <ng-container
+                  *hasPermission="item.permission ?? null; projectId: item.permissionProjectId ?? null; mode: item.permissionMode ?? 'all'"
                 >
-                  <fa-icon [icon]="item.faIcon"></fa-icon>
-                  <span>{{ item.label }}</span>
-                </a>
-              </ng-container>
-            </ng-template>
-          </p-menu>
-        </nav>
-      </div>
+                  <a
+                    [routerLink]="item.routerLink || null"
+                    class="p-menu-item-link"
+                    (click)="handleMenuItemClick($event, item)"
+                  >
+                    <fa-icon [icon]="item.faIcon"></fa-icon>
+                    <span>{{ item.label }}</span>
+                  </a>
+                </ng-container>
+              </ng-template>
+            </p-menu>
+          </nav>
+        </div>
+      </ng-container>
 
       <nav class="px-3 mt-auto mb-4">
         <p-menu [model]="footerItems">

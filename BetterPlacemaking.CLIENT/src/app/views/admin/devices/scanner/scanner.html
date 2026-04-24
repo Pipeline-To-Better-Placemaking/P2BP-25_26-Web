@@ -348,7 +348,7 @@
     </p-table>
   </div>
 
-  <div *hasPermission="'Project.Update'; projectId: projectId" class="fusion-history-card">
+  <div *hasPermission="'Project.Read'; projectId: projectId" class="fusion-history-card">
     <div class="fusion-history-header">
       <span class="fusion-history-title">LiDAR Calibration</span>
       <span class="fusion-history-subtitle">Use the shared floorplan library and open calibration in a popout</span>
@@ -361,6 +361,7 @@
         </div>
 
         <p-button
+          *hasPermission="'Project.Update'; projectId: projectId"
           label="Open LiDAR Calibration"
           icon="pi pi-compass"
           severity="secondary"
@@ -375,6 +376,7 @@
         <div class="flex items-center justify-between">
           <label class="cursor-pointer">
             <p-button
+              *hasPermission="'Project.Update'; projectId: projectId"
               label="Upload Floorplan"
               icon="pi pi-upload"
               severity="secondary"
@@ -430,6 +432,7 @@
                 <div class="text-xs text-muted-color">{{ fp.ImageWidth }} × {{ fp.ImageHeight }}</div>
               </div>
               <p-button
+                *hasPermission="'Project.Update'; projectId: projectId"
                 icon="pi pi-trash"
                 severity="danger"
                 [text]="true"

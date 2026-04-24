@@ -67,10 +67,12 @@ export class Fusion implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+
     interval(POLL_INTERVAL_MS)
       .pipe(
         startWith(0),
-        switchMap(() => this.fusionService.getHistory()),
+        switchMap(() => this.fusionService.getHistory(this.projectId)),
         takeUntil(this.destroy$),
       )
       .subscribe({
@@ -85,7 +87,6 @@ export class Fusion implements OnInit, OnDestroy {
         },
       });
 
-    this.projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
     this.fusionService.getConfig(this.projectId || undefined).subscribe({
       next: (cfg: FusionConfigDto) => (this.config = cfg),
       error: () => {},
@@ -134,7 +135,7 @@ export class Fusion implements OnInit, OnDestroy {
     this.modalRef = ref;
     ref.onClose.subscribe((result?: { triggered?: boolean }) => {
       if (result?.triggered) {
-        this.fusionService.getHistory().subscribe({
+        this.fusionService.getHistory(this.projectId).subscribe({
           next: (runs: FusionRunDto[]) => (this.history = runs),
         });
       }

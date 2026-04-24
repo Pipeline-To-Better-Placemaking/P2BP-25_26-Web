@@ -88,6 +88,7 @@ namespace BetterPlacemaking.Authorization
                 DevicesRead,
                 MembersRead,
                 ScansRead,
+                ScansStart,
                 ScanSchedulesRead
             ];
 

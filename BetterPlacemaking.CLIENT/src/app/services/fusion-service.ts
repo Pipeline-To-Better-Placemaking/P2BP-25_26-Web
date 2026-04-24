@@ -17,15 +17,18 @@ export class FusionService {
     private readonly errorHandler: ErrorHandlerService,
   ) {}
 
-  getHistory(limit = 50): Observable<FusionRunDto[]> {
+  getHistory(projectId: string, limit = 50): Observable<FusionRunDto[]> {
     return this.http
-      .get<FusionRunDto[]>(`${environment.apiBaseUrl}/api/fusion/history`, { params: { limit } })
+      .get<FusionRunDto[]>(`${environment.apiBaseUrl}/api/fusion/history`, { params: { projectId, limit } })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to load fusion history')));
   }
 
   triggerFusion(payload: TriggerFusionDto): Observable<FusionRunDto> {
+    let params = new HttpParams();
+    if (payload.ProjectId) params = params.set('projectId', payload.ProjectId);
+
     return this.http
-      .post<FusionRunDto>(`${environment.apiBaseUrl}/api/fusion/trigger`, payload)
+      .post<FusionRunDto>(`${environment.apiBaseUrl}/api/fusion/trigger`, payload, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to trigger fusion')));
   }
 
@@ -66,8 +69,11 @@ export class FusionService {
   }
 
   updateConfig(payload: UpdateFusionConfigDto): Observable<FusionConfigDto> {
+    let params = new HttpParams();
+    if (payload.ProjectId) params = params.set('projectId', payload.ProjectId);
+
     return this.http
-      .put<FusionConfigDto>(`${environment.apiBaseUrl}/api/fusion/config`, payload)
+      .put<FusionConfigDto>(`${environment.apiBaseUrl}/api/fusion/config`, payload, { params })
       .pipe(catchError((err) => this.errorHandler.handleError(err, 'Failed to update fusion config')));
   }
 }

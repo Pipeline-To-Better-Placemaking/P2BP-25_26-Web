@@ -16,6 +16,7 @@ import { CameraInfo, IntrinsicsCalibrationState } from '../../../../../models/je
 import { BoardService } from '../../../../../services/board-service';
 import { BoardLibraryItem } from '../../../../../models/BoardLibrary';
 import { HomographyService } from '../../../../../services/homography-service';
+import { PermissionDirective } from '../../../../../directives/permission.directive';
 
 /** Poll rate while the Jetson is actively collecting intrinsics sightings (matches its fast heartbeat). */
 const CALIBRATING_POLL_MS = 2_000;
@@ -34,6 +35,7 @@ const MIN_POLL_INTERVAL_MS = 5_000;
     InputTextModule,
     TooltipModule,
     SelectModule,
+    PermissionDirective,
   ],
   templateUrl: './camera-modal.html',
 })

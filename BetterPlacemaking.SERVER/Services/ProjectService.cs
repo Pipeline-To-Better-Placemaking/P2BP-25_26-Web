@@ -16,6 +16,16 @@ namespace BetterPlacemaking.Services
             
             return projects;
         }
+
+        public async Task<List<Project>> GetAllAsync(CancellationToken cancellationToken = default)
+        {
+            var projects = await _db.Collection(collectionName)
+                .GetSnapshotAsync(cancellationToken);
+
+            return projects.Documents
+                .Select(doc => doc.ConvertTo<Project>())
+                .ToList();
+        }
         
         public Project? GetById(string id)
         {

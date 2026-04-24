@@ -1,4 +1,4 @@
-<div *hasPermission="'Global.Projects.ReadAll'" class="w-full flex flex-col content-background rounded-lg">
+<div class="w-full flex flex-col content-background rounded-lg">
   <p-table [value]="projects" class="rounded-lg overflow-hidden">
 
     <ng-template #caption>
@@ -34,6 +34,12 @@
             Open
           </a>
         </td>
+      </tr>
+    </ng-template>
+
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="4">No projects assigned.</td>
       </tr>
     </ng-template>
 
