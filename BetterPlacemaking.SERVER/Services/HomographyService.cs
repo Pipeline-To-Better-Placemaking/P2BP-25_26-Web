@@ -167,8 +167,8 @@ namespace BetterPlacemaking.Services
                 var (computed, devMap) = RunBfsLock();
                 cameraDevice = devMap;
                 _logger.LogInformation("Compute-lock complete: {N} cameras", computed);
-                WriteArucoLockStatus(cameraDevice, "done");
-                return new ComputeLockResponseDto("done", computed);
+                WriteArucoLockStatus(cameraDevice, "locked");
+                return new ComputeLockResponseDto("locked", computed);
             }
             catch (Exception ex)
             {
