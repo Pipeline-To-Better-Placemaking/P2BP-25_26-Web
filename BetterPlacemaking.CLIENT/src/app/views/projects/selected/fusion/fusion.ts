@@ -17,13 +17,16 @@ import { FusionService } from '../../../../services/fusion-service';
 import { FusionConfigDto, FusionRunDto } from '../../../../models/FusionDtos';
 import { FusionModal } from './fusion-modal/fusion-modal';
 import { PermissionDirective } from '../../../../directives/permission.directive';
+import { ConfirmationService } from 'primeng/api';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+
 
 const POLL_INTERVAL_MS = 6_000;
 
 @Component({
   selector: 'app-fusion',
   standalone: true,
-  providers: [DialogService],
+  providers: [DialogService, ConfirmationService],
   imports: [
     CommonModule,
     FormsModule,
@@ -37,6 +40,7 @@ const POLL_INTERVAL_MS = 6_000;
     DialogModule,         // NEW
     DynamicDialogModule,
     PermissionDirective,
+    ConfirmDialogModule,
   ],
   templateUrl: './fusion.html',
   styleUrls: ['./fusion.scss'],
@@ -64,6 +68,7 @@ export class Fusion implements OnInit, OnDestroy {
     private readonly fusionService: FusionService,
     private readonly dialogService: DialogService,
     private readonly route: ActivatedRoute,
+    private readonly confirmationService: ConfirmationService,
   ) {}
 
   ngOnInit(): void {
@@ -209,16 +214,28 @@ openScheduleDialog(): void {
     });
   }
 
+  // new deleteRun function with confirmation dialog
   deleteRun(run: FusionRunDto, event: Event): void {
     event.stopPropagation();
     if (run.Status === 'running') return;
-    this.deletingRunId = run.Id;
-    this.fusionService.deleteRun(run.Id).subscribe({
-      next: () => {
-        this.history = this.history.filter((r) => r.Id !== run.Id);
-        this.deletingRunId = null;
+
+    this.confirmationService.confirm({
+      message: `Delete fusion run for <strong>${this.formatDateRange(run)}</strong>? This cannot be undone.`,
+      header: 'Delete Run',
+      icon: 'pi pi-trash',
+      acceptLabel: 'Delete',
+      rejectLabel: 'Cancel',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.deletingRunId = run.Id;
+        this.fusionService.deleteRun(run.Id).subscribe({
+          next: () => {
+            this.history = this.history.filter((r) => r.Id !== run.Id);
+            this.deletingRunId = null;
+          },
+          error: () => (this.deletingRunId = null),
+        });
       },
-      error: () => (this.deletingRunId = null),
     });
   }
 
