@@ -1,6 +1,6 @@
 # Better Placemaking — Web
 
-Web platform for the **Pipeline to Better Placemaking** senior design project. It's the admin/operator dashboard for managing pedestrian-observation devices in the field, running lidar/camera calibration, fusing multi-sensor data, and visualizing the results in 3D.
+Website for the Fall '25 - Spring '26 Senior Design project. **Pipeline to Better Placemaking** It's the admin/operator dashboard for managing pedestrian-observation devices in the field, running lidar/camera calibration, fusing multi-sensor data, and visualizing the results in 3D.
 
 This repo contains two independent apps:
 
