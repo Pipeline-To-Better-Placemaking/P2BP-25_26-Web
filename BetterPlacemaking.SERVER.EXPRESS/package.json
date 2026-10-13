@@ -11,19 +11,24 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.9",
     "@google-cloud/storage": "^7.22.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "delaunator": "^5.1.0",
     "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.45.4",
     "express": "^4.19.2",
     "firebase-admin": "^12.3.1",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
+    "postgres": "^3.4.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -34,6 +39,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.9",
     "@types/supertest": "^6.0.2",
+    "drizzle-kit": "^0.31.11",
     "supertest": "^7.0.0",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",

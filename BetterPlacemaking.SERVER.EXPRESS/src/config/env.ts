@@ -35,6 +35,11 @@ export const env = {
   firebaseProjectId: required("FIREBASE_PROJECT_ID"),
   firebaseDatabaseId: optional("FIREBASE_DATABASE_ID", "(default)") as string,
 
+  // --- Postgres / Supabase (optional at boot while services migrate off Firestore) ---
+  databaseUrl: optional("DATABASE_URL"),
+  supabaseUrl: optional("SUPABASE_URL"),
+  supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
+
   jwtKey: required("JWT_KEY"),
   jwtIssuer: required("JWT_ISSUER"),
   jwtAudience: required("JWT_AUDIENCE"),
