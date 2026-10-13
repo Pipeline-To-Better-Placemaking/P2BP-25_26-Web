@@ -13,9 +13,6 @@
 
 [Dd]ist/
 node_modules/
-.angular
-.firebase/
-/BetterPlacemaking.CLIENT/.firebase
 
 *.cache
 
@@ -29,7 +26,6 @@ service-account*.json
 # Visualizer temp uploads
 **/uploads/
 
-BetterPlacemaking.CLIENT/public/test-puzzle/test-points.jsonl
 
 # Local documentation, notes, test-scripts, and shell helpers (see docs/)
 docs/*

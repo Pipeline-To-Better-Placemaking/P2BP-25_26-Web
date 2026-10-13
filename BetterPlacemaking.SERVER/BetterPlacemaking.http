@@ -1,6 +1,0 @@
-@BetterPlacemaking_HostAddress = http://localhost:5123
-
-GET {{BetterPlacemaking_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
