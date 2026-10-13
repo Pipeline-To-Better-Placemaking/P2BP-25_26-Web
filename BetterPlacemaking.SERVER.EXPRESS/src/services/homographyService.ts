@@ -1,6 +1,15 @@
 import crypto from "node:crypto";
-import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import {
+  arucoSessions,
+  arucoSightings,
+  devices,
+  globalHomographies,
+  localHomographies,
+  lockedHomographies,
+  puzzlePieces,
+} from "../db/schema/index.js";
 import { createSignedDownloadUrl, type SignedUrlResult } from "./cloudStorageService.js";
 import {
   flattenMatrix3x3,
@@ -9,9 +18,7 @@ import {
   unflattenPointPairs,
   type ArUcoMarkerRecordDoc,
   type ArUcoScanSession,
-  type ArUcoScanSessionDoc,
   type ArUcoSighting,
-  type ArUcoSightingDoc,
   type ArucoMarkerSightingDto,
   type ArucoSightingsResponseDto,
   type CameraIntrinsicsResponseDto,
@@ -22,14 +29,11 @@ import {
   type HomographyLockGroupDto,
   type HomographyLockGroupRecord,
   type LocalHomography,
-  type LocalHomographyDoc,
   type LocalHomographyResponseDto,
   type LocalHomographyWorkspaceDto,
-  type LockedHomographyDoc,
   type Matrix3x3,
   type ProjectGlobalHomographySetDoc,
   type PuzzlePieceArtifact,
-  type PuzzlePieceArtifactDoc,
   type PuzzlePieceDto,
   type PuzzlePieceMetadataDto,
   type PuzzleWorkspaceResponseDto,
@@ -40,14 +44,6 @@ import {
   type SubmitLocalHomographyDto,
 } from "../models/homography.js";
 
-const COL_LOCAL = "local_homographies";
-const COL_SESSIONS = "aruco_sessions";
-const COL_SIGHTINGS = "aruco_sightings";
-const COL_LOCKED = "locked_homographies";
-const COL_PUZZLE_PIECES = "puzzle_pieces";
-const COL_GLOBAL = "global_homographies";
-const COL_DEVICES = "devices";
-
 const PUZZLE_PIECE_GENERATION_VERSION = 2;
 
 /** Ported from HomographyController's ArgumentException -> BadRequest(400) mappings. */
@@ -56,6 +52,102 @@ export class HomographyValidationError extends Error {}
 export class HomographyNotFoundError extends Error {}
 /** Ported from HomographyController's InvalidOperationException -> UnprocessableEntity(422) mapping on /compute-lock. */
 export class HomographyLockError extends Error {}
+
+// ---------------------------------------------------------------------------
+// Row -> doc mapping (DB columns -> the PascalCase doc shapes the logic below uses)
+// ---------------------------------------------------------------------------
+
+type LocalRow = typeof localHomographies.$inferSelect;
+type SessionRow = typeof arucoSessions.$inferSelect;
+type SightingRow = typeof arucoSightings.$inferSelect;
+type PuzzleRow = typeof puzzlePieces.$inferSelect;
+type GlobalRow = typeof globalHomographies.$inferSelect;
+
+function toLocalHomography(r: LocalRow): LocalHomography {
+  return {
+    Id: r.id,
+    DeviceId: r.deviceId,
+    CameraMac: r.cameraMac,
+    MatrixFlat: r.matrixFlat,
+    FrameSize: r.frameSize,
+    Inliers: r.inliers as number,
+    RmseBoard: r.rmseBoard as number,
+    CornersUsed: r.cornersUsed as number,
+    MarkersDetected: r.markersDetected as number,
+    ArucoDict: r.arucoDict,
+    SquaresX: r.squaresX as number,
+    SquaresY: r.squaresY as number,
+    SquareLength: r.squareLength as number,
+    MarkerLength: r.markerLength as number,
+    TimestampUnix: r.timestampUnix as number,
+    SnapshotPath: r.snapshotPath,
+    CameraMatrixFlat: r.cameraMatrixFlat,
+    DistortionCoefficients: r.distortionCoefficients,
+    UsedUndistortedImage: r.usedUndistortedImage,
+  };
+}
+
+function toArUcoSession(r: SessionRow): ArUcoScanSession {
+  return {
+    Id: r.id,
+    ArucoDict: r.arucoDict,
+    Status: r.status,
+    CamerasCheckedIn: r.camerasCheckedIn,
+    CamerasTotal: r.camerasTotal,
+    CreatedAt: r.createdAt,
+  };
+}
+
+function toArUcoSighting(r: SightingRow): ArUcoSighting {
+  return {
+    Id: r.id,
+    SessionId: r.sessionId,
+    DeviceId: r.deviceId,
+    CameraMac: r.cameraMac,
+    ArucoDict: r.arucoDict,
+    CapturedAt: r.capturedAt,
+    Markers: r.markers,
+    LocalHomographyHash: r.localHomographyHash,
+  };
+}
+
+function toPuzzlePieceArtifact(r: PuzzleRow): PuzzlePieceArtifact {
+  return {
+    Id: r.id,
+    ProjectId: r.projectId,
+    DeviceId: r.deviceId,
+    CameraMac: r.cameraMac,
+    LocalHomographyId: r.localHomographyId,
+    LocalHomographyHash: r.localHomographyHash,
+    LocalHomographyMatrixFlat: r.localHomographyMatrixFlat,
+    HLocalCanvasFlat: r.hLocalCanvasFlat,
+    SourceFrameSize: r.sourceFrameSize,
+    PuzzlePieceSize: r.puzzlePieceSize,
+    SourceSnapshotPath: r.sourceSnapshotPath,
+    UsedUndistortedImage: r.usedUndistortedImage,
+    UndistortMode: r.undistortMode,
+    BboxTrimPct: r.bboxTrimPct,
+    HomographyFile: r.homographyFile,
+    PuzzlePiecePath: r.puzzlePiecePath,
+    MetadataPath: r.metadataPath,
+    GenerationVersion: r.generationVersion,
+    GeneratedAt: r.generatedAt,
+  };
+}
+
+function toGlobalSetDoc(r: GlobalRow): ProjectGlobalHomographySetDoc {
+  return {
+    ProjectId: r.projectId,
+    FloorplanId: r.floorplanId,
+    MmPerFpPx: r.mmPerFpPx,
+    OriginFp: r.originFp,
+    FloorplanSize: r.floorplanSize,
+    Placements: r.placements as GlobalHomographyPlacementRecord[] | null,
+    LockedGroups: r.lockedGroups as HomographyLockGroupRecord[] | null,
+    SavedByUserId: r.savedByUserId,
+    SavedAt: r.savedAt,
+  };
+}
 
 function normalizeMac(mac?: string | null): string {
   return (mac ?? "").trim().toLowerCase();
@@ -297,38 +389,41 @@ export async function submitLocalHomography(
   const mac = normalizeMac(dto.CameraMac);
   const docId = `${deviceId}_${mac}`;
 
-  const doc: LocalHomographyDoc = {
-    DeviceId: deviceId,
-    CameraMac: mac,
-    MatrixFlat: flattenMatrix3x3(dto.Matrix),
-    FrameSize: dto.FrameSize ?? null,
-    Inliers: dto.Inliers,
-    RmseBoard: dto.RmseBoard,
-    CornersUsed: dto.CornersUsed,
-    MarkersDetected: dto.MarkersDetected,
-    ArucoDict: dto.ArucoDict,
-    SquaresX: dto.SquaresX,
-    SquaresY: dto.SquaresY,
-    SquareLength: dto.SquareLength,
-    MarkerLength: dto.MarkerLength,
-    TimestampUnix: dto.TimestampUnix,
-    SnapshotPath: dto.SnapshotPath ?? null,
-    CameraMatrixFlat: flattenMatrix3x3(dto.CameraMatrix ?? null),
-    DistortionCoefficients: dto.DistortionCoefficients ?? null,
-    UsedUndistortedImage: dto.UsedUndistortedImage ?? null,
+  const values = {
+    deviceId,
+    cameraMac: mac,
+    matrixFlat: flattenMatrix3x3(dto.Matrix),
+    frameSize: dto.FrameSize ?? null,
+    inliers: dto.Inliers ?? null,
+    rmseBoard: dto.RmseBoard ?? null,
+    cornersUsed: dto.CornersUsed ?? null,
+    markersDetected: dto.MarkersDetected ?? null,
+    arucoDict: dto.ArucoDict ?? null,
+    squaresX: dto.SquaresX ?? null,
+    squaresY: dto.SquaresY ?? null,
+    squareLength: dto.SquareLength ?? null,
+    markerLength: dto.MarkerLength ?? null,
+    timestampUnix: dto.TimestampUnix ?? null,
+    snapshotPath: dto.SnapshotPath ?? null,
+    cameraMatrixFlat: flattenMatrix3x3(dto.CameraMatrix ?? null),
+    distortionCoefficients: dto.DistortionCoefficients ?? null,
+    usedUndistortedImage: dto.UsedUndistortedImage ?? null,
   };
 
-  await getDb().collection(COL_LOCAL).doc(docId).set(doc);
+  await getDb()
+    .insert(localHomographies)
+    .values({ id: docId, ...values })
+    .onConflictDoUpdate({ target: localHomographies.id, set: values });
   return { HomographyId: docId, CameraMac: dto.CameraMac };
 }
 
 /** Mirrors HomographyService.GetIntrinsics. */
 export async function getIntrinsics(deviceId: string, mac: string): Promise<CameraIntrinsicsResponseDto | null> {
   const docId = `${deviceId}_${normalizeMac(mac)}`;
-  const snap = await getDb().collection(COL_LOCAL).doc(docId).get();
-  if (!snap.exists) return null;
+  const [row] = await getDb().select().from(localHomographies).where(eq(localHomographies.id, docId)).limit(1);
+  if (!row) return null;
 
-  const record = snap.data() as LocalHomographyDoc;
+  const record = toLocalHomography(row);
   const cameraMatrix = unflattenMatrix3x3(record.CameraMatrixFlat);
   if (!cameraMatrix || !record.DistortionCoefficients) return null;
 
@@ -347,27 +442,20 @@ export async function getIntrinsics(deviceId: string, mac: string): Promise<Came
  * ("markers may have moved since the last scan").
  */
 async function resolveOrCreateSession(
-  db: FirebaseFirestore.Firestore,
   sessionId: string | null | undefined,
   arucoDict: string,
 ): Promise<ArUcoScanSession> {
+  const db = getDb();
   if (sessionId?.trim()) {
-    const snap = await db.collection(COL_SESSIONS).doc(sessionId).get();
-    if (snap.exists) {
-      return { Id: snap.id, ...(snap.data() as ArUcoScanSessionDoc) };
-    }
+    const [existing] = await db.select().from(arucoSessions).where(eq(arucoSessions.id, sessionId)).limit(1);
+    if (existing) return toArUcoSession(existing);
   }
 
-  const doc: ArUcoScanSessionDoc = {
-    ArucoDict: arucoDict,
-    Status: "collecting",
-    CamerasCheckedIn: [],
-    CamerasTotal: 0,
-    CreatedAt: Timestamp.now(),
-  };
-  const ref = db.collection(COL_SESSIONS).doc();
-  await ref.set(doc);
-  return { Id: ref.id, ...doc };
+  const [created] = await db
+    .insert(arucoSessions)
+    .values({ arucoDict, status: "collecting", camerasCheckedIn: [], camerasTotal: 0, createdAt: new Date() })
+    .returning();
+  return toArUcoSession(created);
 }
 
 /** Mirrors HomographyService.SubmitArucoSightings. */
@@ -378,7 +466,7 @@ export async function submitArucoSightings(
   const mac = normalizeMac(dto.CameraMac);
   const db = getDb();
 
-  const session = await resolveOrCreateSession(db, dto.SessionId, dto.ArucoDict);
+  const session = await resolveOrCreateSession(dto.SessionId, dto.ArucoDict);
   const sessionId = session.Id;
 
   const markers: ArUcoMarkerRecordDoc[] = (dto.Markers ?? []).map((m: ArucoMarkerSightingDto) => ({
@@ -386,28 +474,28 @@ export async function submitArucoSightings(
     CornersPxFlat: flattenPointPairs(m.CornersPx),
   }));
 
-  const sightingDoc: ArUcoSightingDoc = {
-    SessionId: sessionId,
-    DeviceId: deviceId,
-    CameraMac: mac,
-    ArucoDict: dto.ArucoDict,
-    CapturedAt: dto.CapturedAt,
-    Markers: markers,
-    LocalHomographyHash: dto.LocalHomographyHash ?? null,
+  const sightingValues = {
+    sessionId,
+    deviceId,
+    cameraMac: mac,
+    arucoDict: dto.ArucoDict ?? null,
+    capturedAt: dto.CapturedAt ?? null,
+    markers,
+    localHomographyHash: dto.LocalHomographyHash ?? null,
   };
 
   await db
-    .collection(COL_SIGHTINGS)
-    .doc(`${sessionId}_${mac}`)
-    .set(sightingDoc);
+    .insert(arucoSightings)
+    .values({ id: `${sessionId}_${mac}`, ...sightingValues })
+    .onConflictDoUpdate({ target: arucoSightings.id, set: sightingValues });
 
   let checkedIn = session.CamerasCheckedIn ?? [];
   if (!checkedIn.some((c) => c.toLowerCase() === mac)) {
     checkedIn = [...checkedIn, mac];
-    await db.collection(COL_SESSIONS).doc(sessionId).update({
-      CamerasCheckedIn: checkedIn,
-      CamerasTotal: checkedIn.length,
-    });
+    await db
+      .update(arucoSessions)
+      .set({ camerasCheckedIn: checkedIn, camerasTotal: checkedIn.length })
+      .where(eq(arucoSessions.id, sessionId));
     session.CamerasCheckedIn = checkedIn;
     session.CamerasTotal = checkedIn.length;
   }
@@ -422,32 +510,36 @@ export async function submitArucoSightings(
 
 /** Mirrors HomographyService.GetSessionStatus. */
 export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponseDto> {
-  const snap = await getDb().collection(COL_SESSIONS).doc(sessionId).get();
-  if (!snap.exists) throw new HomographyNotFoundError(`Session ${sessionId} not found.`);
+  const [row] = await getDb().select().from(arucoSessions).where(eq(arucoSessions.id, sessionId)).limit(1);
+  if (!row) throw new HomographyNotFoundError(`Session ${sessionId} not found.`);
 
-  const session = snap.data() as ArUcoScanSessionDoc;
+  const session = toArUcoSession(row);
   return {
     SessionId: sessionId,
     Status: session.Status,
     CamerasCheckedIn: session.CamerasCheckedIn ?? [],
     CamerasTotal: session.CamerasTotal,
-    CreatedAt: session.CreatedAt.toDate().toISOString(),
+    CreatedAt: session.CreatedAt.toISOString(),
   };
 }
 
 /** Mirrors HomographyService.HasLocalHomography. */
 export async function hasLocalHomography(deviceId: string): Promise<boolean> {
-  const snap = await getDb().collection(COL_LOCAL).where("DeviceId", "==", deviceId).limit(1).get();
-  return !snap.empty;
+  const rows = await getDb()
+    .select({ id: localHomographies.id })
+    .from(localHomographies)
+    .where(eq(localHomographies.deviceId, deviceId))
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** Mirrors HomographyService.GetSnapshotUrlAsync. */
 export async function getSnapshotUrl(deviceId: string, cameraMac: string): Promise<string | null> {
   const docId = `${deviceId}_${normalizeMac(cameraMac)}`;
-  const snap = await getDb().collection(COL_LOCAL).doc(docId).get();
-  if (!snap.exists) return null;
+  const [row] = await getDb().select().from(localHomographies).where(eq(localHomographies.id, docId)).limit(1);
+  if (!row) return null;
 
-  const record = snap.data() as LocalHomographyDoc;
+  const record = toLocalHomography(row);
   if (!record.SnapshotPath?.trim()) return null;
 
   const result = await createSignedDownloadUrl({ PathFromRoot: record.SnapshotPath });
@@ -470,15 +562,17 @@ async function writeArucoLockStatus(cameraDevice: Map<string, string>, status: s
 
   for (const deviceId of deviceIds) {
     try {
-      // NOTE: real Firestore interprets a dotted string key ("Config.ArucoLock.Status") in an
-      // update() payload as a field path (nested write), matching C#'s
-      // UpdateAsync(Dictionary<string,object>{ {"Config.ArucoLock.Status", status} }). The
-      // FakeFirestore test double used in this repo does a *shallow* merge and will store this
-      // literally as a top-level dotted key instead - see homography.routes.test.ts for how the
-      // tests account for that.
-      await db.collection(COL_DEVICES).doc(deviceId).update({
-        "Config.ArucoLock.Status": status,
-        "Config.ArucoLock.LastRunUnix": nowUnixSeconds,
+      // Equivalent of C#'s UpdateAsync("Config.ArucoLock.Status", ...) nested-field write: merge into the
+      // device's Config jsonb, creating Config/ArucoLock when absent. Row-locked so concurrent writers serialize.
+      await db.transaction(async (tx) => {
+        const [row] = await tx.select().from(devices).where(eq(devices.id, deviceId)).for("update").limit(1);
+        if (!row) throw new Error(`Device ${deviceId} not found.`);
+        const config = (row.config ?? {}) as Record<string, unknown>;
+        const aruco = (config.ArucoLock ?? {}) as Record<string, unknown>;
+        await tx
+          .update(devices)
+          .set({ config: { ...config, ArucoLock: { ...aruco, Status: status, LastRunUnix: nowUnixSeconds } } })
+          .where(eq(devices.id, deviceId));
       });
     } catch {
       // Mirrors the C# catch-and-log-warning: a failed status write must not fail compute-lock itself.
@@ -502,19 +596,17 @@ async function storeLocked(
   if (!matrix) return 0;
 
   const hLocked = matMul3x3(tToGlobal, matrix);
-  const doc: LockedHomographyDoc = {
-    DeviceId: deviceId,
-    CameraMac: mac,
-    MatrixFlat: flattenMatrix3x3(hLocked),
-    ComputedAt: Timestamp.now(),
-  };
-  await getDb().collection(COL_LOCKED).doc(`${deviceId}_${mac}`).set(doc);
+  const values = { deviceId, cameraMac: mac, matrixFlat: flattenMatrix3x3(hLocked), computedAt: new Date() };
+  await getDb()
+    .insert(lockedHomographies)
+    .values({ id: `${deviceId}_${mac}`, ...values })
+    .onConflictDoUpdate({ target: lockedHomographies.id, set: values });
   return 1;
 }
 
 async function runBfsLock(): Promise<{ count: number; cameraDevice: Map<string, string> }> {
   const db = getDb();
-  const sightingDocs = (await db.collection(COL_SIGHTINGS).get()).docs;
+  const sightingRows = await db.select().from(arucoSightings);
 
   // cameraMarkersPx.get(mac).get(`${sessionId}_${markerId}`) = raw pixel corners [[x,y]x4].
   const cameraMarkersPx = new Map<string, Map<string, number[][]>>();
@@ -523,13 +615,12 @@ async function runBfsLock(): Promise<{ count: number; cameraDevice: Map<string, 
   // First pass: collect device IDs and the most recent sighting per camera (last write wins,
   // matching the Firestore upsert semantics used by submitArucoSightings).
   const sightingsByCam = new Map<string, ArUcoSighting>();
-  for (const doc of sightingDocs) {
-    const data = doc.data() as ArUcoSightingDoc | undefined;
-    if (!data) continue;
+  for (const row of sightingRows) {
+    const data = toArUcoSighting(row);
     const mac = data.CameraMac;
     if (!mac || !data.SessionId) continue;
     if (data.DeviceId) cameraDevice.set(mac, data.DeviceId);
-    sightingsByCam.set(mac, { Id: doc.id, ...data });
+    sightingsByCam.set(mac, data);
   }
 
   // Load current local homographies once per camera and compute their hashes.
@@ -537,11 +628,12 @@ async function runBfsLock(): Promise<{ count: number; cameraDevice: Map<string, 
   for (const mac of sightingsByCam.keys()) {
     const deviceId = cameraDevice.get(mac);
     if (!deviceId) continue;
-    const localSnap = await db.collection(COL_LOCAL).doc(`${deviceId}_${mac}`).get();
-    localHomographyCache.set(
-      mac,
-      localSnap.exists ? ({ Id: localSnap.id, ...(localSnap.data() as LocalHomographyDoc) } as LocalHomography) : null,
-    );
+    const [localRow] = await db
+      .select()
+      .from(localHomographies)
+      .where(eq(localHomographies.id, `${deviceId}_${mac}`))
+      .limit(1);
+    localHomographyCache.set(mac, localRow ? toLocalHomography(localRow) : null);
   }
 
   // Filter: discard sightings whose attached homography hash doesn't match the camera's
@@ -715,7 +807,7 @@ function toGlobalHomographySetDto(record: ProjectGlobalHomographySetDoc): Global
     FloorplanSize: record.FloorplanSize ?? [],
     Placements: placements,
     LockedGroups: lockedGroups,
-    SavedAt: record.SavedAt.toDate().toISOString(),
+    SavedAt: record.SavedAt.toISOString(),
     SavedByUserId: record.SavedByUserId ?? null,
   };
 }
@@ -785,10 +877,23 @@ export async function saveGlobalHomographies(
     Placements: placements,
     LockedGroups: lockedGroups,
     SavedByUserId: savedByUserId,
-    SavedAt: Timestamp.now(),
+    SavedAt: new Date(),
   };
 
-  await getDb().collection(COL_GLOBAL).doc(projectId).set(record);
+  const globalValues = {
+    floorplanId: record.FloorplanId ?? null,
+    mmPerFpPx: record.MmPerFpPx,
+    originFp: record.OriginFp ?? null,
+    floorplanSize: record.FloorplanSize ?? null,
+    placements: record.Placements ?? null,
+    lockedGroups: record.LockedGroups ?? null,
+    savedByUserId: record.SavedByUserId ?? null,
+    savedAt: record.SavedAt,
+  };
+  await getDb()
+    .insert(globalHomographies)
+    .values({ projectId, ...globalValues })
+    .onConflictDoUpdate({ target: globalHomographies.projectId, set: globalValues });
 
   const responseDto = toGlobalHomographySetDto(record);
   return {
@@ -877,7 +982,7 @@ function toPuzzlePieceMetadataDto(
     MetadataPath: artifact.MetadataPath ?? null,
     MetadataDownloadUrl: metadataDownload?.SignedUrl ?? null,
     MetadataDownloadUrlExpiresAt: metadataDownload?.ExpiresAt.toISOString() ?? null,
-    GeneratedAt: artifact.GeneratedAt.toDate().toISOString(),
+    GeneratedAt: artifact.GeneratedAt.toISOString(),
   };
 }
 
@@ -956,20 +1061,20 @@ export async function getPuzzleWorkspace(
   if (!projectId?.trim()) throw new HomographyValidationError("projectId is required.");
 
   const db = getDb();
-  const deviceDocs = (await db.collection(COL_DEVICES).where("ProjectId", "==", projectId).get()).docs;
-  const deviceIdSet = new Set(deviceDocs.map((d) => d.id.toLowerCase()));
+  const deviceRows = await db.select({ id: devices.id }).from(devices).where(eq(devices.projectId, projectId));
+  const deviceIdSet = new Set(deviceRows.map((d) => d.id.toLowerCase()));
 
-  const artifactDocs = (await db.collection(COL_PUZZLE_PIECES).where("ProjectId", "==", projectId).get()).docs;
+  const artifactRows = await db.select().from(puzzlePieces).where(eq(puzzlePieces.projectId, projectId));
   const artifactsByKey = new Map<string, PuzzlePieceArtifact>();
-  for (const doc of artifactDocs) {
-    const data = doc.data() as PuzzlePieceArtifactDoc | undefined;
-    if (!data?.DeviceId?.trim() || !data?.CameraMac?.trim()) continue;
-    artifactsByKey.set(buildCameraKey(data.DeviceId, data.CameraMac), { Id: doc.id, ...data });
+  for (const row of artifactRows) {
+    const data = toPuzzlePieceArtifact(row);
+    if (!data.DeviceId?.trim() || !data.CameraMac?.trim()) continue;
+    artifactsByKey.set(buildCameraKey(data.DeviceId, data.CameraMac), data);
   }
 
-  const localDocs = (await db.collection(COL_LOCAL).get()).docs;
-  const localHomographies = localDocs
-    .map((doc) => ({ Id: doc.id, ...(doc.data() as LocalHomographyDoc) }) as LocalHomography)
+  const localRows = await db.select().from(localHomographies);
+  const localHomographyList = localRows
+    .map(toLocalHomography)
     .filter(
       (local) =>
         !!local.DeviceId?.trim() &&
@@ -984,10 +1089,10 @@ export async function getPuzzleWorkspace(
     });
 
   const localDtos: LocalHomographyWorkspaceDto[] = [];
-  const puzzlePieces: PuzzlePieceDto[] = [];
+  const pieceDtos: PuzzlePieceDto[] = [];
   const puzzlePieceMetaFiles: PuzzlePieceMetadataDto[] = [];
 
-  for (const local of localHomographies) {
+  for (const local of localHomographyList) {
     const matrix = unflattenMatrix3x3(local.MatrixFlat)!;
     const localHash = computeHomographyHash(matrix);
     localDtos.push(toLocalWorkspaceDto(local, localHash));
@@ -1009,17 +1114,21 @@ export async function getPuzzleWorkspace(
       };
     }
 
-    puzzlePieces.push(pieceDto);
+    pieceDtos.push(pieceDto);
     if (pieceDto.Metadata) puzzlePieceMetaFiles.push(pieceDto.Metadata);
   }
 
-  const globalSnap = await db.collection(COL_GLOBAL).doc(projectId).get();
-  const globalRecord = globalSnap.exists ? (globalSnap.data() as ProjectGlobalHomographySetDoc) : null;
+  const [globalRow] = await db
+    .select()
+    .from(globalHomographies)
+    .where(eq(globalHomographies.projectId, projectId))
+    .limit(1);
+  const globalRecord = globalRow ? toGlobalSetDoc(globalRow) : null;
   const globalDto = globalRecord ? toGlobalHomographySetDto(globalRecord) : null;
 
   return {
     ProjectId: projectId,
-    PuzzlePieces: puzzlePieces,
+    PuzzlePieces: pieceDtos,
     PuzzlePieceMetaFiles: puzzlePieceMetaFiles,
     LocalHomographies: localDtos,
     GlobalHomographies: globalDto,
@@ -1044,21 +1153,24 @@ export async function getPuzzlePiece(
   validateRequiredString(cameraMac, "cameraMac");
 
   const db = getDb();
-  const deviceSnap = await db.collection(COL_DEVICES).doc(deviceId).get();
-  if (!deviceSnap.exists) throw new HomographyNotFoundError(`Device '${deviceId}' was not found.`);
+  const [deviceRow] = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1);
+  if (!deviceRow) throw new HomographyNotFoundError(`Device '${deviceId}' was not found.`);
 
-  const device = deviceSnap.data() as { ProjectId?: string | null } | undefined;
-  if ((device?.ProjectId ?? "").toLowerCase() !== projectId.toLowerCase()) {
+  if ((deviceRow.projectId ?? "").toLowerCase() !== projectId.toLowerCase()) {
     throw new HomographyNotFoundError(`Device '${deviceId}' does not belong to project '${projectId}'.`);
   }
 
   const normalizedMac = normalizeMac(cameraMac);
-  const localSnap = await db.collection(COL_LOCAL).doc(`${deviceId}_${normalizedMac}`).get();
-  if (!localSnap.exists) {
+  const [localRow] = await db
+    .select()
+    .from(localHomographies)
+    .where(eq(localHomographies.id, `${deviceId}_${normalizedMac}`))
+    .limit(1);
+  if (!localRow) {
     throw new HomographyNotFoundError(`No local homography was found for device '${deviceId}' camera '${normalizedMac}'.`);
   }
 
-  const localData = localSnap.data() as LocalHomographyDoc;
+  const localData = toLocalHomography(localRow);
   if (!localData.MatrixFlat) {
     throw new HomographyNotFoundError(
       `Local homography for device '${deviceId}' camera '${normalizedMac}' is incomplete.`,
@@ -1066,7 +1178,6 @@ export async function getPuzzlePiece(
   }
 
   const local: LocalHomography = {
-    Id: localSnap.id,
     ...localData,
     DeviceId: localData.DeviceId ?? deviceId,
     CameraMac: normalizedMac,
@@ -1075,19 +1186,17 @@ export async function getPuzzlePiece(
   const matrix = unflattenMatrix3x3(local.MatrixFlat)!;
   const localHash = computeHomographyHash(matrix);
 
-  const artifactSnap = await db
-    .collection(COL_PUZZLE_PIECES)
-    .doc(buildPuzzlePieceDocumentId(projectId, deviceId, normalizedMac))
-    .get();
+  const [artifactRow] = await db
+    .select()
+    .from(puzzlePieces)
+    .where(and(eq(puzzlePieces.id, buildPuzzlePieceDocumentId(projectId, deviceId, normalizedMac))))
+    .limit(1);
 
   const artifactsByKey = new Map<string, PuzzlePieceArtifact>();
-  if (artifactSnap.exists) {
-    const artifactData = artifactSnap.data() as PuzzlePieceArtifactDoc;
+  if (artifactRow) {
+    const artifactData = toPuzzlePieceArtifact(artifactRow);
     if (artifactData.DeviceId?.trim() && artifactData.CameraMac?.trim()) {
-      artifactsByKey.set(buildCameraKey(artifactData.DeviceId, artifactData.CameraMac), {
-        Id: artifactSnap.id,
-        ...artifactData,
-      });
+      artifactsByKey.set(buildCameraKey(artifactData.DeviceId, artifactData.CameraMac), artifactData);
     }
   }
 
