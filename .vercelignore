@@ -6,11 +6,8 @@
 .env
 .env.*
 **/node_modules
-BetterPlacemaking.CLIENT
-BetterPlacemaking.SERVER
 supabase
 tools
-tools/firestore-import
 docs
 **/*.test.ts
 **/service-account*.json
