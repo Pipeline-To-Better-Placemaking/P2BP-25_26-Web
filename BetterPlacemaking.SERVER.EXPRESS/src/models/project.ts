@@ -1,4 +1,4 @@
-/** Firestore doc shape for the `projects` collection - PascalCase, unchanged from the ASP.NET server. */
+/** API shape for projects - PascalCase, unchanged from the ASP.NET server (backed by the `projects` table). */
 export interface ProjectDoc {
   Title?: string | null;
   Description?: string | null;

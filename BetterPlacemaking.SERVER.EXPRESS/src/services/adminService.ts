@@ -1,4 +1,6 @@
-import { getDb } from "../config/firebase.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { users } from "../db/schema/index.js";
 import * as userService from "./userService.js";
 
 export async function updateRole(targetEmail: string, newRole: string): Promise<boolean> {
@@ -8,7 +10,6 @@ export async function updateRole(targetEmail: string, newRole: string): Promise<
   if (user.Role === "Admin") return false; // legacy rule: Admins can't be role-changed via this endpoint
   if (user.Role === newRole) return true;
 
-  const db = getDb();
-  await db.collection("users").doc(user.Id).update({ Role: newRole });
+  await getDb().update(users).set({ role: newRole }).where(eq(users.id, user.Id));
   return true;
 }

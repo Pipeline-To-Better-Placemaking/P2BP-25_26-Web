@@ -1,10 +1,30 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { and, eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { setDbForTesting, type Db } from "../db/client.js";
+import { projectMembers, users } from "../db/schema/index.js";
+import { createTestDb } from "../test/db.js";
+import * as projectService from "./projectService.js";
 
-const fake = new FakeFirestore();
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
+let db: Db;
 
-const projectService = await import("./projectService.js");
+async function makeUser(id: string) {
+  await db.insert(users).values({ id, email: `${id}@example.com` });
+}
+
+beforeAll(async () => {
+  db = await createTestDb();
+  await makeUser("creator-user-1");
+  await makeUser("creator-user-2");
+  await makeUser("u1");
+});
+afterAll(() => setDbForTesting(null));
+
+function member(projectId: string, userId: string) {
+  return db
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
+}
 
 describe("projectService.create", () => {
   it("bootstraps the creator's ProjectOwner membership (migration fix)", async () => {
@@ -15,16 +35,15 @@ describe("projectService.create", () => {
 
     expect(project.Title).toBe("Test Project");
 
-    const member = fake.peek(`projects/${project.Id}/members/creator-user-1`);
-    expect(member).toBeDefined();
-    expect(member?.roles).toEqual(["ProjectOwner"]);
-    expect(member?.authzVersion).toBe(1);
+    const [row] = await member(project.Id, "creator-user-1");
+    expect(row).toBeDefined();
+    expect(row.roles).toEqual(["ProjectOwner"]);
+    expect(row.authzVersion).toBe(1);
   });
 
   it("does not bootstrap membership for any other user", async () => {
     const project = await projectService.create({ Title: "Another" }, "creator-user-2");
-    const strangerMember = fake.peek(`projects/${project.Id}/members/some-other-user`);
-    expect(strangerMember).toBeUndefined();
+    expect(await member(project.Id, "some-other-user")).toHaveLength(0);
   });
 });
 
@@ -34,7 +53,7 @@ describe("projectService.update", () => {
     const success = await projectService.update(project.Id, { Title: "New Title" });
     expect(success).toBe(true);
 
-    const doc = fake.peek(`projects/${project.Id}`);
+    const doc = await projectService.getById(project.Id);
     expect(doc?.Title).toBe("New Title");
     expect(doc?.Description ?? null).toBeNull();
     expect(doc?.Location ?? null).toBeNull();
@@ -43,5 +62,15 @@ describe("projectService.update", () => {
   it("returns false for a nonexistent project", async () => {
     const success = await projectService.update("does-not-exist", { Title: "x" });
     expect(success).toBe(false);
+  });
+});
+
+describe("projectService.deleteProject", () => {
+  it("deletes the project and cascades members", async () => {
+    const project = await projectService.create({ Title: "Del" }, "u1");
+    expect(await projectService.deleteProject(project.Id)).toBe(true);
+    expect(await projectService.getById(project.Id)).toBeNull();
+    expect(await member(project.Id, "u1")).toHaveLength(0);
+    expect(await projectService.deleteProject(project.Id)).toBe(false);
   });
 });

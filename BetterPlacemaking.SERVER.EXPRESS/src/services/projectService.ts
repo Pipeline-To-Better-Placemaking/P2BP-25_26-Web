@@ -1,25 +1,23 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
-import type { Project, ProjectDoc } from "../models/project.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { projectMembers, projects } from "../db/schema/index.js";
+import type { Project } from "../models/project.js";
 
-const COLLECTION = "projects";
+type ProjectRow = typeof projects.$inferSelect;
 
-function toProject(id: string, data: FirebaseFirestore.DocumentData): Project {
-  return { Id: id, ...(data as ProjectDoc) };
+function toProject(row: ProjectRow): Project {
+  return { Id: row.id, Title: row.title, Description: row.description, Location: row.location };
 }
 
 export async function getAll(): Promise<Project[]> {
-  const db = getDb();
-  const snapshot = await db.collection(COLLECTION).get();
-  return snapshot.docs.map((doc) => toProject(doc.id, doc.data()));
+  const rows = await getDb().select().from(projects);
+  return rows.map(toProject);
 }
 
 export async function getById(id: string): Promise<Project | null> {
   if (!id) return null;
-  const db = getDb();
-  const doc = await db.collection(COLLECTION).doc(id).get();
-  if (!doc.exists) return null;
-  return toProject(doc.id, doc.data()!);
+  const [row] = await getDb().select().from(projects).where(eq(projects.id, id)).limit(1);
+  return row ? toProject(row) : null;
 }
 
 export interface CreateProjectInput {
@@ -31,53 +29,45 @@ export interface CreateProjectInput {
 /**
  * Creates the project and, as a fix over the ASP.NET server (see migration plan),
  * bootstraps the creator's membership so they aren't immediately locked out of a
- * project they just made - writes the same member-doc shape roleAssignmentService
- * already uses (roles/authzVersion/updatedAt) with the seeded ProjectOwner role.
+ * project they just made - writes the same member-row shape roleAssignmentService
+ * already uses (roles/authzVersion) with the seeded ProjectOwner role.
  */
 export async function create(input: CreateProjectInput, creatorUserId: string): Promise<Project> {
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc();
-  const doc: ProjectDoc = {
-    Title: input.Title ?? null,
-    Description: input.Description ?? null,
-    Location: input.Location ?? null,
-  };
-
-  const memberRef = ref.collection("members").doc(creatorUserId);
-
-  await db.runTransaction(async (tx) => {
-    tx.set(ref, doc);
-    tx.set(memberRef, {
+  return getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .insert(projects)
+      .values({
+        title: input.Title ?? null,
+        description: input.Description ?? null,
+        location: input.Location ?? null,
+      })
+      .returning();
+    await tx.insert(projectMembers).values({
+      projectId: row.id,
+      userId: creatorUserId,
       roles: ["ProjectOwner"],
       authzVersion: 1,
-      updatedAt: FieldValue.serverTimestamp(),
     });
+    return toProject(row);
   });
-
-  return toProject(ref.id, doc as FirebaseFirestore.DocumentData);
 }
 
 /** Full-field overwrite of Title/Description/Location every call - matches the ASP.NET server (not a partial PATCH). */
 export async function update(id: string, input: CreateProjectInput): Promise<boolean> {
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const existing = await ref.get();
-  if (!existing.exists) return false;
-
-  await ref.update({
-    Title: input.Title ?? null,
-    Description: input.Description ?? null,
-    Location: input.Location ?? null,
-  });
-  return true;
+  const rows = await getDb()
+    .update(projects)
+    .set({
+      title: input.Title ?? null,
+      description: input.Description ?? null,
+      location: input.Location ?? null,
+    })
+    .where(eq(projects.id, id))
+    .returning({ id: projects.id });
+  return rows.length > 0;
 }
 
-/** Single-doc delete, no cascading cleanup of members/devices - matches the ASP.NET server. */
+/** Deletes the project row (members cascade via FK); no other cleanup - matches the ASP.NET server. */
 export async function deleteProject(id: string): Promise<boolean> {
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const existing = await ref.get();
-  if (!existing.exists) return false;
-  await ref.delete();
-  return true;
+  const rows = await getDb().delete(projects).where(eq(projects.id, id)).returning({ id: projects.id });
+  return rows.length > 0;
 }

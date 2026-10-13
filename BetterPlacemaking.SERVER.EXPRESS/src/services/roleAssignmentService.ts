@@ -1,5 +1,6 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb, type Db } from "../db/client.js";
+import { projectMembers, projects, users } from "../db/schema/index.js";
 import * as userService from "./userService.js";
 import type {
   ProjectMemberRoleDto,
@@ -19,44 +20,52 @@ function normalizeRoles(roles: string[] | undefined): string[] {
   return Array.from(seen.values());
 }
 
-async function nextAuthzVersion(memberSnapshot: FirebaseFirestore.DocumentSnapshot): Promise<number> {
-  const current = memberSnapshot.exists ? (memberSnapshot.data()?.authzVersion as number | undefined) : undefined;
-  return (current ?? 0) + 1;
+/** Upserts a member's roles, bumping authzVersion (starts at 1) and leaving notification prefs untouched. */
+async function upsertMemberRoles(db: Pick<Db, "insert">, projectId: string, userId: string, roles: string[]) {
+  await db
+    .insert(projectMembers)
+    .values({ projectId, userId, roles, authzVersion: 1 })
+    .onConflictDoUpdate({
+      target: [projectMembers.projectId, projectMembers.userId],
+      set: {
+        roles,
+        authzVersion: sql`${projectMembers.authzVersion} + 1`,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 /** All users, each with their role assignments across every project. Mirrors UserService.GetProjectRoleAssignments. */
 export async function getProjectRoleAssignments(): Promise<UserProjectRoleAssignmentsDto[]> {
   const db = getDb();
-  const users = await userService.getUsers();
-  const projectsSnapshot = await db.collection("projects").get();
+  const allUsers = await userService.getUsers();
+  const rows = await db
+    .select({ member: projectMembers, title: projects.title })
+    .from(projectMembers)
+    .innerJoin(projects, eq(projects.id, projectMembers.projectId));
 
   const assignmentsByUser = new Map<string, ProjectRoleAssignmentDto[]>();
 
-  for (const projectDoc of projectsSnapshot.docs) {
-    const project = projectDoc.data();
-    const membersSnapshot = await db.collection("projects").doc(projectDoc.id).collection("members").get();
+  for (const { member, title } of rows) {
+    const roles = normalizeRoles(member.roles);
+    if (roles.length === 0) continue;
 
-    for (const member of membersSnapshot.docs) {
-      const roles = normalizeRoles(member.data().roles as string[] | undefined);
-      if (roles.length === 0) continue;
-
-      const list = assignmentsByUser.get(member.id) ?? [];
-      list.push({
-        ProjectId: projectDoc.id,
-        ProjectName: project.Title,
-        Roles: roles,
-        NotifyOnOwnScan: !!member.data().notifyOnOwnScan,
-        NotifyOnOthersScan: !!member.data().notifyOnOthersScan,
-        NotifyOnScheduledScan: !!member.data().notifyOnScheduledScan,
-        NotifyOnSystemToggle: !!member.data().notifyOnSystemToggle,
-        NotifyOnHealthAlert: !!member.data().notifyOnHealthAlert,
-        EmailPdfOnSystemOff: !!member.data().emailPdfOnSystemOff,
-      });
-      assignmentsByUser.set(member.id, list);
-    }
+    const list = assignmentsByUser.get(member.userId) ?? [];
+    list.push({
+      ProjectId: member.projectId,
+      ProjectName: title ?? undefined,
+      Roles: roles,
+      NotifyOnOwnScan: member.notifyOnOwnScan,
+      NotifyOnOthersScan: member.notifyOnOthersScan,
+      NotifyOnScheduledScan: member.notifyOnScheduledScan,
+      NotifyOnSystemToggle: member.notifyOnSystemToggle,
+      NotifyOnHealthAlert: member.notifyOnHealthAlert,
+      EmailPdfOnSystemOff: member.emailPdfOnSystemOff,
+    });
+    assignmentsByUser.set(member.userId, list);
   }
 
-  return users.map((user) => ({
+  return allUsers.map((user) => ({
     UserId: user.Id,
     FirstName: user.FirstName ?? undefined,
     LastName: user.LastName ?? undefined,
@@ -68,54 +77,49 @@ export async function getProjectRoleAssignments(): Promise<UserProjectRoleAssign
 /** Overwrites one user's role assignments across the projects listed in the request. */
 export async function setUserProjectRoleAssignments(request: UserProjectRoleAssignmentsUpdateDto): Promise<boolean> {
   if (!request.UserId) return false;
+  const userId = request.UserId;
   const db = getDb();
 
-  const userSnap = await db.collection("users").doc(request.UserId).get();
-  if (!userSnap.exists) return false;
+  const user = await userService.getUserById(userId);
+  if (!user) return false;
 
-  for (const assignment of request.Assignments) {
-    if (!assignment.ProjectId) continue;
+  await db.transaction(async (tx) => {
+    for (const assignment of request.Assignments) {
+      if (!assignment.ProjectId) continue;
 
-    const roles = normalizeRoles(assignment.Roles);
-    const memberRef = db.collection("projects").doc(assignment.ProjectId).collection("members").doc(request.UserId);
+      const roles = normalizeRoles(assignment.Roles);
+      if (roles.length === 0) {
+        await tx
+          .delete(projectMembers)
+          .where(and(eq(projectMembers.projectId, assignment.ProjectId), eq(projectMembers.userId, userId)));
+        continue;
+      }
 
-    if (roles.length === 0) {
-      const existing = await memberRef.get();
-      if (existing.exists) await memberRef.delete();
-      continue;
+      await upsertMemberRoles(tx, assignment.ProjectId, userId, roles);
     }
-
-    const memberSnapshot = await memberRef.get();
-    const authzVersion = await nextAuthzVersion(memberSnapshot);
-
-    await memberRef.set(
-      { roles, authzVersion, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-  }
+  });
 
   return true;
 }
 
 /** Members of one project with their (single, display-only) role. Mirrors UserService.GetProjectMemberRoles. */
 export async function getProjectMemberRoles(projectId: string): Promise<ProjectMemberRoleDto[]> {
-  const db = getDb();
-  const membersSnapshot = await db.collection("projects").doc(projectId).collection("members").get();
+  const rows = await getDb()
+    .select({ member: projectMembers, user: users })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(eq(projectMembers.projectId, projectId));
 
   const results: ProjectMemberRoleDto[] = [];
-  for (const member of membersSnapshot.docs) {
-    const roles = (member.data().roles as string[] | undefined) ?? [];
-    const role = roles.find((r) => r?.trim())?.trim();
+  for (const { member, user } of rows) {
+    const role = member.roles.find((r) => r?.trim())?.trim();
     if (!role) continue;
 
-    const user = await userService.getUserById(member.id);
-    if (!user) continue;
-
     results.push({
-      UserId: member.id,
-      FirstName: user.FirstName ?? undefined,
-      LastName: user.LastName ?? undefined,
-      Email: user.Email ?? undefined,
+      UserId: member.userId,
+      FirstName: user.firstName ?? undefined,
+      LastName: user.lastName ?? undefined,
+      Email: user.email ?? undefined,
       Role: role,
     });
   }
@@ -131,27 +135,22 @@ export async function getProjectMemberRoles(projectId: string): Promise<ProjectM
 
 export async function setProjectMemberRole(projectId: string, request: ProjectMemberRoleUpdateDto): Promise<boolean> {
   if (!request.UserId) return false;
+  const userId = request.UserId;
   const db = getDb();
 
-  const userSnap = await db.collection("users").doc(request.UserId).get();
-  if (!userSnap.exists) return false;
+  const user = await userService.getUserById(userId);
+  if (!user) return false;
 
-  const memberRef = db.collection("projects").doc(projectId).collection("members").doc(request.UserId);
   const normalizedRole = request.Role?.trim();
 
   if (!normalizedRole) {
-    const existing = await memberRef.get();
-    if (existing.exists) await memberRef.delete();
+    await db
+      .delete(projectMembers)
+      .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
     return true;
   }
 
-  const memberSnapshot = await memberRef.get();
-  const authzVersion = await nextAuthzVersion(memberSnapshot);
-
-  await memberRef.set(
-    { roles: [normalizedRole], authzVersion, updatedAt: FieldValue.serverTimestamp() },
-    { merge: true },
-  );
+  await upsertMemberRoles(db, projectId, userId, [normalizedRole]);
   return true;
 }
 
@@ -169,18 +168,17 @@ export async function updateProjectNotificationPrefs(
   projectId: string,
   prefs: NotificationPrefsUpdate,
 ): Promise<boolean> {
-  const db = getDb();
-  const memberRef = db.collection("projects").doc(projectId).collection("members").doc(userId);
-  const snap = await memberRef.get();
-  if (!snap.exists) return false;
-
-  await memberRef.update({
-    notifyOnOwnScan: prefs.NotifyOnOwnScan,
-    notifyOnOthersScan: prefs.NotifyOnOthersScan,
-    notifyOnScheduledScan: prefs.NotifyOnScheduledScan,
-    notifyOnSystemToggle: prefs.NotifyOnSystemToggle,
-    notifyOnHealthAlert: prefs.NotifyOnHealthAlert,
-    emailPdfOnSystemOff: prefs.EmailPdfOnSystemOff,
-  });
-  return true;
+  const rows = await getDb()
+    .update(projectMembers)
+    .set({
+      notifyOnOwnScan: prefs.NotifyOnOwnScan,
+      notifyOnOthersScan: prefs.NotifyOnOthersScan,
+      notifyOnScheduledScan: prefs.NotifyOnScheduledScan,
+      notifyOnSystemToggle: prefs.NotifyOnSystemToggle,
+      notifyOnHealthAlert: prefs.NotifyOnHealthAlert,
+      emailPdfOnSystemOff: prefs.EmailPdfOnSystemOff,
+    })
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+    .returning({ userId: projectMembers.userId });
+  return rows.length > 0;
 }
