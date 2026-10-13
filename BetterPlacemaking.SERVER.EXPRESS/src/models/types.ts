@@ -1,5 +1,5 @@
 /**
- * Firestore document shapes. Field casing is preserved exactly as the ASP.NET
+ * API document shapes (backed by Postgres tables). Field casing is preserved exactly as the ASP.NET
  * server wrote it (PascalCase for `users`/`refreshTokens`, camelCase for the
  * role/permission collections) since both servers point at the same database
  * during the phased migration.
@@ -15,7 +15,7 @@ export interface UserDoc {
   EmailVerified?: boolean;
   EmailVerificationToken?: string | null;
   PasswordResetToken?: string | null;
-  PasswordResetTokenExpiry?: FirebaseFirestore.Timestamp | null;
+  PasswordResetTokenExpiry?: Date | null;
 }
 
 export interface User extends UserDoc {
@@ -45,9 +45,9 @@ export interface RefreshTokenRecord {
   Id: string;
   UserId?: string | null;
   TokenHash?: string | null;
-  CreatedAtUtc: FirebaseFirestore.Timestamp;
-  ExpiresAtUtc: FirebaseFirestore.Timestamp;
-  RevokedAtUtc?: FirebaseFirestore.Timestamp | null;
+  CreatedAtUtc: Date;
+  ExpiresAtUtc: Date;
+  RevokedAtUtc?: Date | null;
   ReplacedByTokenId?: string | null;
   UserAgent?: string | null;
 }

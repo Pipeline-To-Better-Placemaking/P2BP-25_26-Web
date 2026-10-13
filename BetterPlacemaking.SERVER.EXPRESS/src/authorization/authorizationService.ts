@@ -1,5 +1,12 @@
 import NodeCache from "node-cache";
-import { getDb } from "../config/firebase.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import {
+  projectMembers,
+  roleDefinitionsGlobal,
+  roleDefinitionsProject,
+  userGlobalRoles,
+} from "../db/schema/index.js";
 
 // Global-permission checks are cached for 10 minutes (matches the ASP.NET server's
 // IDistributedCache TTL). Project-permission checks are intentionally never cached -
@@ -12,35 +19,40 @@ function hasPermissionCaseInsensitive(permissions: string[] | undefined, permiss
   return permissions.some((p) => p.toLowerCase() === target);
 }
 
+type RoleCollection = "role_definitions_global" | "role_definitions_project";
+
+/** Permission lists for the named roles (missing roles are skipped). */
+async function loadRolePermissions(collection: RoleCollection, roleNames: string[]): Promise<string[][]> {
+  if (roleNames.length === 0) return [];
+  const table = collection === "role_definitions_global" ? roleDefinitionsGlobal : roleDefinitionsProject;
+  const rows = await getDb()
+    .select({ permissions: table.permissions })
+    .from(table)
+    .where(inArray(table.name, roleNames));
+  return rows.map((r) => r.permissions);
+}
+
 async function roleGrantsPermission(
-  collection: "role_definitions_global" | "role_definitions_project",
+  collection: RoleCollection,
   roleNames: string[],
   permission: string,
 ): Promise<boolean> {
-  if (roleNames.length === 0) return false;
-  const db = getDb();
-  const docs = await Promise.all(
-    roleNames.map((role) => db.collection(collection).doc(role).get()),
-  );
-  return docs.some((doc) => {
-    if (!doc.exists) return false;
-    const permissions = doc.data()?.permissions as string[] | undefined;
-    return hasPermissionCaseInsensitive(permissions, permission);
-  });
+  const lists = await loadRolePermissions(collection, roleNames);
+  return lists.some((permissions) => hasPermissionCaseInsensitive(permissions, permission));
 }
 
 async function getUserGlobalRoles(userId: string): Promise<string[]> {
-  const db = getDb();
-  const doc = await db.collection("user_global_roles").doc(userId).get();
-  if (!doc.exists) return [];
-  return (doc.data()?.roles as string[] | undefined) ?? [];
+  const [row] = await getDb().select().from(userGlobalRoles).where(eq(userGlobalRoles.userId, userId)).limit(1);
+  return row?.roles ?? [];
 }
 
 async function getUserProjectRoles(userId: string, projectId: string): Promise<string[]> {
-  const db = getDb();
-  const doc = await db.collection("projects").doc(projectId).collection("members").doc(userId).get();
-  if (!doc.exists) return [];
-  return (doc.data()?.roles as string[] | undefined) ?? [];
+  const [row] = await getDb()
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+    .limit(1);
+  return row?.roles ?? [];
 }
 
 function candidateGlobalRoles(userId: string, jwtRole: string | undefined, assignedRoles: string[]): string[] {
@@ -97,17 +109,10 @@ export function _clearGlobalPermissionCache(): void {
   globalPermissionCache.flushAll();
 }
 
-async function unionPermissions(
-  collection: "role_definitions_global" | "role_definitions_project",
-  roleNames: string[],
-): Promise<string[]> {
-  if (roleNames.length === 0) return [];
-  const db = getDb();
-  const docs = await Promise.all(roleNames.map((role) => db.collection(collection).doc(role).get()));
+async function unionPermissions(collection: RoleCollection, roleNames: string[]): Promise<string[]> {
+  const lists = await loadRolePermissions(collection, roleNames);
   const seen = new Map<string, string>();
-  for (const doc of docs) {
-    if (!doc.exists) continue;
-    const permissions = (doc.data()?.permissions as string[] | undefined) ?? [];
+  for (const permissions of lists) {
     for (const p of permissions) seen.set(p.toLowerCase(), p);
   }
   return Array.from(seen.values());
@@ -137,9 +142,8 @@ export async function getEffectiveProjectPermissions(userId: string, projectId: 
 }
 
 export async function getProjectRoleOptions(): Promise<string[]> {
-  const db = getDb();
-  const snapshot = await db.collection("role_definitions_project").get();
-  return snapshot.docs.map((doc) => doc.id).sort((a, b) => a.localeCompare(b));
+  const rows = await getDb().select({ name: roleDefinitionsProject.name }).from(roleDefinitionsProject);
+  return rows.map((r) => r.name).sort((a, b) => a.localeCompare(b));
 }
 
 export { getUserGlobalRoles, getUserProjectRoles };

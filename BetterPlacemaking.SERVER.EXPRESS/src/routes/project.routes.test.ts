@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { createTestDb } from "../test/db.js";
+import { projects } from "../db/schema/index.js";
 
-const fake = new FakeFirestore();
+const db = await createTestDb();
 const hasGlobalPermission = vi.fn(async () => false);
 const hasProjectPermission = vi.fn(async (_userId: string, _role: string | undefined, projectId: string) => projectId === "readable-project");
 
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 vi.mock("../authorization/authorizationService.js", () => ({
   hasGlobalPermission: (...args: unknown[]) => hasGlobalPermission(...(args as [string, string | undefined, string])),
   hasProjectPermission: (...args: unknown[]) =>
@@ -26,8 +26,8 @@ function authHeader(): string {
 
 describe("GET /api/project (permission-filtered list)", () => {
   it("returns only projects the user has Project.Read on when they lack Global.Projects.ReadAll", async () => {
-    await fake.collection("projects").doc("readable-project").set({ Title: "Readable" });
-    await fake.collection("projects").doc("hidden-project").set({ Title: "Hidden" });
+    await db.insert(projects).values({ id: "readable-project", title: "Readable" });
+    await db.insert(projects).values({ id: "hidden-project", title: "Hidden" });
 
     const app = createApp();
     const res = await request(app).get("/api/project").set("Authorization", authHeader());
