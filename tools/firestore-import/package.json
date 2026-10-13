@@ -1,0 +1,24 @@
+{
+  "name": "firestore-import",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off, read-only-from-Firestore migration of legacy data into Supabase Postgres + Storage.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "@google-cloud/storage": "^7.14.0",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.3"
+  }
+}
