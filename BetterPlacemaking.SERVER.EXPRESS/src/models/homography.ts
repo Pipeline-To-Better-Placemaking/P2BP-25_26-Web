@@ -5,7 +5,7 @@
  * LockedHomography,ArUcoScanSession,ArUcoSighting,PuzzlePieceArtifact,
  * ProjectGlobalHomographySet}.cs and Models/Dtos/HomographyDtos.cs.
  *
- * As in CameraIntrinsics (see models/intrinsics.ts), Firestore does not support
+ * As in CameraIntrinsics (see models/intrinsics.ts), the old document store did not support
  * arrays nested directly inside arrays, so every 3x3 matrix is stored flattened
  * to 9 elements (`*Flat`) and un/flattened at the model boundary via
  * flattenMatrix3x3 / unflattenMatrix3x3 below - same strategy the C# types use
@@ -14,7 +14,7 @@
 
 export type Matrix3x3 = number[][];
 
-/** Mirrors the `Matrix` (etc.) setter on the C# Firestore models: `value?.SelectMany(r => r).ToList()`. */
+/** Mirrors the `Matrix` (etc.) setter on the C# database models: `value?.SelectMany(r => r).ToList()`. */
 export function flattenMatrix3x3(m: Matrix3x3 | null | undefined): number[] | null {
   return m ? m.flat() : null;
 }
@@ -39,10 +39,10 @@ export function unflattenPointPairs(flat?: number[] | null): number[][] | null {
 }
 
 // ---------------------------------------------------------------------------
-// Firestore doc shapes
+// Document shapes
 // ---------------------------------------------------------------------------
 
-/** Firestore doc shape for the `local_homographies` collection (id: "{deviceId}_{cameraMac}"). */
+/** Document shape for the `local_homographies` collection (id: "{deviceId}_{cameraMac}"). */
 export interface LocalHomographyDoc {
   DeviceId?: string | null;
   CameraMac?: string | null;
@@ -68,7 +68,7 @@ export interface LocalHomography extends LocalHomographyDoc {
   Id: string;
 }
 
-/** Firestore doc shape for the `locked_homographies` collection (id: "{deviceId}_{cameraMac}"). */
+/** Document shape for the `locked_homographies` collection (id: "{deviceId}_{cameraMac}"). */
 export interface LockedHomographyDoc {
   DeviceId?: string | null;
   CameraMac?: string | null;
@@ -80,7 +80,7 @@ export interface LockedHomography extends LockedHomographyDoc {
   Id: string;
 }
 
-/** Firestore doc shape for the `aruco_sessions` collection (auto id). */
+/** Document shape for the `aruco_sessions` collection (auto id). */
 export interface ArUcoScanSessionDoc {
   ArucoDict?: string | null;
   Status: string; // collecting -> computing -> done | failed
@@ -98,7 +98,7 @@ export interface ArUcoMarkerRecordDoc {
   CornersPxFlat?: number[] | null;
 }
 
-/** Firestore doc shape for the `aruco_sightings` collection (id: "{sessionId}_{cameraMac}"). */
+/** Document shape for the `aruco_sightings` collection (id: "{sessionId}_{cameraMac}"). */
 export interface ArUcoSightingDoc {
   SessionId?: string | null;
   DeviceId?: string | null;
@@ -113,7 +113,7 @@ export interface ArUcoSighting extends ArUcoSightingDoc {
   Id: string;
 }
 
-/** Firestore doc shape for the `puzzle_pieces` collection (id: "{projectId}__{deviceId}__{cameraMac with ':' -> '_'}"). */
+/** Document shape for the `puzzle_pieces` collection (id: "{projectId}__{deviceId}__{cameraMac with ':' -> '_'}"). */
 export interface PuzzlePieceArtifactDoc {
   ProjectId?: string | null;
   DeviceId?: string | null;
@@ -157,7 +157,7 @@ export interface HomographyLockGroupRecord {
   CameraMacs?: string[] | null;
 }
 
-/** Firestore doc shape for the `global_homographies` collection (id: projectId). */
+/** Document shape for the `global_homographies` collection (id: projectId). */
 export interface ProjectGlobalHomographySetDoc {
   ProjectId?: string | null;
   FloorplanId?: string | null;

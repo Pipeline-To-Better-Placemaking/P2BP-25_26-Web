@@ -12,7 +12,7 @@ import type { ScanSettingsRequest, UpdateScanStatusRequest } from "../models/sca
  * Ported from BetterPlacemaking.SERVER/Controllers/ScanController.cs - the user-facing scan
  * history/history resource (start/list/get/delete scans, plus the .xyz download and
  * visualizer-preload endpoints), as opposed to scanDeviceRouter's device-authenticated command
- * queue (ScanDeviceController.cs). Both operate on the same Firestore scan documents under
+ * queue (ScanDeviceController.cs). Both operate on the same database scan documents under
  * `projects/{projectId}/devices/{deviceId}/scans` - see scanService.ts.
  *
  * The old route was `api/[controller]` = `api/Scan`. Not wired into app.ts yet (another
@@ -24,7 +24,7 @@ import type { ScanSettingsRequest, UpdateScanStatusRequest } from "../models/sca
  * pipeline (ScanCompleteVisualizerIngestService - an entire in-memory 3D-visualizer subsystem
  * with no Express port yet) and scan-completion email notifications (NotificationService, also
  * not yet ported). Both are fire-and-forget side effects on the old server; every endpoint below
- * still performs its own Firestore read/write correctly without them.
+ * still performs its own database read/write correctly without them.
  */
 export const scanRouter = Router();
 

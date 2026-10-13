@@ -4,9 +4,9 @@ const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
 // user_id / project_id are intentionally plain text (no FK): library items are
-// scoped by the caller's JWT subject, mirroring the Firestore docs.
+// scoped by the caller's JWT subject, mirroring the database docs.
 
-/** Firestore `board_library` (saved ChArUco/ArUco calibration board presets). */
+/** Legacy `board_library` (saved ChArUco/ArUco calibration board presets). */
 export const boardLibrary = pgTable(
   "board_library",
   {
@@ -37,7 +37,7 @@ export interface FloorplanCalibrationJson {
   CalibratedAtUtc: string;
 }
 
-/** Firestore `floorplan_library` (uploaded floorplan images + optional scale calibration). */
+/** Legacy `floorplan_library` (uploaded floorplan images + optional scale calibration). */
 export const floorplanLibrary = pgTable(
   "floorplan_library",
   {

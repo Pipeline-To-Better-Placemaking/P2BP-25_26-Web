@@ -8,7 +8,7 @@ import type { LidarPoint, LidarPoint3D, Point3D } from "../models/visualizer.js"
  *
  * File-reading strategy: the C# services read from a `Stream` (OBJ/PLY) or a file
  * path on disk (XYZ). OBJ/PLY here instead take the file's text content directly as
- * a `string` - callers (route handlers, GCS downloads, etc.) are expected to read
+ * a `string` - callers (route handlers, storage downloads, etc.) are expected to read
  * the uploaded/stored file into a string first, which is more natural for an
  * Express handler than plumbing a Node stream through. XYZ keeps its original
  * disk-file-path signature since XyzParserService.cs always reads from a known

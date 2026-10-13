@@ -4,7 +4,7 @@ import type { LidarPoint3D, Mesh, Point3D } from "../models/visualizer.js";
 /**
  * Ported from BetterPlacemaking.SERVER/Services/Visualizer/{MeshGenerationService,
  * FastMeshService}.cs. Mesh generation from raw LiDAR point clouds - service layer
- * only (no Firestore/HTTP here).
+ * only (no database/HTTP here).
  *
  * ─── MeshGenerationService.cs (707 lines) ───
  * FULLY SELF-CONTAINED in the original: zero external dependencies, hand-rolls its

@@ -21,7 +21,7 @@ import type {
  * than reimplemented, since both controllers operate on the exact same scan rows.
  */
 
-/** Ported from ScanService.NormalizeFirestoreValue - date fields render as ISO-8601 strings, everything else passes through. */
+/** Ported from ScanService.NormalizeValue - date fields render as ISO-8601 strings, everything else passes through. */
 function normalizeValue(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();
   return value;
@@ -116,7 +116,7 @@ export async function getScans(projectId: string, deviceId: string): Promise<Sca
 
 /**
  * Mirrors ScanService.GetScan. Delegates to scanDeviceService.getScan (same document, same
- * path) and applies the same NormalizeFirestoreValue pass GetScans uses above - the device-facing
+ * path) and applies the same NormalizeValue pass GetScans uses above - the device-facing
  * port skipped that pass since ScanDeviceController never needed it (see scanDeviceService.ts).
  */
 export async function getScan(projectId: string, deviceId: string, scanId: string): Promise<ScanDto | null> {
@@ -131,7 +131,7 @@ export async function getScanRaw(projectId: string, deviceId: string, scanId: st
 }
 
 /**
- * Mirrors ScanService.UpdateScanStatus's Firestore write. Delegates to
+ * Mirrors ScanService.UpdateScanStatus's database write. Delegates to
  * scanDeviceService.updateScanStatus for the actual field write (Status/ObjUrl/Error plus the
  * StartedAt/FinishedAt transitions) - identical logic, same document - rather than duplicating it.
  *
@@ -224,9 +224,9 @@ export async function getLatestCompleteScanForProject(
  * ScanCompleteVisualizerIngestService.TryIngestFromScanDocumentAsync, which
  * ScanController.UpdateScanStatus fires-and-forgets after every successful status write. On the
  * old server it downloads the scan's .xyz (HTTPS ObjUrl with an SSRF host allowlist, or a
- * canonical GCS path) and hot-loads it into the in-memory 3D visualizer session
+ * canonical storage path) and hot-loads it into the in-memory 3D visualizer session
  * (VisualizerController/XyzParserService/FastMeshService - an entire subsystem with no Express
- * port yet, not just a missing helper). No-op here; the scan's Firestore Status/ObjUrl/Error
+ * port yet, not just a missing helper). No-op here; the scan's database Status/ObjUrl/Error
  * fields still transition correctly without it (see updateScanStatus above), only the
  * visualizer's live point cloud does not get refreshed automatically.
  */
@@ -250,8 +250,8 @@ export function notifyScanCompleted(_initiatedByUserId: string, _projectId: stri
 /**
  * TODO(scan-xyz-download): stands in for
  * ScanCompleteVisualizerIngestService.DownloadScanXyzAsync, which streams the scan's raw .xyz
- * point cloud (Firestore ObjUrl over HTTPS with an SSRF host allowlist and a size cap, falling
- * back to the canonical GCS object `vision/lidar-scans/{projectId}/{deviceId}/{scanId}.xyz` via
+ * point cloud (database ObjUrl over HTTPS with an SSRF host allowlist and a size cap, falling
+ * back to the canonical storage object `vision/lidar-scans/{projectId}/{deviceId}/{scanId}.xyz` via
  * CloudStorageService.DownloadToStreamAsync - a method cloudStorageService.ts hasn't ported,
  * which currently only issues signed URLs, not raw downloads). Always returns null (route
  * responds 404 `{ reason: "xyz_unavailable" }`, matching DownloadScanXyz's own "stream is null"

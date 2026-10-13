@@ -3,7 +3,7 @@ import type { GalleryGeometry, LidarPoint3D } from "../models/visualizer.js";
 /**
  * Ported from BetterPlacemaking.SERVER/Services/Visualizer/{GeometryCalculationService,
  * GeometryExportService}.cs. Pure geometry-calculation and export-formatting helpers -
- * no I/O, no Firestore. The export functions here back VisualizerController's
+ * no I/O, no database. The export functions here back VisualizerController's
  * `/export/{obj,csv,xyz,xyz-rgb,txt,pts,ply,geometry/json}` endpoints (routes not yet
  * ported - see a later Visualizer routes/controller task).
  *

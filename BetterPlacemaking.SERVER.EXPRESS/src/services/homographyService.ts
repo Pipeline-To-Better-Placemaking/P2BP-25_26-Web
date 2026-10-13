@@ -613,7 +613,7 @@ async function runBfsLock(): Promise<{ count: number; cameraDevice: Map<string, 
   const cameraDevice = new Map<string, string>();
 
   // First pass: collect device IDs and the most recent sighting per camera (last write wins,
-  // matching the Firestore upsert semantics used by submitArucoSightings).
+  // matching the database upsert semantics used by submitArucoSightings).
   const sightingsByCam = new Map<string, ArUcoSighting>();
   for (const row of sightingRows) {
     const data = toArUcoSighting(row);

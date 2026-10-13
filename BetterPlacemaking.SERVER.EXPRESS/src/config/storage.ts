@@ -1,4 +1,3 @@
-import { Storage, type Bucket } from "@google-cloud/storage";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "./env.js";
 
@@ -32,13 +31,13 @@ export interface StorageBucketApi {
 
 let instance: StorageBucketApi | null = null;
 
-/** Private Supabase Storage bucket (SUPABASE_STORAGE_BUCKET, default "media"); lazily created with the service-role key. */
+/** Private Supabase Storage bucket (SUPABASE_STORAGE_BUCKET, default "media"); lazily created with the secret (service-role) key. */
 export function getStorageBucket(): StorageBucketApi {
   if (instance) return instance;
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    throw new Error("Missing required environment variables: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+  if (!env.supabaseUrl || !env.supabaseSecretKey) {
+    throw new Error("Missing required environment variables: SUPABASE_URL / SUPABASE_SECRET_KEY");
   }
-  const client = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+  const client = createClient(env.supabaseUrl, env.supabaseSecretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   instance = client.storage.from(env.supabaseStorageBucket) as unknown as StorageBucketApi;
@@ -48,16 +47,4 @@ export function getStorageBucket(): StorageBucketApi {
 /** Test hook: install (or clear with null) the storage client returned by getStorageBucket(). */
 export function setStorageForTesting(bucket: StorageBucketApi | null): void {
   instance = bucket;
-}
-
-// --- Legacy GCS accessors: still used by fusionEngineService until that domain is ported; the final cleanup PR removes them. ---
-let gcs: Storage | undefined;
-
-/** @deprecated Use getStorageBucket(). */
-export function getBucket(): Bucket {
-  gcs ??= new Storage({
-    ...(process.env.GOOGLE_APPLICATION_CREDENTIALS ? { keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS } : {}),
-    projectId: env.firebaseProjectId,
-  });
-  return gcs.bucket(env.gcsBucketName as string);
 }

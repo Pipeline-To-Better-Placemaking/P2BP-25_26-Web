@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import * as fusionService from "../services/fusionService.js";
-import { downloadGcsBytes } from "../services/fusionEngineService.js";
+import { downloadStorageBytes } from "../services/fusionEngineService.js";
 import { hasProjectPermission } from "../authorization/authorizationService.js";
 import { Permissions } from "../authorization/permissions.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -195,7 +195,7 @@ fusionRouter.get("/:runId/download", async (req, res, next) => {
       return;
     }
 
-    const bytes = await downloadGcsBytes(run.OutputGcsPath);
+    const bytes = await downloadStorageBytes(run.OutputGcsPath);
     const filename = run.OutputGcsPath.split("/").pop() ?? "fused_tracks.json";
     res.status(200).type("application/json").attachment(filename).send(bytes);
   } catch (err) {

@@ -5,9 +5,9 @@ import type { Scan, UpdateScanStatusRequest } from "../models/scanDevice.js";
 
 /**
  * Mirrors ScanService.cs's data model: scans belong to a (project, device) pair (formerly the
- * Firestore subcollection `projects/{projectId}/devices/{deviceId}/scans`), distinct from the
+ * database subcollection `projects/{projectId}/devices/{deviceId}/scans`), distinct from the
  * top-level `devices` table deviceService.ts owns. Kept as a direct table access here (not
- * routed through deviceService.ts) for the same reason ScanService.cs talks to Firestore
+ * routed through deviceService.ts) for the same reason ScanService.cs talks to database
  * directly instead of going through DeviceService for this subtree.
  */
 export type ScanRow = typeof scans.$inferSelect;
@@ -44,7 +44,7 @@ export async function getNextPendingScanId(projectId: string, deviceId: string):
   return row?.id ?? null;
 }
 
-/** Mirrors ScanService.GetScan, minus the NormalizeFirestoreValue timestamp->ISO-string pass (not needed by ScanDeviceController's own use of this). */
+/** Mirrors ScanService.GetScan, minus the NormalizeValue timestamp->ISO-string pass (not needed by ScanDeviceController's own use of this). */
 export async function getScan(projectId: string, deviceId: string, scanId: string): Promise<Scan | null> {
   const [row] = await getDb()
     .select()

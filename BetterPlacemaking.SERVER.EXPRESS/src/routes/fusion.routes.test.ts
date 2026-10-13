@@ -22,12 +22,12 @@ vi.mock("../authorization/authorizationService.js", () => ({
 }));
 
 // The core algorithm has its own dedicated tests (fusionEngineService.test.ts) - here it's
-// mocked out so route/orchestration tests don't touch real GCS/Firestore-backed logic.
+// mocked out so route/orchestration tests don't touch real storage/database-backed logic.
 const runFusionEngineMock = vi.fn(async () => ({ success: true, message: "" }));
-const downloadGcsBytesMock = vi.fn(async () => Buffer.from('{"0":{"sources":[],"num_events":0,"tracks":[]}}'));
+const downloadStorageBytesMock = vi.fn(async () => Buffer.from('{"0":{"sources":[],"num_events":0,"tracks":[]}}'));
 vi.mock("../services/fusionEngineService.js", () => ({
   runFusionEngine: (...args: unknown[]) => runFusionEngineMock(...args),
-  downloadGcsBytes: (...args: unknown[]) => downloadGcsBytesMock(...args),
+  downloadStorageBytes: (...args: unknown[]) => downloadStorageBytesMock(...args),
 }));
 
 const createSignedDownloadUrlMock = vi.fn(async (input: { PathFromRoot: string }) => ({
@@ -113,7 +113,7 @@ beforeEach(async () => {
 beforeEach(() => {
   runFusionEngineMock.mockClear();
   runFusionEngineMock.mockImplementation(async () => ({ success: true, message: "" }));
-  downloadGcsBytesMock.mockClear();
+  downloadStorageBytesMock.mockClear();
   createSignedDownloadUrlMock.mockClear();
   hasProjectPermission.mockClear();
 });
@@ -367,7 +367,7 @@ describe("GET /api/fusion/:runId/download", () => {
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/json");
     expect(res.headers["content-disposition"]).toContain("fused_tracks-20250101.json");
-    expect(downloadGcsBytesMock).toHaveBeenCalledWith("vision/tracks-fused/proj-1/fused_tracks-20250101.json");
+    expect(downloadStorageBytesMock).toHaveBeenCalledWith("vision/tracks-fused/proj-1/fused_tracks-20250101.json");
   });
 
   it("returns 404 when the run has no output file", async () => {

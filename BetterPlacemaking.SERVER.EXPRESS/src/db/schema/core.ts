@@ -5,7 +5,7 @@ const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 const textArray = (name: string) => text(name).array().notNull().default(sql`'{}'::text[]`);
 
-/** Firestore `users` (PascalCase fields in the API; snake_case here). */
+/** Legacy `users` (PascalCase fields in the API; snake_case here). */
 export const users = pgTable(
   "users",
   {
@@ -28,7 +28,7 @@ export const users = pgTable(
   ],
 );
 
-/** Firestore `refreshTokens`. */
+/** Legacy `refreshTokens`. */
 export const refreshTokens = pgTable(
   "refresh_tokens",
   {
@@ -47,7 +47,7 @@ export const refreshTokens = pgTable(
   ],
 );
 
-/** Firestore `role_definitions_global`; doc id = role name. */
+/** Legacy `role_definitions_global`; doc id = role name. */
 export const roleDefinitionsGlobal = pgTable("role_definitions_global", {
   name: text("name").primaryKey(),
   permissions: textArray("permissions"),
@@ -55,7 +55,7 @@ export const roleDefinitionsGlobal = pgTable("role_definitions_global", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
-/** Firestore `role_definitions_project`; doc id = role name. */
+/** Legacy `role_definitions_project`; doc id = role name. */
 export const roleDefinitionsProject = pgTable("role_definitions_project", {
   name: text("name").primaryKey(),
   permissions: textArray("permissions"),
@@ -63,7 +63,7 @@ export const roleDefinitionsProject = pgTable("role_definitions_project", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
-/** Firestore `user_global_roles`; doc id = user id, `roles` = array of role names. */
+/** Legacy `user_global_roles`; doc id = user id, `roles` = array of role names. */
 export const userGlobalRoles = pgTable("user_global_roles", {
   userId: text("user_id")
     .primaryKey()
@@ -72,7 +72,7 @@ export const userGlobalRoles = pgTable("user_global_roles", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
-/** Firestore `projects`. */
+/** Legacy `projects`. */
 export const projects = pgTable("projects", {
   id: id(),
   title: text("title"),
@@ -81,7 +81,7 @@ export const projects = pgTable("projects", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-/** Firestore `projects/{id}/members/{userId}`; one row per (project, user). */
+/** Legacy `projects/{id}/members/{userId}`; one row per (project, user). */
 export const projectMembers = pgTable(
   "project_members",
   {

@@ -4,7 +4,7 @@ import { createApp } from "./app.js";
 
 const app = createApp();
 
-describe("app wiring (no Firestore access required)", () => {
+describe("app wiring (no database access required)", () => {
   it("GET /health returns ok", async () => {
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
@@ -21,13 +21,13 @@ describe("app wiring (no Firestore access required)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects login with a missing password before touching Firestore", async () => {
+  it("rejects login with a missing password before touching database", async () => {
     const res = await request(app).post("/api/login/authenticate").send({ email: "a@b.com" });
     expect(res.status).toBe(400);
     expect(res.body.Success).toBe(false);
   });
 
-  it("rejects registration with a missing email before touching Firestore", async () => {
+  it("rejects registration with a missing email before touching database", async () => {
     const res = await request(app).post("/api/register").send({ Password: "hunter22" });
     expect(res.status).toBe(400);
   });

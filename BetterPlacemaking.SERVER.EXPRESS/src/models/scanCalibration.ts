@@ -4,8 +4,8 @@
  * (the 2D point used by the preview renderer). Scan documents themselves are NOT
  * redefined here - see models/scanDevice.ts's Scan/ScanDoc, which
  * scanCalibrationService.ts imports and reuses (ScanCalibrationController talks to the
- * same `projects/{projectId}/devices/{deviceId}/scans` Firestore subtree ScanService.cs
- * does, just directly via FirestoreDb rather than through ScanService).
+ * same `projects/{projectId}/devices/{deviceId}/scans` database subtree ScanService.cs
+ * does, just directly via the database rather than through ScanService).
  */
 
 /** Mirrors ScanCombine.XyzPoint - one point in a raw .xyz point-cloud file. */

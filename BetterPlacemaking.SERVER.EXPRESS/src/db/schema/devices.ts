@@ -4,7 +4,7 @@ import { projects } from "./core.js";
 const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
-/** Firestore top-level `devices`. Config/HealthReport are opaque Jetson payloads, kept as jsonb. */
+/** database top-level `devices`. Config/HealthReport are opaque Jetson payloads, kept as jsonb. */
 export const devices = pgTable(
   "devices",
   {
@@ -19,10 +19,10 @@ export const devices = pgTable(
 );
 
 /**
- * Firestore `projects/{projectId}/devices/{deviceId}/scans`. The device id is the same id as
+ * Legacy `projects/{projectId}/devices/{deviceId}/scans`. The device id is the same id as
  * `devices.id` but deliberately not an FK (the old subtree hangs off a "shadow" device doc).
  * Fields beyond the first-class columns (scan settings, calibration flags, ...) live in `extra`,
- * keyed exactly as they were on the Firestore document.
+ * keyed exactly as they were on the database document.
  */
 export const scans = pgTable(
   "scans",
@@ -44,7 +44,7 @@ export const scans = pgTable(
   (t) => [index("scans_project_device_idx").on(t.projectId, t.deviceId)],
 );
 
-/** Firestore `projects/{projectId}/scan_schedules`. */
+/** Legacy `projects/{projectId}/scan_schedules`. */
 export const scanSchedules = pgTable(
   "scan_schedules",
   {
@@ -64,7 +64,7 @@ export const scanSchedules = pgTable(
   (t) => [index("scan_schedules_project_id_idx").on(t.projectId)],
 );
 
-/** Firestore `intrinsics_sightings`. */
+/** Legacy `intrinsics_sightings`. */
 export const intrinsicsSightings = pgTable(
   "intrinsics_sightings",
   {
@@ -82,7 +82,7 @@ export const intrinsicsSightings = pgTable(
   (t) => [index("intrinsics_sightings_device_idx").on(t.deviceId)],
 );
 
-/** Firestore `camera_intrinsics`; id = "{deviceId}_{mac}" (per unit) or the model id. */
+/** Legacy `camera_intrinsics`; id = "{deviceId}_{mac}" (per unit) or the model id. */
 export const cameraIntrinsics = pgTable("camera_intrinsics", {
   id: id(),
   modelId: text("model_id"),
@@ -96,7 +96,7 @@ export const cameraIntrinsics = pgTable("camera_intrinsics", {
   computedAtUnix: doublePrecision("computed_at_unix"),
 });
 
-/** Firestore `local_homographies`; id = "{deviceId}_{cameraMac}". */
+/** Legacy `local_homographies`; id = "{deviceId}_{cameraMac}". */
 export const localHomographies = pgTable(
   "local_homographies",
   {
@@ -123,7 +123,7 @@ export const localHomographies = pgTable(
   (t) => [index("local_homographies_device_id_idx").on(t.deviceId)],
 );
 
-/** Firestore `aruco_sessions`. */
+/** Legacy `aruco_sessions`. */
 export const arucoSessions = pgTable("aruco_sessions", {
   id: id(),
   arucoDict: text("aruco_dict"),
@@ -133,7 +133,7 @@ export const arucoSessions = pgTable("aruco_sessions", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-/** Firestore `aruco_sightings`; id = "{sessionId}_{cameraMac}". */
+/** Legacy `aruco_sightings`; id = "{sessionId}_{cameraMac}". */
 export const arucoSightings = pgTable("aruco_sightings", {
   id: id(),
   sessionId: text("session_id"),
@@ -145,7 +145,7 @@ export const arucoSightings = pgTable("aruco_sightings", {
   localHomographyHash: text("local_homography_hash"),
 });
 
-/** Firestore `locked_homographies`; id = "{deviceId}_{cameraMac}". */
+/** Legacy `locked_homographies`; id = "{deviceId}_{cameraMac}". */
 export const lockedHomographies = pgTable("locked_homographies", {
   id: id(),
   deviceId: text("device_id"),
@@ -154,7 +154,7 @@ export const lockedHomographies = pgTable("locked_homographies", {
   computedAt: ts("computed_at").notNull().defaultNow(),
 });
 
-/** Firestore `puzzle_pieces`; id = "{projectId}__{deviceId}__{mac with ':' -> '_'}". */
+/** Legacy `puzzle_pieces`; id = "{projectId}__{deviceId}__{mac with ':' -> '_'}". */
 export const puzzlePieces = pgTable(
   "puzzle_pieces",
   {
@@ -181,7 +181,7 @@ export const puzzlePieces = pgTable(
   (t) => [index("puzzle_pieces_project_id_idx").on(t.projectId)],
 );
 
-/** Firestore `global_homographies`; id = project id. Placements/lockedGroups keep their PascalCase record shape. */
+/** Legacy `global_homographies`; id = project id. Placements/lockedGroups keep their PascalCase record shape. */
 export const globalHomographies = pgTable("global_homographies", {
   projectId: text("project_id")
     .primaryKey()

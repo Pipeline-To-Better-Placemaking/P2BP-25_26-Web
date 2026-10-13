@@ -3,7 +3,7 @@ import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timesta
 
 const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
 
-/** Firestore `fusion_runs`. Unix-seconds fields stay doubles, as the API returns them. */
+/** Legacy `fusion_runs`. Unix-seconds fields stay doubles, as the API returns them. */
 export const fusionRuns = pgTable(
   "fusion_runs",
   {
@@ -22,7 +22,7 @@ export const fusionRuns = pgTable(
   (t) => [index("fusion_runs_project_id_idx").on(t.projectId), index("fusion_runs_status_idx").on(t.status)],
 );
 
-/** Firestore `fusion_config`; doc id = projectId or "default". */
+/** Legacy `fusion_config`; doc id = projectId or "default". */
 export const fusionConfig = pgTable("fusion_config", {
   id: text("id").primaryKey(),
   scheduledHourUtc: integer("scheduled_hour_utc").notNull(),
@@ -46,7 +46,7 @@ export const visualizerSessions = pgTable("visualizer_sessions", {
 });
 
 /**
- * Firestore `projects/{p}/devices/{d}/scans/{scanId}` docs written by the scan-calibration
+ * Legacy `projects/{p}/devices/{d}/scans/{scanId}` docs written by the scan-calibration
  * routes (uploaded and combined calibration scans). Kept separate from the scans domain's table.
  */
 export const scanCalibrationRecords = pgTable(

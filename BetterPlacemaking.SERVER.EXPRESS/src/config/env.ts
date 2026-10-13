@@ -32,13 +32,11 @@ export const env = {
   nodeEnv: optional("NODE_ENV", "development") as string,
   isProduction: process.env.NODE_ENV === "production",
 
-  firebaseProjectId: required("FIREBASE_PROJECT_ID"),
-  firebaseDatabaseId: optional("FIREBASE_DATABASE_ID", "(default)") as string,
-
-  // --- Postgres / Supabase (optional at boot while services migrate off Firestore) ---
+  // --- Postgres / Supabase (resolved lazily, so boot needs none of these) ---
   databaseUrl: optional("DATABASE_URL"),
   supabaseUrl: optional("SUPABASE_URL"),
-  supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
+  // SUPABASE_SECRET_KEY is the current name; SUPABASE_SERVICE_ROLE_KEY is the legacy alias.
+  supabaseSecretKey: optional("SUPABASE_SECRET_KEY") ?? optional("SUPABASE_SERVICE_ROLE_KEY"),
   supabaseStorageBucket: optional("SUPABASE_STORAGE_BUCKET", "media") as string,
 
   jwtKey: required("JWT_KEY"),
@@ -74,7 +72,7 @@ export const env = {
 
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
-  // detections + one JSON file per finished track), not a Firestore collection - see
+  // detections + one JSON file per finished track), not a database table - see
   // trackingService.ts for the read/parse logic ported from TrackingDataService.cs.
   trackingPositionsCsv: optional("TRACKING_POSITIONS_CSV", "Data/positions.csv") as string,
   trackingTracksDir: optional("TRACKING_TRACKS_DIR", "Data/tracks") as string,
@@ -85,13 +83,9 @@ export const env = {
   trackingScaleX: optionalFloat("TRACKING_SCALE_X", 1),
   trackingScaleZ: optionalFloat("TRACKING_SCALE_Z", 1),
 
-  // --- Signed URL TTL (name kept from the GCS era); bucket is SUPABASE_STORAGE_BUCKET above ---
-  gcsBucketName: optional("GCS_BUCKET_NAME"), // legacy; unused once on Supabase Storage
-  gcsUrlTtlMinutes: optionalInt("GCS_URL_TTL_MINUTES", 10080),
-
   // --- RplidarScan (mirrors appsettings.json "RplidarScan" section) ---
   // Raw .xyz scan files live on disk under this directory (a filesystem artifact,
-  // like Tracking:* above, not a Firestore collection) - see rplidarService.ts for
+  // like Tracking:* above, not a database table) - see rplidarService.ts for
   // the parse/classify/cluster logic ported from RplidarScanService.cs. The
   // threshold/margin values are physical calibration constants (meters, relative
   // to the RPLidar's ceiling-mount height) - see rplidarService.ts for what each

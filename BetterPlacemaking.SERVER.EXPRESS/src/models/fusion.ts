@@ -3,7 +3,7 @@
  *  - BetterPlacemaking.SERVER/Services/FusionEngine.cs (FusionEngineConfig, TrackEvent,
  *    TrackObject, FusedIdentity, HomographyEntry, FusionCameraIntrinsics, FusionRequest,
  *    FusionResult)
- *  - BetterPlacemaking.SERVER/Models/Fusion/FusionRun.cs, FusionConfig.cs (Firestore doc shapes)
+ *  - BetterPlacemaking.SERVER/Models/Fusion/FusionRun.cs, FusionConfig.cs (Document shapes)
  *  - BetterPlacemaking.SERVER/Models/Dtos/FusionDtos.cs (wire DTOs)
  *
  * The wire DTOs below (FusionRunDto/FusionConfigDto/TriggerFusionDto/UpdateFusionConfigDto)
@@ -102,7 +102,7 @@ export interface FusionResult {
 }
 
 // ─────────────────────────────────────────────
-// FIRESTORE DOC SHAPES — ported from Models/Fusion/FusionRun.cs, FusionConfig.cs
+// DOC SHAPES — ported from Models/Fusion/FusionRun.cs, FusionConfig.cs
 // ─────────────────────────────────────────────
 
 export type FusionRunStatus = "running" | "cancelling" | "cancelled" | "success" | "failed" | "unknown";
@@ -112,7 +112,7 @@ export type FusionRunStatus = "running" | "cancelling" | "cancelled" | "success"
 // the old string, and aligning now avoids a mismatch resurfacing later.
 export type FusionTriggeredBy = "manual" | "scheduled" | "unknown";
 
-/** Firestore doc shape for the `fusion_runs` collection. */
+/** Document shape for the `fusion_runs` collection. */
 export interface FusionRunDoc {
   Status?: string | null;
   TriggeredBy?: string | null;
@@ -130,7 +130,7 @@ export interface FusionRun extends FusionRunDoc {
   Id: string;
 }
 
-/** Firestore doc shape for the `fusion_config` collection (one doc per project, keyed by projectId, or "default"). */
+/** Document shape for the `fusion_config` collection (one doc per project, keyed by projectId, or "default"). */
 export interface FusionConfigDoc {
   ScheduledHourUtc: number;
   ScheduledMinuteUtc: number;
