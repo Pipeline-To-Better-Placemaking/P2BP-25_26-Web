@@ -12,7 +12,6 @@ field devices (cameras + lidar), run calibration, fuse multi-sensor tracks and v
 | `api/index.ts` | Vercel serverless entry that mounts the Express app |
 | `supabase/migrations` | SQL migrations generated from `src/db/schema` |
 | `workstation/` | Python workstation skeleton (not wired in yet) |
-| `BetterPlacemaking.SERVER`, `BetterPlacemaking.CLIENT` | Legacy .NET / Angular apps, reference only |
 
 ## Local development
 
