@@ -1,0 +1,16 @@
+.git
+.claude
+.idea
+.vscode
+.vs
+.env
+.env.*
+**/node_modules
+BetterPlacemaking.CLIENT
+BetterPlacemaking.SERVER
+supabase
+tools
+docs
+**/*.test.ts
+**/service-account*.json
+**/firebase-service.json
