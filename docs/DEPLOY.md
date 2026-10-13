@@ -47,7 +47,6 @@ serverless function) on the same domain, so the `bp_refresh` cookie is first-par
 | `MAILJET_FROM_EMAIL`, `MAILJET_FROM_NAME` | no | |
 | `WORKSTATION_MODE` | no | `disabled` |
 | `WORKSTATION_BASE_URL`, `WORKSTATION_API_TOKEN` | token yes | only if enabled |
-| `NODE_ENV` | no | `production` (cookies marked secure) |
 
 `DATABASE_DIRECT_URL` is only for local migrations; do not add it to Vercel.
 The client needs no variable: `.env.production` sets `VITE_API_BASE_URL` empty (same origin).

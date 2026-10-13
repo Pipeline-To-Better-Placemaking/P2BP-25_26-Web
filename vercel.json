@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm --prefix BetterPlacemaking.SERVER.EXPRESS ci && npm --prefix BetterPlacemaking.CLIENT.REACT ci",
+  "installCommand": "npm --prefix BetterPlacemaking.SERVER.EXPRESS ci --include=dev && npm --prefix BetterPlacemaking.CLIENT.REACT ci --include=dev",
   "buildCommand": "npm --prefix BetterPlacemaking.CLIENT.REACT run build",
   "outputDirectory": "BetterPlacemaking.CLIENT.REACT/dist",
   "framework": null,
