@@ -4,7 +4,7 @@ import type { Scan } from "./scanDevice.js";
  * Ported from BetterPlacemaking.SERVER/Models/ScanSettingsRequest.cs - the body of
  * `POST /api/scan/:projectId/:deviceId` (ScanController.StartScan). Field names are
  * snake_case verbatim (they are the literal C# property names, serialized as-is by
- * System.Text.Json with no naming policy, and mirrored again as literal Firestore
+ * System.Text.Json with no naming policy, and mirrored again as literal database
  * field names on the scan document by ScanService.CreateScan).
  */
 export interface ScanSettingsRequest {
@@ -57,9 +57,9 @@ export interface UpdateScanStatusRequest {
 }
 
 /**
- * Wire shape returned by GetScan/GetScans - mirrors ScanService's NormalizeFirestoreValue
- * pass: every Firestore Timestamp field is rendered as an ISO-8601 string (`.ToString("o")`)
- * rather than the raw Firestore Timestamp, and all other fields (including the
+ * Wire shape returned by GetScan/GetScans - mirrors ScanService's NormalizeValue
+ * pass: every Timestamp field is rendered as an ISO-8601 string (`.ToString("o")`)
+ * rather than the raw Timestamp, and all other fields (including the
  * ScanSettingsRequest passthrough fields written by CreateScan) pass through unchanged.
  */
 export type ScanDto = Record<string, unknown> & { Id: string };

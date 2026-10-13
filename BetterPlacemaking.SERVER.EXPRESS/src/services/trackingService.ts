@@ -7,7 +7,7 @@ import type { ActiveTrackSummary, PathPoint, TrackingPath, TrackingPoint3D, Trac
  * Ported from BetterPlacemaking.SERVER/Services/TrackingDataService.cs and
  * CoordinateTransformService.cs (themselves ported from P2BP-25_26-Visualizer
  * GalleryModelApi). Unlike the other *Service.ts files in this project, this is
- * NOT a Firestore CRUD layer - tracking data is a filesystem artifact of the
+ * NOT a database CRUD layer - tracking data is a filesystem artifact of the
  * offline CV pipeline: a rolling CSV of recent per-frame detections
  * (Tracking:PositionsCsv) and one JSON file per finished track
  * (Tracking:TracksDir). Both are read fresh on every call, matching the

@@ -2,7 +2,7 @@
  * Ported from BetterPlacemaking.SERVER/Controllers/RplidarController.cs and
  * Services/Rplidar/RplidarScanService.cs.
  *
- * Rplidar scans are NOT a Firestore resource - they are raw RPLidar `.xyz` point
+ * Rplidar scans are NOT a database resource - they are raw RPLidar `.xyz` point
  * cloud files (one "x y z" point per line, in meters, relative to the sensor's
  * ceiling mount) sitting on disk under RPLIDAR_SCAN_DIRECTORY (presumably
  * uploaded from a Jetson edge device), the same filesystem-artifact pattern

@@ -7,8 +7,9 @@ serverless function) on the same domain, so the `bp_refresh` cookie is first-par
 ## 1. Supabase
 
 1. supabase.com > New project. Save the database password.
-2. Project Settings > API: copy **Project URL** (`SUPABASE_URL`) and the **service_role** key
-   (`SUPABASE_SERVICE_ROLE_KEY`, secret, server only).
+2. Project Settings > API: copy **Project URL** (`SUPABASE_URL`) and the secret key
+   (`SUPABASE_SECRET_KEY`; the legacy **service_role** key works too, under either the
+   `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` name). Secret, server only.
 3. Project Settings > Database > Connection string (click **Connect**):
    - **Transaction pooler** (port 6543, host `*.pooler.supabase.com`) = `DATABASE_URL`. Use this
      on Vercel; serverless functions open many short connections and need the pooler.
@@ -16,10 +17,13 @@ serverless function) on the same domain, so the `bp_refresh` cookie is first-par
      Only for running migrations from your machine.
    Replace `[YOUR-PASSWORD]` in both (URL-encode special characters).
 4. Storage > New bucket, name it `media` (= `SUPABASE_STORAGE_BUCKET`), keep it **private**.
-5. Apply migrations (from your machine, once and after each schema change):
-   - Supabase CLI: `supabase link --project-ref <ref>` then `supabase db push`
-     (reads `supabase/migrations/`), or
-   - paste each file in `supabase/migrations/*.sql` (in order) into SQL Editor > Run.
+5. Apply migrations and seed roles (from your machine, once and after each schema change). Put
+   `DATABASE_DIRECT_URL` and `DATABASE_URL` in `BetterPlacemaking.SERVER.EXPRESS/.env`, then:
+   ```
+   cd BetterPlacemaking.SERVER.EXPRESS
+   npm run db:migrate       # applies supabase/migrations via DATABASE_DIRECT_URL
+   npm run db:seed-roles    # idempotent; upserts system role definitions
+   ```
 
 ## 2. Vercel
 
@@ -32,7 +36,7 @@ serverless function) on the same domain, so the `bp_refresh` cookie is first-par
 |---|---|---|
 | `DATABASE_URL` | yes | pooled string (6543) |
 | `SUPABASE_URL` | no | |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | |
+| `SUPABASE_SECRET_KEY` | yes | or the older name `SUPABASE_SERVICE_ROLE_KEY` (either works) |
 | `SUPABASE_STORAGE_BUCKET` | no | `media` |
 | `JWT_KEY` | yes | long random string |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | no | `BetterPlacemaking`, `BetterPlacemaking.Client` |
@@ -44,7 +48,6 @@ serverless function) on the same domain, so the `bp_refresh` cookie is first-par
 | `WORKSTATION_MODE` | no | `disabled` |
 | `WORKSTATION_BASE_URL`, `WORKSTATION_API_TOKEN` | token yes | only if enabled |
 | `NODE_ENV` | no | `production` (cookies marked secure) |
-| `FIREBASE_PROJECT_ID`, `GCS_BUCKET_NAME` | no | LEGACY placeholders (any text) until the cleanup PR; `config/env.ts` still requires them |
 
 `DATABASE_DIRECT_URL` is only for local migrations; do not add it to Vercel.
 The client needs no variable: `.env.production` sets `VITE_API_BASE_URL` empty (same origin).
@@ -57,7 +60,7 @@ The client needs no variable: `.env.production` sets `VITE_API_BASE_URL` empty (
 
 ## Notes
 
-- The function has no boot-time seeding (no `app.listen`); run role seeding as part of the migrations.
+- The function has no boot-time seeding (no `app.listen`); run `npm run db:seed-roles` after migrating.
 - Local API dev is unchanged: `npm run dev` in the Express folder plus `npm run dev` in the React
   folder (`.env.development` points the client at `http://localhost:5200`).
 - Request bodies on Vercel are capped at 4.5 MB, below the 35 MB the Express limit allows. Large

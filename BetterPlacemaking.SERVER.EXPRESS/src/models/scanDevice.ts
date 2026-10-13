@@ -2,7 +2,7 @@
  * Ported from BetterPlacemaking.SERVER/Controllers/ScanDeviceController.cs and the
  * subset of Services/ScanService.cs it calls (GetNextPendingScanId/GetScan/UpdateScanStatus).
  *
- * Scans live in the `scans` table (formerly Firestore `projects/{projectId}/devices/{deviceId}/scans`) - a
+ * Scans live in the `scans` table (formerly `projects/{projectId}/devices/{deviceId}/scans`) - a
  * separate subtree from the top-level `devices` collection that models/device.ts +
  * services/deviceService.ts manage (device metadata/config/health). Both are keyed by
  * the same device id; the old ScanService reads/writes this subtree directly rather

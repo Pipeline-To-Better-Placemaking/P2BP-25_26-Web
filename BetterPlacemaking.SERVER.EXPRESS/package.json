@@ -13,11 +13,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:check": "drizzle-kit check"
+    "db:check": "drizzle-kit check",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed-roles": "tsx scripts/seed-roles.ts",
+    "db:seed-demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.9",
-    "@google-cloud/storage": "^7.22.0",
     "@supabase/supabase-js": "^2.117.3",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
@@ -26,7 +28,6 @@
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.4",
     "express": "^4.19.2",
-    "firebase-admin": "^12.3.1",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "postgres": "^3.4.9",

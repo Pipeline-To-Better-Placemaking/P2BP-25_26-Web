@@ -9,7 +9,7 @@ import { computeApiKeyHash } from "./requireDeviceApiKey.js";
 /**
  * Matches CloudStorageController: [Authorize(AuthenticationSchemes = "UserJwt,DeviceApiKey")] -
  * accepts either a user JWT or a device API key in the same `Authorization: Bearer` header, so
- * both logged-in users and Jetson devices can request their own signed GCS URLs. Tries the
+ * both logged-in users and Jetson devices can request their own signed storage URLs. Tries the
  * (cheap, local) JWT verification first and only falls back to a device-key lookup
  * if that fails, rather than picking a scheme up front - same "try both" semantics ASP.NET's
  * multi-scheme [Authorize] gives you.

@@ -148,7 +148,7 @@ export interface HealthReport {
   PiCompanion?: PiCompanionInfo | null;
 }
 
-/** Firestore doc shape for the `devices` collection. */
+/** Document shape for the `devices` collection. */
 export interface DeviceDoc {
   ProjectId?: string | null;
   Name?: string | null;

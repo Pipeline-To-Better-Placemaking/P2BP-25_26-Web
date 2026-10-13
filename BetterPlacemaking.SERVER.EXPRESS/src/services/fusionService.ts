@@ -52,7 +52,7 @@ function yyyymmddUtc(d: Date): string {
 
 type RunRow = typeof fusionRuns.$inferSelect;
 
-/** DB row -> the legacy PascalCase run shape (nulls preserved as Firestore stored them). */
+/** DB row -> the legacy PascalCase run shape (nulls preserved as database stored them). */
 function rowToRun(r: RunRow): FusionRun {
   return {
     Id: r.id,
@@ -124,7 +124,7 @@ export const fusionCancellationRegistry = new FusionCancellationRegistry();
 
 /**
  * Ported from FusionService.GetHistory(projectId, limit). Uses a plain equality filter (single-
- * field index, auto-created by Firestore) and sorts/limits in memory - same approach and same
+ * field index, auto-created by database) and sorts/limits in memory - same approach and same
  * scale caveat as the C# comment: fine at small/medium scale, switch to server-side
  * OrderByDescending + Limit (with a composite index) if a project ever accumulates hundreds of
  * thousands of runs.
@@ -219,7 +219,7 @@ export async function cancelRun(runId: string): Promise<CancelResult> {
 /**
  * Ported from FusionService.TriggerFusion. The C# version is synchronous (it blocks on
  * `AddAsync(run).Result` to obtain the run id before returning, then fires a detached
- * `Task.Run`). Firestore access here is inherently async, so this is `async` and `await`s only
+ * `Task.Run`). database access here is inherently async, so this is `async` and `await`s only
  * the initial doc write before returning - the actual fusion run below is still fire-and-forget,
  * matching the "create the row, kick off the job, return immediately" contract.
  */

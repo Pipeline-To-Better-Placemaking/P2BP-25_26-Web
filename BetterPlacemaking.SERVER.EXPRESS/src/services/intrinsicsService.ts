@@ -34,7 +34,7 @@ function normalizeMac(mac?: string | null): string {
 
 /**
  * Mirrors IntrinsicsService.SubmitSightings: one row per sighting, inserted together in a
- * single transaction (the equivalent of the Firestore batch write it replaced).
+ * single transaction (the equivalent of the database batch write it replaced).
  */
 export async function submitSightings(
   deviceId: string,

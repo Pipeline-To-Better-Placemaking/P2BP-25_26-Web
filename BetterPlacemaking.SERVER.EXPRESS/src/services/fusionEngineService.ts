@@ -1,6 +1,8 @@
 import { getWorkstation } from "../workstation/index.js";
-import { getDb } from "../config/firebase.js";
-import { getBucket } from "../config/storage.js";
+import { getDb, type Db } from "../db/client.js";
+import { cameraIntrinsics, lockedHomographies } from "../db/schema/index.js";
+import { getStorageBucket } from "../config/storage.js";
+import { downloadObject, uploadObject } from "./cloudStorageService.js";
 import {
   FusionEngineConfig,
   type FusedIdentity,
@@ -16,10 +18,10 @@ import {
  * Ported from BetterPlacemaking.SERVER/Services/FusionEngine.cs (1337 lines) - the core fusion
  * algorithm. Despite a comment there claiming an OpenCvSharp4 dependency, the file never calls
  * any OpenCvSharp/Cv2 function (`using OpenCvSharp;` is a dead import) - this is pure hand-rolled
- * math plus Firestore/GCS I/O, ported 1:1 below, organized into the same ~9 stages as the source:
+ * math plus Postgres/Supabase Storage I/O, ported 1:1 below, organized into the same ~9 stages as the source:
  *
  *   1. Camera intrinsics loading (dead/unreachable YAML loader) + lens undistortion
- *   2. Firestore homography/intrinsics loaders
+ *   2. Postgres homography/intrinsics loaders
  *   3. JSONL track-vector loading
  *   4. Track building
  *   5. World-coordinate transform (undistortion + homography + Kalman smoothing)
@@ -230,7 +232,7 @@ export function undistortPoint(
 //
 // NOT called anywhere in FusionRunner.RunAsync, or anywhere else in the C# server (verified by
 // repo-wide grep for `FusionCameraIntrinsics`) - the real runtime path loads intrinsics from
-// Firestore (loadIntrinsics below) instead. Ported only for structural parity with the source
+// database (loadIntrinsics below) instead. Ported only for structural parity with the source
 // file's stage layout.
 //
 // The C# version deserializes full YAML via YamlDotNet. This server has no YAML dependency and
@@ -292,7 +294,7 @@ function extractFlatOrNestedList(yamlText: string, key: string): number[] | null
 }
 
 // ─────────────────────────────────────────────
-// FIRESTORE CONFIG LOADER (stage 2) — ported from FusionFirestoreLoader (FusionEngine.cs)
+// CONFIG LOADER (stage 2) — ported from FusionConfigLoader (FusionEngine.cs), now backed by Postgres
 // ─────────────────────────────────────────────
 
 /** Must be kept in sync with MAC_PREFIX_TO_MODEL in camera_onboard.py, same as the C# source. */
@@ -308,18 +310,16 @@ function detectModelFromMac(mac: string): string | null {
   return null;
 }
 
-function tryGetMac(id: string, data: FirebaseFirestore.DocumentData): string | null {
-  const stored = data.CameraMac;
-  if (typeof stored === "string" && stored.trim() !== "") {
-    return stored.toLowerCase().trim();
+function tryGetMac(id: string, storedMac: string | null | undefined): string | null {
+  if (typeof storedMac === "string" && storedMac.trim() !== "") {
+    return storedMac.toLowerCase().trim();
   }
   const idx = id.indexOf("_");
   if (idx < 1 || idx === id.length - 1) return null;
   return id.slice(idx + 1).toLowerCase();
 }
 
-function tryParseMatrix3x3Flat(data: FirebaseFirestore.DocumentData, field: string): number[][] | null {
-  const flat = data[field];
+function tryParseMatrix3x3Flat(flat: unknown): number[][] | null {
   if (!Array.isArray(flat) || flat.length !== 9) return null;
   const matrix: number[][] = [
     [0, 0, 0],
@@ -334,47 +334,50 @@ function tryParseMatrix3x3Flat(data: FirebaseFirestore.DocumentData, field: stri
  * source too (no field is read for it) - faithfully preserved rather than "fixed", per the
  * porting brief. This makes the undistortion branch in applyWorldTransform effectively dead
  * for any homography loaded through this path, exactly as in the original. */
-function parseHomographyDoc(data: FirebaseFirestore.DocumentData): HomographyEntry | null {
-  const matrix = tryParseMatrix3x3Flat(data, "MatrixFlat");
+function parseHomographyRow(row: { matrixFlat: number[] | null }): HomographyEntry | null {
+  const matrix = tryParseMatrix3x3Flat(row.matrixFlat);
   if (!matrix) return null;
   return { matrix, usedUndistortedImage: false };
 }
 
-function parseIntrinsicsDoc(data: FirebaseFirestore.DocumentData): FusionCameraIntrinsics | null {
-  const cameraMatrix = tryParseMatrix3x3Flat(data, "CameraMatrixFlat");
+function parseIntrinsicsRow(row: {
+  cameraMatrixFlat: number[] | null;
+  distortionCoefficients: number[] | null;
+}): FusionCameraIntrinsics | null {
+  const cameraMatrix = tryParseMatrix3x3Flat(row.cameraMatrixFlat);
   if (!cameraMatrix) return null;
 
-  const distRaw = data.DistortionCoefficients;
+  const distRaw = row.distortionCoefficients;
   if (!Array.isArray(distRaw)) return null;
 
   return { cameraMatrix, distCoeffs: distRaw.map(Number) };
 }
 
-/** Ported from FusionFirestoreLoader.LoadHomographiesAsync. */
+/** Ported from FusionConfigLoader.LoadHomographiesAsync. */
 export async function loadHomographies(
   cameraMacs: Set<string>,
-  db: FirebaseFirestore.Firestore = getDb(),
+  db: Db = getDb(),
 ): Promise<Map<string, HomographyEntry>> {
   const result = new Map<string, HomographyEntry>();
 
-  let snapshot: FirebaseFirestore.QuerySnapshot;
+  let rows: Array<typeof lockedHomographies.$inferSelect>;
   try {
-    snapshot = await db.collection("locked_homographies").get();
+    rows = await db.select().from(lockedHomographies);
   } catch (err) {
     console.warn(`[WARN] Could not read locked_homographies: ${err instanceof Error ? err.message : err}`);
     return result;
   }
 
-  for (const doc of snapshot.docs) {
-    const mac = tryGetMac(doc.id, doc.data());
+  for (const row of rows) {
+    const mac = tryGetMac(row.id, row.cameraMac);
     if (!mac || !cameraMacs.has(mac)) continue;
 
-    const entry = parseHomographyDoc(doc.data());
+    const entry = parseHomographyRow(row);
     if (entry) {
       result.set(mac, entry);
-      console.log(`[INFO] Homography loaded from Firestore: ${doc.id}`);
+      console.log(`[INFO] Homography loaded: ${row.id}`);
     } else {
-      console.warn(`[WARN] Homography document ${doc.id} could not be parsed — skipped.`);
+      console.warn(`[WARN] Homography row ${row.id} could not be parsed — skipped.`);
     }
   }
 
@@ -385,16 +388,16 @@ export async function loadHomographies(
   return result;
 }
 
-/** Ported from FusionFirestoreLoader.LoadIntrinsicsAsync (two-pass per-unit + model-level fallback). */
+/** Ported from FusionConfigLoader.LoadIntrinsicsAsync (two-pass per-unit + model-level fallback). */
 export async function loadIntrinsics(
   cameraMacs: Set<string>,
-  db: FirebaseFirestore.Firestore = getDb(),
+  db: Db = getDb(),
 ): Promise<Map<string, FusionCameraIntrinsics>> {
   const result = new Map<string, FusionCameraIntrinsics>();
 
-  let snapshot: FirebaseFirestore.QuerySnapshot;
+  let rows: Array<typeof cameraIntrinsics.$inferSelect>;
   try {
-    snapshot = await db.collection("camera_intrinsics").get();
+    rows = await db.select().from(cameraIntrinsics);
   } catch (err) {
     console.warn(
       `[WARN] Could not read camera_intrinsics: ${err instanceof Error ? err.message : err} — undistortion skipped.`,
@@ -404,28 +407,26 @@ export async function loadIntrinsics(
 
   // Index model-level docs (IsPerUnit == false, no CameraMac) by their doc ID (= ModelId) so we
   // can fall back to them for MACs whose per-unit doc is missing.
-  const modelDocs = new Map<string, FirebaseFirestore.DocumentData>();
+  const modelDocs = new Map<string, typeof cameraIntrinsics.$inferSelect>();
 
   // First pass: per-unit docs matched by CameraMac field or {deviceId}_{mac} doc ID.
-  for (const doc of snapshot.docs) {
-    const data = doc.data();
-    const hasCameraMac = typeof data.CameraMac === "string" && data.CameraMac.trim() !== "";
-    const isPerUnit = data.IsPerUnit === undefined || data.IsPerUnit === true;
+  for (const data of rows) {
+    const hasCameraMac = typeof data.cameraMac === "string" && data.cameraMac.trim() !== "";
 
-    if (!hasCameraMac && !isPerUnit) {
-      modelDocs.set(doc.id, data);
+    if (!hasCameraMac && !data.isPerUnit) {
+      modelDocs.set(data.id, data);
       continue;
     }
 
-    const mac = tryGetMac(doc.id, data);
+    const mac = tryGetMac(data.id, data.cameraMac);
     if (!mac || !cameraMacs.has(mac)) continue;
 
-    const intrinsics = parseIntrinsicsDoc(data);
+    const intrinsics = parseIntrinsicsRow(data);
     if (intrinsics) {
       result.set(mac, intrinsics);
-      console.log(`[INFO] Intrinsics loaded from Firestore: ${doc.id}`);
+      console.log(`[INFO] Intrinsics loaded: ${data.id}`);
     } else {
-      console.warn(`[WARN] Intrinsics document ${doc.id} could not be parsed — undistortion skipped for cam=${mac}.`);
+      console.warn(`[WARN] Intrinsics row ${data.id} could not be parsed — undistortion skipped for cam=${mac}.`);
     }
   }
 
@@ -441,7 +442,7 @@ export async function loadIntrinsics(
         continue;
       }
 
-      const intrinsics = parseIntrinsicsDoc(modelDoc);
+      const intrinsics = parseIntrinsicsRow(modelDoc);
       if (intrinsics) {
         result.set(mac, intrinsics);
         console.log(`[INFO] Intrinsics for cam=${mac} resolved from model-level doc '${modelId}'.`);
@@ -556,7 +557,7 @@ export function applyWorldTransform(
 
     if (entry.usedUndistortedImage && !intrinsics) {
       console.warn(
-        `[WARN] cam=${track.cam}: homography expects undistorted input but no intrinsics found in Firestore.`,
+        `[WARN] cam=${track.cam}: homography expects undistorted input but no intrinsics found in camera_intrinsics.`,
       );
     }
 
@@ -809,7 +810,7 @@ export interface FusionExportEntry {
 
 /** Ported from FusionExporter.Export. Builds the JSON object in memory rather than streaming to
  * disk via Utf8JsonWriter - the C# version streamed purely to bound peak memory on very large
- * runs; this server serializes once and uploads directly to GCS (see runFusionEngine, stage 9),
+ * runs; this server serializes once and uploads directly to storage (see runFusionEngine, stage 9),
  * so there's no local-file step to stream into. Same shape: {"0": {...}, "1": {...}, ...}. */
 export function exportFusionResult(gids: FusedIdentity[]): Record<string, FusionExportEntry> {
   const output: Record<string, FusionExportEntry> = {};
@@ -834,45 +835,48 @@ export function exportFusionResult(gids: FusedIdentity[]): Record<string, Fusion
 // ─────────────────────────────────────────────
 // ORCHESTRATION RUNNER (stage 9) — ported from FusionRunner.RunAsync (FusionEngine.cs)
 //
-// GCS I/O: cloudStorageService.ts (this server's already-ported GCS helper) only exposes
-// signed-URL creation (CreateSignedUploadUrlAsync/CreateSignedDownloadUrlAsync) - it has no
-// ListFilesAsync/DownloadToStreamAsync/UploadFromStreamAsync/DownloadBytesAsync equivalents, and
-// editing it is out of scope for this port. The small GCS helpers below reimplement just those
-// four raw operations directly against getBucket() (config/storage.ts), mirroring
-// CloudStorageService.cs's own methods of the same name/shape without touching that file.
+// Storage I/O: cloudStorageService.ts exposes signed-URL creation plus whole-object
+// upload/download; the folder listing needed here goes straight to getStorageBucket()
+// (config/storage.ts), mirroring CloudStorageService.cs's ListFilesAsync.
 // ─────────────────────────────────────────────
 
-interface GcsFileInfo {
+interface StorageFileInfo {
   storagePath: string;
   lastModified: Date;
 }
 
-async function listGcsFiles(folder: string): Promise<GcsFileInfo[]> {
-  // Ensure the prefix ends with '/' so we don't accidentally match sibling folders that share a
-  // common prefix (e.g. "tracks-raw2") - same reasoning as CloudStorageService.ListFilesAsync.
-  const prefix = `${folder.replace(/\/+$/, "")}/`;
-  const [files] = await getBucket().getFiles({ prefix });
-  return files
-    .filter((f) => !f.name.endsWith("/"))
-    .map((f) => ({
-      storagePath: f.name,
-      lastModified: f.metadata.updated ? new Date(f.metadata.updated) : new Date(0),
-    }));
+async function listStorageFiles(folder: string): Promise<StorageFileInfo[]> {
+  // Normalise the folder so sibling folders sharing a prefix (e.g. "tracks-raw2") never match.
+  const dir = folder.replace(/^\/+|\/+$/g, "");
+  const pageSize = 1000;
+  const out: StorageFileInfo[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await getStorageBucket().list(dir, { limit: pageSize, offset });
+    if (error || !data) throw new Error(`Failed to list storage folder '${folder}': ${error?.message ?? "unknown error"}`);
+    for (const f of data) {
+      // Supabase returns sub-folders as entries with a null updated_at; only files are wanted.
+      if (f.updated_at === null || f.name.endsWith("/")) continue;
+      out.push({
+        storagePath: dir ? `${dir}/${f.name}` : f.name,
+        lastModified: f.updated_at ? new Date(f.updated_at) : new Date(0),
+      });
+    }
+    if (data.length < pageSize) break;
+  }
+  return out;
 }
 
-async function downloadGcsText(storagePath: string): Promise<string> {
-  const [buf] = await getBucket().file(storagePath).download();
-  return buf.toString("utf-8");
+async function downloadStorageText(storagePath: string): Promise<string> {
+  return (await downloadObject(storagePath)).toString("utf-8");
 }
 
-async function uploadGcsText(storagePath: string, contentType: string, text: string): Promise<void> {
-  await getBucket().file(storagePath).save(text, { contentType, resumable: false });
+async function uploadStorageText(storagePath: string, contentType: string, text: string): Promise<void> {
+  await uploadObject(storagePath, contentType, Buffer.from(text, "utf-8"));
 }
 
 /** Raw byte download for GET /:runId/download - mirrors CloudStorageService.DownloadBytesAsync. */
-export async function downloadGcsBytes(storagePath: string): Promise<Buffer> {
-  const [buf] = await getBucket().file(storagePath).download();
-  return buf;
+export async function downloadStorageBytes(storagePath: string): Promise<Buffer> {
+  return downloadObject(storagePath);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -946,9 +950,9 @@ async function downloadAndMergeTracksForRange(
   rangeToExclusive: Date,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const allFiles = await listGcsFiles(folder);
+  const allFiles = await listStorageFiles(folder);
   if (allFiles.length === 0) {
-    throw new Error(`No track files found in GCS folder '${folder}'.`);
+    throw new Error(`No track files found in storage folder '${folder}'.`);
   }
 
   const rangeFiles = allFiles
@@ -970,7 +974,7 @@ async function downloadAndMergeTracksForRange(
   throwIfAborted(signal);
 
   // Download all parts in parallel (max 4 concurrent), same cap as Parallel.ForEachAsync in the source.
-  const contents = await mapWithConcurrency(rangeFiles, 4, (item) => downloadGcsText(item.file.storagePath));
+  const contents = await mapWithConcurrency(rangeFiles, 4, (item) => downloadStorageText(item.file.storagePath));
 
   const mergedLines: string[] = [];
   for (const text of contents) {
@@ -990,9 +994,9 @@ export interface RunFusionEngineOptions {
 }
 
 /** Ported from FusionRunner.RunAsync (FusionEngine.cs) - the async orchestration runner, stage 9.
- * Downloads + merges the raw JSONL tracks for the requested date range from GCS, builds tracks,
- * loads homographies/intrinsics from Firestore, world-transforms, fuses, cleans, and uploads the
- * fused result JSON back to GCS. */
+ * Downloads + merges the raw JSONL tracks for the requested date range from storage, builds tracks,
+ * loads homographies/intrinsics from Postgres, world-transforms, fuses, cleans, and uploads the
+ * fused result JSON back to storage. */
 export async function runFusionEngine(request: FusionRequest, options: RunFusionEngineOptions = {}): Promise<FusionResult> {
   const { signal, debug = false } = options;
 
@@ -1040,7 +1044,7 @@ export async function runFusionEngine(request: FusionRequest, options: RunFusion
     const activeMacs = new Set(trackObjs.map((t) => t.cam.toLowerCase()));
     console.log(`[INFO] Active cameras: ${Array.from(activeMacs).join(", ")}`);
 
-    // ── 5. Fetch homographies + intrinsics from Firestore ──
+    // ── 5. Fetch homographies + intrinsics from Postgres ──
     const homographies = await loadHomographies(activeMacs);
     const intrinsicsDict = await loadIntrinsics(activeMacs);
 
@@ -1052,7 +1056,7 @@ export async function runFusionEngine(request: FusionRequest, options: RunFusion
     throwIfAborted(signal);
     const gids = runFusion(trackObjs, debug);
 
-    // ── 8. Serialize + upload result to GCS ──
+    // ── 8. Serialize + upload result to storage ──
     throwIfAborted(signal);
     const exportObj = exportFusionResult(gids);
 
@@ -1065,7 +1069,7 @@ export async function runFusionEngine(request: FusionRequest, options: RunFusion
         : `${outputFolder}/fused_tracks-${fromStr}_${toStr}.json`;
 
     console.log(`[INFO] Uploading result to: ${outputStoragePath}`);
-    await uploadGcsText(outputStoragePath, "application/json", JSON.stringify(exportObj, null, 2));
+    await uploadStorageText(outputStoragePath, "application/json", JSON.stringify(exportObj, null, 2));
 
     console.log(`[DONE] ${gids.length} fused identities written to ${outputStoragePath}`);
 

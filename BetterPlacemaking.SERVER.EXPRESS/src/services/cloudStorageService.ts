@@ -1,5 +1,4 @@
 import { getStorageBucket } from "../config/storage.js";
-import { env } from "../config/env.js";
 
 /** Ported from CloudStorageService's input-validation exceptions. */
 export class ValidationError extends Error {}
@@ -117,11 +116,13 @@ export function buildObjectPath(rawDirectoryPath: string, rawFileName: string, r
 
 /** Supabase signed upload URLs have a fixed lifetime (2 hours) that can't be configured per call. */
 const UPLOAD_URL_TTL_MS = 2 * 60 * 60 * 1000;
+/** Signed download URLs live for 7 days. */
+const DOWNLOAD_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Ported from CloudStorageService.CreateSignedUploadUrlAsync. Returns a Supabase Storage signed
- * upload URL (replaces the GCS V4 PUT URL); the client PUTs the file bytes to `SignedUrl`.
- * `upsert` keeps GCS's overwrite-on-PUT behavior.
+ * upload URL (replaces the storage PUT URL); the client PUTs the file bytes to `SignedUrl`.
+ * `upsert` keeps the old overwrite-on-PUT behavior.
  */
 export async function createSignedUploadUrl(input: RequestUploadUrlInput): Promise<SignedUrlResult> {
   if (input.SizeBytes === undefined || input.SizeBytes === null || input.SizeBytes <= 0) {
@@ -145,7 +146,7 @@ export async function createSignedDownloadUrl(input: RequestDownloadUrlInput): P
   const segments = objectName.split("/");
   const filename = segments[segments.length - 1];
 
-  const ttlSeconds = env.gcsUrlTtlMinutes * 60;
+  const ttlSeconds = DOWNLOAD_URL_TTL_SECONDS;
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
   const { data, error } = await getStorageBucket().createSignedUrl(objectName, ttlSeconds, { download: filename });

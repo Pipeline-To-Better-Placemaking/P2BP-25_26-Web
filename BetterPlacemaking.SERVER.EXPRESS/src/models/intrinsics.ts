@@ -50,7 +50,7 @@ export interface IntrinsicsResultResponseDto {
   ComputedAtUnix: number;
 }
 
-/** Firestore doc shape for the `intrinsics_sightings` collection. */
+/** Document shape for the `intrinsics_sightings` collection. */
 export interface IntrinsicsSightingDoc {
   ModelId?: string | null; // null for per-unit
   DeviceId?: string | null;
@@ -64,7 +64,7 @@ export interface IntrinsicsSightingDoc {
 }
 
 /**
- * Firestore doc shape for the `camera_intrinsics` collection. Firestore does not
+ * Document shape for the `camera_intrinsics` collection. The old document store did not
  * support arrays nested directly inside arrays, so - exactly as the C#
  * CameraIntrinsics model does - the 3x3 CameraMatrix is flattened to 9 elements
  * for storage and unflattened on read via flattenCameraMatrix/unflattenCameraMatrix.

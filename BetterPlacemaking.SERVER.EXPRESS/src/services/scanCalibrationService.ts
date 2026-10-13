@@ -392,9 +392,9 @@ export async function renderPreviewPngFromFile(xyzFilePath: string, threshold = 
  * resolves its ObjUrl to a local filesystem path - either because it already is one
  * (uploaded/combined calibration files), or by downloading it once from an http(s) URL
  * into a local cache directory (normal device-produced scans, which store a signed
- * URL). Reuses scanDeviceService.getScan (same Firestore path/Scan type - not
- * redefined here) rather than querying Firestore directly a second time, unlike the
- * old controller which talks to FirestoreDb inline; the read shape is identical either
+ * URL). Reuses scanDeviceService.getScan (same database path/Scan type - not
+ * redefined here) rather than querying database directly a second time, unlike the
+ * old controller which talks to the database inline; the read shape is identical either
  * way.
  */
 export async function resolveLocalXyzPath(projectId: string, deviceId: string, scanId: string): Promise<string> {

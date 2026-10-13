@@ -32,7 +32,7 @@ import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget";
  * All five widgets are backed by real, already-ported Express resources:
  *  - StatsWidget: ProjectDto (from ProjectWorkspace's Outlet context) + the device counts below.
  *  - DevicesWidget: deviceApi.getDevicesByProject (/api/device/project/:projectId).
- *  - AlertsWidget: derived client-side from DeviceDto.HealthReport (there's no Firestore
+ *  - AlertsWidget: derived client-side from DeviceDto.HealthReport (there's no database
  *    "alerts" collection on either server - the Angular dashboard synthesized these too from
  *    offline/degraded-service detection, ported faithfully below).
  *  - ScanStatusWidget: scanApi.getScans/startScan (/api/scan/:projectId/:deviceId), already

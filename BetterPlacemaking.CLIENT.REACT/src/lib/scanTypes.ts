@@ -1,7 +1,7 @@
 /**
  * Wire shape returned by `GET /api/scan/:projectId/:deviceId` (and the single-scan
  * variant) - mirrors `ScanDto` on the server (models/scan.ts), which is a loosely-typed
- * passthrough of the Firestore scan document (`Record<string, unknown> & { Id: string }`,
+ * passthrough of the stored scan document (`Record<string, unknown> & { Id: string }`,
  * with every Timestamp field rendered as an ISO-8601 string). Only the fields this client
  * actually reads are declared as named members; the index signature keeps the rest
  * passing through untyped rather than being dropped.
@@ -100,7 +100,7 @@ export const SCAN_PRESETS: Record<ScanPreset, ScanSettingsRequest> = {
 /**
  * Wire shape for `/api/scan-schedule/:projectId[/:scheduleId]` (scanSchedule.routes.ts,
  * ScanScheduleDto in models/scanSchedule.ts) - CRUD/config only, the actual triggering logic is a
- * background job runner with no HTTP surface. `LastRunAt` is read back as a raw Firestore
+ * background job runner with no HTTP surface. `LastRunAt` is read back as a raw database
  * Timestamp (unlike scan.routes.ts's ScanDto, this endpoint does not normalize it to an ISO
  * string) so it is typed loosely here and handled defensively wherever it's read.
  */

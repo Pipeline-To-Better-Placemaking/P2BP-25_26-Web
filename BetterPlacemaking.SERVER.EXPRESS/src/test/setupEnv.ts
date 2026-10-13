@@ -2,6 +2,4 @@
 process.env.JWT_KEY ??= "test-jwt-signing-key-not-for-production";
 process.env.JWT_ISSUER ??= "BetterPlacemaking";
 process.env.JWT_AUDIENCE ??= "BetterPlacemaking.Client";
-process.env.FIREBASE_PROJECT_ID ??= "test-project";
 process.env.ALLOWED_ORIGINS ??= "http://localhost:5173";
-process.env.GCS_BUCKET_NAME ??= "test-bucket";

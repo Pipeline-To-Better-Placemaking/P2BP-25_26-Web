@@ -39,6 +39,6 @@ cloudStorageRouter.post("/request-download", async (req, res, next) => {
 
 // Not ported: CloudStorageController.ConfirmUpload. It validates the object path (now
 // available here via cloudStorageService.buildObjectPath) and then calls MediaService.Create
-// to persist a Firestore media record - MediaService and the `media` resource haven't been
+// to persist a database media record - MediaService and the `media` resource haven't been
 // ported to this server yet, so there is nothing for this endpoint to create. Add a
 // `POST /confirm-upload` route here once media.routes.ts / mediaService.ts exist.
