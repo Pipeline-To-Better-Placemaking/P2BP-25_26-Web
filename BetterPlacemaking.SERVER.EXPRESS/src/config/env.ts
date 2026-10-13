@@ -67,6 +67,11 @@ export const env = {
 
   redisUrl: optional("REDIS_URL"),
 
+  // --- Workstation seam (local disk vs. remote workstation; remote is a stub for now) ---
+  workstationMode: (optional("WORKSTATION_MODE", "local") === "remote" ? "remote" : "local") as "local" | "remote",
+  workstationBaseUrl: optional("WORKSTATION_BASE_URL"),
+  workstationApiToken: optional("WORKSTATION_API_TOKEN"),
+
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
   // detections + one JSON file per finished track), not a Firestore collection - see
