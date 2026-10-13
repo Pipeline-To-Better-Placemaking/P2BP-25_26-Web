@@ -12,8 +12,6 @@
  * via their `MatrixFlat` field + computed `Matrix` property.
  */
 
-import type { Timestamp } from "firebase-admin/firestore";
-
 export type Matrix3x3 = number[][];
 
 /** Mirrors the `Matrix` (etc.) setter on the C# Firestore models: `value?.SelectMany(r => r).ToList()`. */
@@ -75,7 +73,7 @@ export interface LockedHomographyDoc {
   DeviceId?: string | null;
   CameraMac?: string | null;
   MatrixFlat?: number[] | null;
-  ComputedAt: Timestamp;
+  ComputedAt: Date;
 }
 
 export interface LockedHomography extends LockedHomographyDoc {
@@ -88,7 +86,7 @@ export interface ArUcoScanSessionDoc {
   Status: string; // collecting -> computing -> done | failed
   CamerasCheckedIn?: string[] | null;
   CamerasTotal: number;
-  CreatedAt: Timestamp;
+  CreatedAt: Date;
 }
 
 export interface ArUcoScanSession extends ArUcoScanSessionDoc {
@@ -134,7 +132,7 @@ export interface PuzzlePieceArtifactDoc {
   PuzzlePiecePath?: string | null;
   MetadataPath?: string | null;
   GenerationVersion: number;
-  GeneratedAt: Timestamp;
+  GeneratedAt: Date;
 }
 
 export interface PuzzlePieceArtifact extends PuzzlePieceArtifactDoc {
@@ -169,7 +167,7 @@ export interface ProjectGlobalHomographySetDoc {
   Placements?: GlobalHomographyPlacementRecord[] | null;
   LockedGroups?: HomographyLockGroupRecord[] | null;
   SavedByUserId?: string | null;
-  SavedAt: Timestamp;
+  SavedAt: Date;
 }
 
 export interface ProjectGlobalHomographySet extends ProjectGlobalHomographySetDoc {
