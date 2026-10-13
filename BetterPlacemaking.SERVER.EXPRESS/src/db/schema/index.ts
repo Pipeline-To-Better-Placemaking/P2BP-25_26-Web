@@ -2,3 +2,4 @@
 export * from "./core.js";
 export * from "./libraries.js";
 export * from "./fusion.js";
+export * from "./devices.js";

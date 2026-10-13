@@ -1,23 +1,31 @@
 import crypto from "node:crypto";
-import { getDb } from "../config/firebase.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { cameraIntrinsics, intrinsicsSightings } from "../db/schema/index.js";
 import {
   flattenCameraMatrix,
   hasCameraMatrix,
   toIntrinsicsResultDto,
   type CameraIntrinsics,
-  type CameraIntrinsicsDoc,
   type IntrinsicsResultResponseDto,
-  type IntrinsicsSightingDoc,
   type IntrinsicsSightingsResponseDto,
   type SubmitIntrinsicsResultDto,
   type SubmitIntrinsicsSightingsDto,
 } from "../models/intrinsics.js";
 
-const COL_SIGHTINGS = "intrinsics_sightings";
-const COL_INTRINSICS = "camera_intrinsics";
-
-function toCameraIntrinsics(id: string, data: FirebaseFirestore.DocumentData): CameraIntrinsics {
-  return { Id: id, ...(data as CameraIntrinsicsDoc) };
+function toCameraIntrinsics(row: typeof cameraIntrinsics.$inferSelect): CameraIntrinsics {
+  return {
+    Id: row.id,
+    ModelId: row.modelId,
+    DeviceId: row.deviceId,
+    CameraMac: row.cameraMac,
+    IsPerUnit: row.isPerUnit,
+    CameraMatrixFlat: row.cameraMatrixFlat,
+    DistortionCoefficients: row.distortionCoefficients,
+    ReprojectionError: row.reprojectionError as number,
+    SightingsUsed: row.sightingsUsed as number,
+    ComputedAtUnix: row.computedAtUnix as number,
+  };
 }
 
 function normalizeMac(mac?: string | null): string {
@@ -25,42 +33,37 @@ function normalizeMac(mac?: string | null): string {
 }
 
 /**
- * Mirrors IntrinsicsService.SubmitSightings: one document per sighting, written
- * together via a transaction (the Firestore-batch-write equivalent that
- * FakeFirestore/the rest of this codebase already uses, see projectService.create).
+ * Mirrors IntrinsicsService.SubmitSightings: one row per sighting, inserted together in a
+ * single transaction (the equivalent of the Firestore batch write it replaced).
  */
 export async function submitSightings(
   deviceId: string,
   dto: SubmitIntrinsicsSightingsDto,
 ): Promise<IntrinsicsSightingsResponseDto> {
   const mac = normalizeMac(dto.CameraMac);
-  const db = getDb();
-  const collection = db.collection(COL_SIGHTINGS);
 
-  const writes = (dto.Sightings ?? []).map((s) => {
+  const rows = (dto.Sightings ?? []).map((s) => {
     const sanitizedCapturedAt = (s.CapturedAt ?? "").replace(/:/g, "-").replace(/\+/g, "p");
     const docId = `${deviceId}_${mac}_${sanitizedCapturedAt}_${crypto.randomUUID().replace(/-/g, "")}`;
-    const doc: IntrinsicsSightingDoc = {
-      ModelId: dto.IsPerUnit ? null : (dto.ModelId ?? null),
-      DeviceId: deviceId,
-      CameraMac: mac,
-      IsPerUnit: dto.IsPerUnit,
-      CapturedAt: s.CapturedAt ?? null,
-      ImagePoints: s.ImagePoints ?? null,
-      CornerIds: s.CornerIds ?? null,
-      FrameSize: s.FrameSize ?? null,
-      Rmse: s.Rmse,
+    return {
+      id: docId,
+      modelId: dto.IsPerUnit ? null : (dto.ModelId ?? null),
+      deviceId,
+      cameraMac: mac,
+      isPerUnit: !!dto.IsPerUnit,
+      capturedAt: s.CapturedAt ?? null,
+      imagePoints: s.ImagePoints ?? null,
+      cornerIds: s.CornerIds ?? null,
+      frameSize: s.FrameSize ?? null,
+      rmse: s.Rmse ?? null,
     };
-    return { ref: collection.doc(docId), doc };
   });
 
-  await db.runTransaction(async (tx) => {
-    for (const { ref, doc } of writes) {
-      tx.set(ref, doc);
-    }
+  await getDb().transaction(async (tx) => {
+    if (rows.length > 0) await tx.insert(intrinsicsSightings).values(rows);
   });
 
-  return { SightingsStored: writes.length };
+  return { SightingsStored: rows.length };
 }
 
 /** Mirrors IntrinsicsService.StoreResult - doc id is per-unit ("{deviceId}_{mac}") or model-level (ModelId, falling back to mac). */
@@ -71,22 +74,24 @@ export async function storeResult(
   const mac = normalizeMac(dto.CameraMac);
   const docId = dto.IsPerUnit ? `${deviceId}_${mac}` : (dto.ModelId ?? mac);
 
-  const db = getDb();
-  const ref = db.collection(COL_INTRINSICS).doc(docId);
-  const doc: CameraIntrinsicsDoc = {
-    ModelId: dto.IsPerUnit ? null : (dto.ModelId ?? null),
-    DeviceId: dto.IsPerUnit ? deviceId : null,
-    CameraMac: dto.IsPerUnit ? mac : null,
-    IsPerUnit: dto.IsPerUnit,
-    CameraMatrixFlat: flattenCameraMatrix(dto.CameraMatrix ?? []),
-    DistortionCoefficients: dto.DistortionCoefficients ?? [],
-    ReprojectionError: dto.ReprojectionError,
-    SightingsUsed: dto.SightingsUsed,
-    ComputedAtUnix: Math.floor(Date.now() / 1000),
+  const values = {
+    modelId: dto.IsPerUnit ? null : (dto.ModelId ?? null),
+    deviceId: dto.IsPerUnit ? deviceId : null,
+    cameraMac: dto.IsPerUnit ? mac : null,
+    isPerUnit: !!dto.IsPerUnit,
+    cameraMatrixFlat: flattenCameraMatrix(dto.CameraMatrix ?? []),
+    distortionCoefficients: dto.DistortionCoefficients ?? [],
+    reprojectionError: dto.ReprojectionError,
+    sightingsUsed: dto.SightingsUsed,
+    computedAtUnix: Math.floor(Date.now() / 1000),
   };
 
-  await ref.set(doc);
-  return toIntrinsicsResultDto(toCameraIntrinsics(docId, doc as FirebaseFirestore.DocumentData));
+  const [row] = await getDb()
+    .insert(cameraIntrinsics)
+    .values({ id: docId, ...values })
+    .onConflictDoUpdate({ target: cameraIntrinsics.id, set: values })
+    .returning();
+  return toIntrinsicsResultDto(toCameraIntrinsics(row));
 }
 
 /** Mirrors IntrinsicsService.GetIntrinsics - the per-unit record takes priority, falling back to the model-level one. */
@@ -97,9 +102,9 @@ export async function getIntrinsics(
 ): Promise<IntrinsicsResultResponseDto | null> {
   const normMac = normalizeMac(mac);
   const perUnitId = `${deviceId}_${normMac}`;
-  const perUnitDoc = await getDb().collection(COL_INTRINSICS).doc(perUnitId).get();
-  if (perUnitDoc.exists) {
-    const record = toCameraIntrinsics(perUnitDoc.id, perUnitDoc.data()!);
+  const [perUnitRow] = await getDb().select().from(cameraIntrinsics).where(eq(cameraIntrinsics.id, perUnitId)).limit(1);
+  if (perUnitRow) {
+    const record = toCameraIntrinsics(perUnitRow);
     if (hasCameraMatrix(record)) {
       return toIntrinsicsResultDto(record);
     }
@@ -114,10 +119,10 @@ export async function getIntrinsics(
 
 /** Mirrors IntrinsicsService.GetModelIntrinsics. */
 export async function getModelIntrinsics(modelId: string): Promise<IntrinsicsResultResponseDto | null> {
-  const doc = await getDb().collection(COL_INTRINSICS).doc(modelId).get();
-  if (!doc.exists) return null;
+  const [row] = await getDb().select().from(cameraIntrinsics).where(eq(cameraIntrinsics.id, modelId)).limit(1);
+  if (!row) return null;
 
-  const record = toCameraIntrinsics(doc.id, doc.data()!);
+  const record = toCameraIntrinsics(row);
   if (!hasCameraMatrix(record)) return null;
 
   return toIntrinsicsResultDto(record);

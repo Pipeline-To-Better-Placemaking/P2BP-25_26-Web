@@ -1,5 +1,5 @@
 /**
- * Firestore doc shape for the `projects/{projectId}/scan_schedules` subcollection,
+ * Row shape for the `scan_schedules` table (formerly the `projects/{projectId}/scan_schedules` subcollection),
  * ported field-for-field (PascalCase) from Models/ScanSchedule.cs. CRUD/config only -
  * the actual scan-triggering logic lives in ScanScheduleExecutorService, which is a
  * background job runner (no HTTP surface of its own) being ported separately later.
@@ -10,9 +10,9 @@ export interface ScanScheduleDoc {
   Frequency?: string | null;
   EndDate?: string | null;
   EndTime?: string | null;
-  CreatedAt: FirebaseFirestore.Timestamp;
+  CreatedAt: Date;
   CreatedByUserId?: string | null;
-  LastRunAt?: FirebaseFirestore.Timestamp | null;
+  LastRunAt?: Date | null;
 }
 
 export interface ScanSchedule extends ScanScheduleDoc {
@@ -27,9 +27,9 @@ export interface ScanScheduleDto {
   Frequency?: string | null;
   EndDate?: string | null;
   EndTime?: string | null;
-  CreatedAt?: FirebaseFirestore.Timestamp | null;
+  CreatedAt?: Date | null;
   CreatedByUserId?: string | null;
-  LastRunAt?: FirebaseFirestore.Timestamp | null;
+  LastRunAt?: Date | null;
 }
 
 export function toScanScheduleDto(schedule: ScanSchedule): ScanScheduleDto {

@@ -1,15 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import {
+  arucoSessions,
+  arucoSightings,
+  devices,
+  globalHomographies,
+  localHomographies,
+  lockedHomographies,
+  projects,
+} from "../db/schema/index.js";
+import type { Db } from "../db/client.js";
 
-const fake = new FakeFirestore();
 const hasGlobalPermission = vi.fn(async () => false);
 const hasProjectPermission = vi.fn(
   async (_userId: string, _role: string | undefined, projectId: string) => projectId === "proj-1",
 );
 
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 vi.mock("../authorization/authorizationService.js", () => ({
   hasGlobalPermission: (...args: unknown[]) => hasGlobalPermission(...(args as [string, string | undefined, string])),
   hasProjectPermission: (...args: unknown[]) =>
@@ -42,11 +51,19 @@ function authHeader(userId = "user-1"): string {
 
 const DEVICE_KEY = "raw-device-api-key";
 
-beforeEach(() => {
-  fake.collection("devices").doc("dev-1").set({
-    ApiKeyHash: computeApiKeyHash(DEVICE_KEY),
-    ProjectId: "proj-1",
-    Nickname: "Jetson 1",
+let db: Db;
+
+beforeEach(async () => {
+  db = await createTestDb();
+  await db.insert(projects).values([
+    { id: "proj-1", title: "P1" },
+    { id: "proj-other", title: "PO" },
+  ]);
+  await db.insert(devices).values({
+    id: "dev-1",
+    apiKeyHash: computeApiKeyHash(DEVICE_KEY),
+    projectId: "proj-1",
+    name: "Jetson 1",
   });
 });
 
@@ -117,6 +134,28 @@ describe("POST /api/homography/submit-local", () => {
     expect(res.status).toBe(200);
     expect(res.body.CameraMac).toBeTruthy();
     expect(res.body.HomographyId).toContain("dev-1");
+
+    const [stored] = await db
+      .select()
+      .from(localHomographies)
+      .where(eq(localHomographies.id, "dev-1_aa:bb:cc:dd:ee:ff"));
+    expect(stored.matrixFlat).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    expect(stored.deviceId).toBe("dev-1");
+    expect(stored.frameSize).toEqual([1920, 1080]);
+  });
+
+  it("upserts when the same camera submits again", async () => {
+    const send = (rmse: number) =>
+      request(app)
+        .post("/api/homography/submit-local")
+        .set("Authorization", `Bearer ${DEVICE_KEY}`)
+        .send({ ...validLocalDto, RmseBoard: rmse });
+    expect((await send(0.3)).status).toBe(200);
+    expect((await send(0.1)).status).toBe(200);
+
+    const rows = await db.select().from(localHomographies);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].rmseBoard).toBe(0.1);
   });
 
   it("rejects an empty payload", async () => {
@@ -293,5 +332,187 @@ describe("POST /api/homography/workspace/:projectId/global-homographies", () => 
 
     expect(res.status).toBe(400);
     expect(res.text).toMatch(/MmPerFpPx/);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// DB-backed flows: ArUco sessions, BFS lock, global homographies, puzzle workspace.
+// ---------------------------------------------------------------------------
+async function submitLocal(mac: string) {
+  return request(app)
+    .post("/api/homography/submit-local")
+    .set("Authorization", `Bearer ${DEVICE_KEY}`)
+    .send({ ...validLocalDto, CameraMac: mac });
+}
+
+/** The server-computed hash of the camera's current local homography, read back via the workspace endpoint. */
+async function localHash(): Promise<string> {
+  const ws = await request(app).get("/api/homography/workspace/proj-1").set("Authorization", authHeader());
+  return ws.body.LocalHomographies[0].LocalHomographyHash as string;
+}
+
+describe("ArUco sighting sessions", () => {
+  const markers = [
+    {
+      MarkerId: 1,
+      CornersPx: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+    },
+  ];
+
+  it("creates a session on first camera, then joins it for the second and reports status", async () => {
+    const first = await request(app)
+      .post("/api/homography/submit-sightings")
+      .set("Authorization", `Bearer ${DEVICE_KEY}`)
+      .send({ CameraMac: "AA:00:00:00:00:01", ArucoDict: "DICT_4X4_50", CapturedAt: "t1", Markers: markers });
+    expect(first.status).toBe(200);
+    expect(first.body.CamerasTotal).toBe(1);
+    const sessionId = first.body.SessionId as string;
+
+    const second = await request(app)
+      .post("/api/homography/submit-sightings")
+      .set("Authorization", `Bearer ${DEVICE_KEY}`)
+      .send({
+        SessionId: sessionId,
+        CameraMac: "AA:00:00:00:00:02",
+        ArucoDict: "DICT_4X4_50",
+        CapturedAt: "t2",
+        Markers: markers,
+      });
+    expect(second.body).toMatchObject({ SessionId: sessionId, CamerasTotal: 2 });
+    expect(second.body.CamerasCheckedIn).toEqual(["aa:00:00:00:00:01", "aa:00:00:00:00:02"]);
+
+    const status = await request(app)
+      .get(`/api/homography/session-status/${sessionId}`)
+      .set("Authorization", authHeader());
+    expect(status.status).toBe(200);
+    expect(status.body).toMatchObject({ SessionId: sessionId, Status: "collecting", CamerasTotal: 2 });
+    expect(new Date(status.body.CreatedAt).toString()).not.toBe("Invalid Date");
+
+    const sightings = await db.select().from(arucoSightings);
+    expect(sightings).toHaveLength(2);
+    expect(sightings[0].markers?.[0].CornersPxFlat).toEqual([0, 0, 10, 0, 10, 10, 0, 10]);
+  });
+});
+
+describe("POST /api/homography/compute-lock with stored sightings", () => {
+  it("locks a single camera with an identity transform and writes Config.ArucoLock on the device", async () => {
+    await submitLocal("AA:00:00:00:00:01");
+    const hash = await localHash();
+
+    await request(app)
+      .post("/api/homography/submit-sightings")
+      .set("Authorization", `Bearer ${DEVICE_KEY}`)
+      .send({
+        CameraMac: "AA:00:00:00:00:01",
+        ArucoDict: "DICT_4X4_50",
+        CapturedAt: "t1",
+        LocalHomographyHash: hash,
+        Markers: [{ MarkerId: 1, CornersPx: [[0, 0], [1, 0], [1, 1], [0, 1]] }],
+      });
+
+    const res = await request(app).post("/api/homography/compute-lock").set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ Status: "locked", CamerasComputed: 1 });
+
+    const [locked] = await db.select().from(lockedHomographies);
+    expect(locked.id).toBe("dev-1_aa:00:00:00:00:01");
+    expect(locked.matrixFlat).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+
+    const [device] = await db.select().from(devices).where(eq(devices.id, "dev-1"));
+    const aruco = (device.config as { ArucoLock: { Status: string; LastRunUnix: number } }).ArucoLock;
+    expect(aruco.Status).toBe("locked");
+    expect(typeof aruco.LastRunUnix).toBe("number");
+  });
+
+  it("returns 422 and leaves the device untouched when no sighting matches a current homography", async () => {
+    await submitLocal("AA:00:00:00:00:01");
+    await request(app)
+      .post("/api/homography/submit-sightings")
+      .set("Authorization", `Bearer ${DEVICE_KEY}`)
+      .send({
+        CameraMac: "AA:00:00:00:00:01",
+        ArucoDict: "DICT_4X4_50",
+        CapturedAt: "t1",
+        LocalHomographyHash: "stale-hash",
+        Markers: [],
+      });
+
+    const res = await request(app).post("/api/homography/compute-lock").set("Authorization", authHeader());
+    expect(res.status).toBe(422);
+
+    const [device] = await db.select().from(devices).where(eq(devices.id, "dev-1"));
+    // runBfsLock throws before any camera->device mapping is returned, so no status is written (as before).
+    expect(device.config).toBeNull();
+  });
+});
+
+describe("global homographies + puzzle workspace", () => {
+  const placement = {
+    PuzzlePieceId: "pp-1",
+    DeviceId: "dev-1",
+    CameraMac: "AA:00:00:00:00:01",
+    CenterFp: [100, 100],
+    AngleDeg: 0,
+    Scale: 1,
+    HLocalCanvas: [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ],
+    LocalCanvasSize: [200, 100],
+  };
+
+  it("saves global homographies, upserts them, and returns them in the workspace", async () => {
+    const save = () =>
+      request(app)
+        .post("/api/homography/workspace/proj-1/global-homographies")
+        .set("Authorization", authHeader())
+        .send({
+          MmPerFpPx: 2,
+          OriginFp: [0, 0],
+          FloorplanSize: [1000, 800],
+          Placements: [placement],
+          LockedGroups: [{ GroupId: "g1", CameraMacs: ["AA:00:00:00:00:01", "aa:00:00:00:00:01"] }],
+        });
+
+    const first = await save();
+    expect(first.status).toBe(200);
+    expect(first.body.PlacementsSaved).toBe(1);
+    expect(first.body.GlobalHomographies.LockedGroups).toEqual([{ GroupId: "g1", CameraMacs: ["aa:00:00:00:00:01"] }]);
+    expect((await save()).status).toBe(200);
+
+    const rows = await db.select().from(globalHomographies);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].projectId).toBe("proj-1");
+
+    await submitLocal("AA:00:00:00:00:01");
+    const ws = await request(app).get("/api/homography/workspace/proj-1").set("Authorization", authHeader());
+    expect(ws.status).toBe(200);
+    expect(ws.body.GlobalHomographies.Placements).toHaveLength(1);
+    expect(ws.body.LocalHomographies).toHaveLength(1);
+    expect(ws.body.LocalHomographies[0]).toMatchObject({ DeviceId: "dev-1", CameraMac: "aa:00:00:00:00:01" });
+    expect(ws.body.PuzzlePieces[0].Status).toBe("missing_snapshot");
+    expect(ws.body.LockedGroups).toHaveLength(1);
+  });
+
+  it("looks up a single puzzle piece for a device in the project and 404s for other projects", async () => {
+    await submitLocal("AA:00:00:00:00:01");
+    const ok = await request(app)
+      .get("/api/homography/workspace/proj-1/puzzle-pieces/dev-1/AA:00:00:00:00:01")
+      .set("Authorization", authHeader());
+    expect(ok.status).toBe(200);
+    expect(ok.body.DeviceId).toBe("dev-1");
+
+    hasProjectPermission.mockImplementationOnce(async () => true);
+    const other = await request(app)
+      .get("/api/homography/workspace/proj-other/puzzle-pieces/dev-1/AA:00:00:00:00:01")
+      .set("Authorization", authHeader());
+    expect(other.status).toBe(404);
   });
 });

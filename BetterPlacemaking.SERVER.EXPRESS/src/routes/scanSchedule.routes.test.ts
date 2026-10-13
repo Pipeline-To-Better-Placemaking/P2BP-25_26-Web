@@ -1,15 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { projects, scanSchedules } from "../db/schema/index.js";
+import type { Db } from "../db/client.js";
 
-const fake = new FakeFirestore();
 const hasGlobalPermission = vi.fn(async () => false);
 const hasProjectPermission = vi.fn(
   async (_userId: string, _role: string | undefined, projectId: string) => projectId === "proj-1",
 );
 
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 vi.mock("../authorization/authorizationService.js", () => ({
   hasGlobalPermission: (...args: unknown[]) => hasGlobalPermission(...(args as [string, string | undefined, string])),
   hasProjectPermission: (...args: unknown[]) =>
@@ -24,6 +25,22 @@ vi.mock("../authorization/authorizationService.js", () => ({
 const { scanScheduleRouter } = await import("./scanSchedule.routes.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
 const { createUserToken } = await import("../services/tokenService.js");
+
+let db: Db;
+
+beforeEach(async () => {
+  db = await createTestDb();
+  await db.insert(projects).values([
+    { id: "proj-1", title: "P1" },
+    { id: "proj-list", title: "PL" },
+    { id: "proj-2", title: "P2" },
+  ]);
+});
+
+async function peekSchedule(id: string) {
+  const [row] = await db.select().from(scanSchedules).where(eq(scanSchedules.id, id));
+  return row;
+}
 
 function buildApp() {
   const app = express();
@@ -49,11 +66,12 @@ describe("POST /api/scan-schedule/:projectId", () => {
     expect(res.status).toBe(200);
     expect(res.body.Id).toBeTruthy();
 
-    const stored = fake.peek(`projects/proj-1/scan_schedules/${res.body.Id}`);
-    expect(stored?.StartDate).toBe("2026-01-01");
-    expect(stored?.Frequency).toBe("Daily");
-    expect(stored?.CreatedByUserId).toBe("user-1");
-    expect(stored?.CreatedAt).toBeTruthy();
+    const stored = await peekSchedule(res.body.Id);
+    expect(stored?.projectId).toBe("proj-1");
+    expect(stored?.startDate).toBe("2026-01-01");
+    expect(stored?.frequency).toBe("Daily");
+    expect(stored?.createdByUserId).toBe("user-1");
+    expect(stored?.createdAt).toBeTruthy();
   });
 
   it("denies creation when the caller lacks Project.ScanSchedules.Manage on the project", async () => {
@@ -68,12 +86,15 @@ describe("POST /api/scan-schedule/:projectId", () => {
 });
 
 describe("GET /api/scan-schedule/:projectId", () => {
-  it("lists the schedules under the project's subcollection", async () => {
+  it("lists the schedules for the project", async () => {
     hasProjectPermission.mockImplementationOnce(async (_u, _r, projectId: string) => projectId === "proj-list");
-    await fake.collection("projects/proj-list/scan_schedules").doc("sched-1").set({
-      StartDate: "2026-02-01",
-      Frequency: "Weekly",
+    await db.insert(scanSchedules).values({
+      id: "sched-1",
+      projectId: "proj-list",
+      startDate: "2026-02-01",
+      frequency: "Weekly",
     });
+    await db.insert(scanSchedules).values({ id: "sched-other", projectId: "proj-1", frequency: "Daily" });
 
     const app = buildApp();
     const res = await request(app).get("/api/scan-schedule/proj-list").set("Authorization", authHeader());
@@ -82,6 +103,8 @@ describe("GET /api/scan-schedule/:projectId", () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0].Id).toBe("sched-1");
     expect(res.body[0].Frequency).toBe("Weekly");
+    expect(typeof res.body[0].CreatedAt).toBe("string");
+    expect(res.body[0].LastRunAt).toBeNull();
   });
 
   it("denies listing when the caller lacks Project.ScanSchedules.Read on the project", async () => {
@@ -94,7 +117,7 @@ describe("GET /api/scan-schedule/:projectId", () => {
 
 describe("DELETE /api/scan-schedule/:projectId/:scheduleId", () => {
   it("deletes an existing schedule", async () => {
-    await fake.collection("projects/proj-1/scan_schedules").doc("sched-del").set({ Frequency: "Daily" });
+    await db.insert(scanSchedules).values({ id: "sched-del", projectId: "proj-1", frequency: "Daily" });
 
     const app = buildApp();
     const res = await request(app)
@@ -102,7 +125,7 @@ describe("DELETE /api/scan-schedule/:projectId/:scheduleId", () => {
       .set("Authorization", authHeader());
 
     expect(res.status).toBe(204);
-    expect(fake.peek("projects/proj-1/scan_schedules/sched-del")).toBeUndefined();
+    expect(await peekSchedule("sched-del")).toBeUndefined();
   });
 
   it("returns 404 for a schedule that does not exist", async () => {
@@ -126,12 +149,14 @@ describe("DELETE /api/scan-schedule/:projectId/:scheduleId", () => {
 
 describe("PUT /api/scan-schedule/:projectId/:scheduleId", () => {
   it("updates provided fields and always resets EndDate/EndTime, defaulting to empty string when omitted", async () => {
-    await fake.collection("projects/proj-1/scan_schedules").doc("sched-put").set({
-      StartDate: "2026-01-01",
-      StartTime: "09:00",
-      Frequency: "Daily",
-      EndDate: "2026-06-01",
-      EndTime: "17:00",
+    await db.insert(scanSchedules).values({
+      id: "sched-put",
+      projectId: "proj-1",
+      startDate: "2026-01-01",
+      startTime: "09:00",
+      frequency: "Daily",
+      endDate: "2026-06-01",
+      endTime: "17:00",
     });
 
     const app = buildApp();
@@ -142,11 +167,11 @@ describe("PUT /api/scan-schedule/:projectId/:scheduleId", () => {
 
     expect(res.status).toBe(204);
 
-    const stored = fake.peek("projects/proj-1/scan_schedules/sched-put");
-    expect(stored?.Frequency).toBe("Weekly");
-    expect(stored?.StartDate).toBe("2026-01-01");
-    expect(stored?.EndDate).toBe("");
-    expect(stored?.EndTime).toBe("");
+    const stored = await peekSchedule("sched-put");
+    expect(stored?.frequency).toBe("Weekly");
+    expect(stored?.startDate).toBe("2026-01-01");
+    expect(stored?.endDate).toBe("");
+    expect(stored?.endTime).toBe("");
   });
 
   it("returns 404 for a schedule that does not exist", async () => {

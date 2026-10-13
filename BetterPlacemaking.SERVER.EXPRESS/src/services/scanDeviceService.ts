@@ -1,45 +1,57 @@
-import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
-import type { Scan, ScanDoc, UpdateScanStatusRequest } from "../models/scanDevice.js";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { scans } from "../db/schema/index.js";
+import type { Scan, UpdateScanStatusRequest } from "../models/scanDevice.js";
 
 /**
- * Mirrors ScanService.cs's collection path exactly: scans are a subcollection of a
- * per-project "devices" shadow doc (`projects/{projectId}/devices/{deviceId}/scans`),
- * distinct from the top-level `devices` collection deviceService.ts owns. Kept as a
- * direct Firestore access here (not routed through deviceService.ts) for the same
- * reason ScanService.cs talks to Firestore directly instead of going through
- * DeviceService for this subtree.
+ * Mirrors ScanService.cs's data model: scans belong to a (project, device) pair (formerly the
+ * Firestore subcollection `projects/{projectId}/devices/{deviceId}/scans`), distinct from the
+ * top-level `devices` table deviceService.ts owns. Kept as a direct table access here (not
+ * routed through deviceService.ts) for the same reason ScanService.cs talks to Firestore
+ * directly instead of going through DeviceService for this subtree.
  */
-function scansCollection(projectId: string, deviceId: string) {
-  return getDb().collection("projects").doc(projectId).collection("devices").doc(deviceId).collection("scans");
-}
+export type ScanRow = typeof scans.$inferSelect;
 
-function toScan(id: string, data: FirebaseFirestore.DocumentData): Scan {
-  return { Id: id, ...(data as ScanDoc) };
-}
-
-function createdAtMillis(data: ScanDoc): number {
-  const createdAt = data.CreatedAt as FirebaseFirestore.Timestamp | null | undefined;
-  return createdAt && typeof createdAt.toMillis === "function" ? createdAt.toMillis() : 0;
+/** Row -> API-shaped scan: first-class columns plus the passthrough `extra` fields, PascalCase as before. */
+export function toScan(row: ScanRow): Scan {
+  return {
+    ...(row.extra ?? {}),
+    Id: row.id,
+    Status: row.status,
+    CreatedAt: row.createdAt,
+    StartedAt: row.startedAt,
+    FinishedAt: row.finishedAt,
+    ObjUrl: row.objUrl,
+    Error: row.error,
+    InitiatedByUserId: row.initiatedByUserId,
+  };
 }
 
 /** Oldest pending scan for the device, or null if none. Mirrors ScanService.GetNextPendingScanId. */
 export async function getNextPendingScanId(projectId: string, deviceId: string): Promise<string | null> {
-  const snapshot = await scansCollection(projectId, deviceId).get();
-
-  const pending = snapshot.docs
-    .map((doc) => ({ id: doc.id, data: doc.data() as ScanDoc }))
-    .filter((d) => typeof d.data.Status === "string" && d.data.Status.trim().toLowerCase() === "pending")
-    .sort((a, b) => createdAtMillis(a.data) - createdAtMillis(b.data));
-
-  return pending.length > 0 ? pending[0].id : null;
+  const [row] = await getDb()
+    .select({ id: scans.id })
+    .from(scans)
+    .where(
+      and(
+        eq(scans.projectId, projectId),
+        eq(scans.deviceId, deviceId),
+        sql`lower(trim(${scans.status})) = 'pending'`,
+      ),
+    )
+    .orderBy(asc(scans.createdAt))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /** Mirrors ScanService.GetScan, minus the NormalizeFirestoreValue timestamp->ISO-string pass (not needed by ScanDeviceController's own use of this). */
 export async function getScan(projectId: string, deviceId: string, scanId: string): Promise<Scan | null> {
-  const doc = await scansCollection(projectId, deviceId).doc(scanId).get();
-  if (!doc.exists) return null;
-  return toScan(doc.id, doc.data()!);
+  const [row] = await getDb()
+    .select()
+    .from(scans)
+    .where(and(eq(scans.id, scanId), eq(scans.projectId, projectId), eq(scans.deviceId, deviceId)))
+    .limit(1);
+  return row ? toScan(row) : null;
 }
 
 /**
@@ -52,9 +64,8 @@ export async function getScan(projectId: string, deviceId: string, scanId: strin
  *    pipeline triggered after every status write)
  *  - NotificationService.NotifyScanCompleted (emails project members on Status=complete)
  *  - DeviceService.ClearLidarScanOneShotIfSet (best-effort Config.LidarScan.BeginScanning
- *    clear on Status=running; also not possible without editing deviceService.ts, which is
- *    off-limits here, and the ported Config type in models/device.ts has no LidarScan field
- *    yet). This is a self-healing performance optimization on the old server, not a
+ *    clear on Status=running; the ported Config type in models/device.ts has no LidarScan
+ *    field yet). This is a self-healing performance optimization on the old server, not a
  *    correctness requirement - see the comment in ScanService.cs's UpdateScanStatus.
  */
 export async function updateScanStatus(
@@ -63,28 +74,28 @@ export async function updateScanStatus(
   scanId: string,
   body: UpdateScanStatusRequest,
 ): Promise<boolean> {
-  const ref = scansCollection(projectId, deviceId).doc(scanId);
-  const existing = await ref.get();
-  if (!existing.exists) return false;
-
   const status = body.Status?.trim();
   const objUrl = body.ObjUrl?.trim();
   const error = body.Error?.trim();
 
-  const updates: Record<string, unknown> = {};
-  if (status) updates.Status = status;
-  if (objUrl) updates.ObjUrl = objUrl;
-  if (error) updates.Error = error;
+  const updates: Partial<typeof scans.$inferInsert> = {};
+  if (status) updates.status = status;
+  if (objUrl) updates.objUrl = objUrl;
+  if (error) updates.error = error;
 
   if (status && status.toLowerCase() === "running") {
-    updates.StartedAt = Timestamp.now();
+    updates.startedAt = new Date();
   }
   if (status && (status.toLowerCase() === "complete" || status.toLowerCase() === "error")) {
-    updates.FinishedAt = Timestamp.now();
+    updates.finishedAt = new Date();
   }
 
-  if (Object.keys(updates).length === 0) return true;
+  const where = and(eq(scans.id, scanId), eq(scans.projectId, projectId), eq(scans.deviceId, deviceId));
+  if (Object.keys(updates).length === 0) {
+    const [existing] = await getDb().select({ id: scans.id }).from(scans).where(where).limit(1);
+    return !!existing;
+  }
 
-  await ref.update(updates);
-  return true;
+  const rows = await getDb().update(scans).set(updates).where(where).returning({ id: scans.id });
+  return rows.length > 0;
 }

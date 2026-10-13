@@ -1,10 +1,10 @@
 import express from "express";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
-
-const fake = new FakeFirestore();
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { cameraIntrinsics, devices, intrinsicsSightings } from "../db/schema/index.js";
+import type { Db } from "../db/client.js";
 
 const { intrinsicsRouter } = await import("./intrinsics.routes.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
@@ -27,9 +27,42 @@ function authHeader(): string {
   return `Bearer ${token}`;
 }
 
+let db: Db;
+
+beforeEach(async () => {
+  db = await createTestDb();
+});
+
 async function seedDevice(id: string, rawApiKey: string): Promise<void> {
-  await fake.collection("devices").doc(id).set({
-    ApiKeyHash: computeApiKeyHash(rawApiKey),
+  await db.insert(devices).values({ id, apiKeyHash: computeApiKeyHash(rawApiKey) });
+}
+
+/** Seeds a camera_intrinsics row from the PascalCase doc shape these tests were written against. */
+async function seedIntrinsics(
+  id: string,
+  doc: {
+    ModelId?: string;
+    DeviceId?: string;
+    CameraMac?: string;
+    IsPerUnit: boolean;
+    CameraMatrixFlat: number[];
+    DistortionCoefficients: number[];
+    ReprojectionError: number;
+    SightingsUsed: number;
+    ComputedAtUnix: number;
+  },
+): Promise<void> {
+  await db.insert(cameraIntrinsics).values({
+    id,
+    modelId: doc.ModelId ?? null,
+    deviceId: doc.DeviceId ?? null,
+    cameraMac: doc.CameraMac ?? null,
+    isPerUnit: doc.IsPerUnit,
+    cameraMatrixFlat: doc.CameraMatrixFlat,
+    distortionCoefficients: doc.DistortionCoefficients,
+    reprojectionError: doc.ReprojectionError,
+    sightingsUsed: doc.SightingsUsed,
+    computedAtUnix: doc.ComputedAtUnix,
   });
 }
 
@@ -69,6 +102,11 @@ describe("POST /api/intrinsics/submit-sightings", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ SightingsStored: 2 });
+
+    const rows = await db.select().from(intrinsicsSightings);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].deviceId).toBe("device-1");
+    expect(rows[0].imagePoints).toBeTruthy();
   });
 
   it("normalizes CameraMac to lowercase and persists sighting fields", async () => {
@@ -96,6 +134,11 @@ describe("POST /api/intrinsics/submit-sightings", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ SightingsStored: 1 });
+
+    const [row] = await db.select().from(intrinsicsSightings);
+    expect(row.cameraMac).toBe("aa:bb:cc:dd:ee:ff");
+    expect(row.modelId).toBe("model-x");
+    expect(row.isPerUnit).toBe(false);
   });
 
   it("rejects requests without a valid device API key", async () => {
@@ -152,8 +195,11 @@ describe("POST /api/intrinsics/submit-result", () => {
     expect(res.body.DistortionCoefficients).toEqual([0.1, 0.2, 0, 0, 0]);
     expect(typeof res.body.ComputedAtUnix).toBe("number");
 
-    const storedRaw = fake.peek("camera_intrinsics/device-3_aa:bb:cc:dd:ee:ff");
-    expect(storedRaw?.CameraMatrixFlat).toEqual([1000, 0, 960, 0, 1000, 540, 0, 0, 1]);
+    const [storedRaw] = await db
+      .select()
+      .from(cameraIntrinsics)
+      .where(eq(cameraIntrinsics.id, "device-3_aa:bb:cc:dd:ee:ff"));
+    expect(storedRaw?.cameraMatrixFlat).toEqual([1000, 0, 960, 0, 1000, 540, 0, 0, 1]);
   });
 
   it("stores a model-level result keyed by ModelId when IsPerUnit is false", async () => {
@@ -201,7 +247,7 @@ describe("POST /api/intrinsics/submit-result", () => {
 
 describe("GET /api/intrinsics/:deviceId/:mac", () => {
   it("returns the per-unit result for an authenticated user", async () => {
-    await fake.collection("camera_intrinsics").doc("device-5_aa:bb:cc:dd:ee:ff").set({
+    await seedIntrinsics("device-5_aa:bb:cc:dd:ee:ff", {
       DeviceId: "device-5",
       CameraMac: "aa:bb:cc:dd:ee:ff",
       IsPerUnit: true,
@@ -227,7 +273,7 @@ describe("GET /api/intrinsics/:deviceId/:mac", () => {
   });
 
   it("falls back to the model-level result when no per-unit record exists and modelId is given", async () => {
-    await fake.collection("camera_intrinsics").doc("model-fallback").set({
+    await seedIntrinsics("model-fallback", {
       ModelId: "model-fallback",
       IsPerUnit: false,
       CameraMatrixFlat: [500, 0, 320, 0, 500, 240, 0, 0, 1],
@@ -268,7 +314,7 @@ describe("GET /api/intrinsics/:deviceId/:mac", () => {
 
 describe("GET /api/intrinsics/model/:modelId", () => {
   it("returns the model-level result for an authenticated user", async () => {
-    await fake.collection("camera_intrinsics").doc("model-lookup").set({
+    await seedIntrinsics("model-lookup", {
       ModelId: "model-lookup",
       IsPerUnit: false,
       CameraMatrixFlat: [500, 0, 320, 0, 500, 240, 0, 0, 1],

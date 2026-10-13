@@ -1,7 +1,8 @@
-import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { scans } from "../db/schema/index.js";
 import * as scanDeviceService from "./scanDeviceService.js";
-import type { Scan, ScanDoc } from "../models/scanDevice.js";
+import type { Scan } from "../models/scanDevice.js";
 import type {
   LatestCompleteScan,
   PendingOrRunningScan,
@@ -17,33 +18,20 @@ import type {
  * DeleteScan/HasPendingOrRunningScan/GetLatestCompleteScanForProject). GetNextPendingScanId
  * is the device-facing half and already lives in scanDeviceService.ts (ScanDeviceController's
  * port); GetScan and the core UpdateScanStatus write are delegated to that file below rather
- * than reimplemented, since both controllers operate on the exact same scan documents.
- *
- * scansCollection() below mirrors scanDeviceService.ts's own (non-exported) helper of the
- * same name field-for-field - it targets the identical Firestore path
- * (`projects/{projectId}/devices/{deviceId}/scans`). It can't be imported directly since
- * scanDeviceService.ts doesn't export it and is off-limits to edit for this port, so it's
- * duplicated here verbatim instead of introducing a second, diverging path convention.
+ * than reimplemented, since both controllers operate on the exact same scan rows.
  */
-function scansCollection(projectId: string, deviceId: string) {
-  return getDb().collection("projects").doc(projectId).collection("devices").doc(deviceId).collection("scans");
-}
 
-function toScan(id: string, data: FirebaseFirestore.DocumentData): Scan {
-  return { Id: id, ...(data as ScanDoc) };
-}
-
-/** Ported from ScanService.NormalizeFirestoreValue - Timestamp fields render as ISO-8601 strings, everything else passes through. */
-function normalizeFirestoreValue(value: unknown): unknown {
-  if (value instanceof Timestamp) return value.toDate().toISOString();
+/** Ported from ScanService.NormalizeFirestoreValue - date fields render as ISO-8601 strings, everything else passes through. */
+function normalizeValue(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
   return value;
 }
 
-/** Applies normalizeFirestoreValue across every top-level field, matching GetScan/GetScans's per-field normalization pass. */
+/** Applies normalizeValue across every top-level field, matching GetScan/GetScans's per-field normalization pass. */
 function toScanDto(scan: Scan): ScanDto {
   const dto: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(scan)) {
-    dto[key] = normalizeFirestoreValue(value);
+    dto[key] = normalizeValue(value);
   }
   dto.Id = scan.Id;
   return dto as ScanDto;
@@ -56,35 +44,34 @@ export async function createScan(
   settings: ScanSettingsRequest,
   initiatedByUserId?: string | null,
 ): Promise<StartScanResult> {
-  const collection = scansCollection(projectId, deviceId);
-
-  const doc: ScanDoc = {
-    Status: "pending",
-    CreatedAt: Timestamp.now(),
-    StartedAt: null,
-    FinishedAt: null,
-    ObjUrl: null,
-    Error: null,
-    InitiatedByUserId: initiatedByUserId ?? null,
-
-    scan_resolution: settings.scan_resolution,
-    protocol_mode: settings.protocol_mode,
-    orientation_mode: settings.orientation_mode,
-    output_mode: settings.output_mode,
-    split_mode: settings.split_mode,
-    filter_enabled: settings.filter_enabled,
-    capture_strategy: settings.capture_strategy,
-    min_revolutions_per_slice: settings.min_revolutions_per_slice,
-    force_recalibration: settings.force_recalibration,
-    ScanSettingsJson: JSON.stringify(settings),
-  };
-
-  const docRef = collection.doc();
-  await docRef.set(doc);
+  const [row] = await getDb()
+    .insert(scans)
+    .values({
+      projectId,
+      deviceId,
+      status: "pending",
+      createdAt: new Date(),
+      initiatedByUserId: initiatedByUserId ?? null,
+      extra: JSON.parse(
+        JSON.stringify({
+          scan_resolution: settings.scan_resolution,
+          protocol_mode: settings.protocol_mode,
+          orientation_mode: settings.orientation_mode,
+          output_mode: settings.output_mode,
+          split_mode: settings.split_mode,
+          filter_enabled: settings.filter_enabled,
+          capture_strategy: settings.capture_strategy,
+          min_revolutions_per_slice: settings.min_revolutions_per_slice,
+          force_recalibration: settings.force_recalibration,
+          ScanSettingsJson: JSON.stringify(settings),
+        }),
+      ) as Record<string, unknown>,
+    })
+    .returning({ id: scans.id });
 
   await requestLidarScanWake(deviceId, settings);
 
-  return { Id: docRef.id, Status: "pending" };
+  return { Id: row.id, Status: "pending" };
 }
 
 /**
@@ -95,8 +82,8 @@ export async function createScan(
  * scan.routes.ts) when re-arming an already-pending scan. Not portable without editing
  * deviceService.ts (off-limits here) and adding a LidarScan section to Config in models/device.ts
  * (also off-limits) - the same gap scanDeviceService.ts's updateScanStatus flagged for the
- * mirror-image one-shot clear. Until that lands, a created/re-armed scan sits at Firestore
- * Status="pending" but the orchestrator is never actually signaled to start scanning.
+ * mirror-image one-shot clear. Until that lands, a created/re-armed scan sits at
+ * status="pending" but the orchestrator is never actually signaled to start scanning.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function requestLidarScanWake(_deviceId: string, _settings: ScanSettingsRequest): Promise<void> {
@@ -120,8 +107,11 @@ export async function hasPendingOrRunningScan(projectId: string, deviceId: strin
 
 /** Mirrors ScanService.GetScans. */
 export async function getScans(projectId: string, deviceId: string): Promise<ScanDto[]> {
-  const snapshot = await scansCollection(projectId, deviceId).get();
-  return snapshot.docs.map((doc) => toScanDto(toScan(doc.id, doc.data())));
+  const rows = await getDb()
+    .select()
+    .from(scans)
+    .where(and(eq(scans.projectId, projectId), eq(scans.deviceId, deviceId)));
+  return rows.map((row) => toScanDto(scanDeviceService.toScan(row)));
 }
 
 /**
@@ -164,11 +154,11 @@ export async function updateScanStatus(
 
 /** Mirrors ScanService.DeleteScan. */
 export async function deleteScan(projectId: string, deviceId: string, scanId: string): Promise<boolean> {
-  const ref = scansCollection(projectId, deviceId).doc(scanId);
-  const existing = await ref.get();
-  if (!existing.exists) return false;
-  await ref.delete();
-  return true;
+  const rows = await getDb()
+    .delete(scans)
+    .where(and(eq(scans.id, scanId), eq(scans.projectId, projectId), eq(scans.deviceId, deviceId)))
+    .returning({ id: scans.id });
+  return rows.length > 0;
 }
 
 function scanBoolField(scan: Scan, key: string): boolean {
@@ -180,7 +170,7 @@ function scanBoolField(scan: Scan, key: string): boolean {
 function scanTimestampMillis(scan: Scan, key: string): number | null {
   const camel = key.charAt(0).toLowerCase() + key.slice(1);
   const value = scan[key] ?? scan[camel];
-  if (value instanceof Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
   return null;
 }
 
@@ -203,12 +193,18 @@ export async function getLatestCompleteScanForProject(
 
   let best: (LatestCompleteScan & { sortMillis: number }) | null = null;
 
-  for (const deviceId of deviceIds) {
-    if (!deviceId?.trim()) continue;
+  const ids = deviceIds.filter((d) => !!d?.trim());
+  if (ids.length === 0) return null;
 
-    const snapshot = await scansCollection(projectId, deviceId).get();
-    for (const doc of snapshot.docs) {
-      const scan = toScan(doc.id, doc.data());
+  // Iterate devices in caller order (ties keep the earlier device, as before).
+  const rows = await getDb()
+    .select()
+    .from(scans)
+    .where(and(eq(scans.projectId, projectId), inArray(scans.deviceId, ids)));
+  for (const deviceId of ids) {
+    for (const row of rows) {
+      if (row.deviceId !== deviceId) continue;
+      const scan = scanDeviceService.toScan(row);
       const status = typeof scan.Status === "string" ? scan.Status : undefined;
       if (!status || status.toLowerCase() !== "complete") continue;
       if (isCalibrationOrCombinedScan(scan)) continue;
