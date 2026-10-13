@@ -26,3 +26,4 @@ dist-ssr
 # The root .gitignore excludes .env* broadly; this file just sets the local API
 # base URL default (no secrets) and is meant to be committed, like Angular's environment.ts.
 !.env.development
+!.env.production

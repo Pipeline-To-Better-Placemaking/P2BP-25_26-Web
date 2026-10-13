@@ -30,4 +30,5 @@ node_modules/
 BetterPlacemaking.CLIENT/public/test-puzzle/test-points.jsonl
 
 # Local documentation, notes, test-scripts, and shell helpers (see docs/)
-docs/
+docs/*
+!docs/DEPLOY.md
