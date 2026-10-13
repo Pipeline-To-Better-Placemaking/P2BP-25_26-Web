@@ -12,7 +12,7 @@
 //   node ~/.claude/skills/browser-automation/browser.mjs http://localhost:4200/login --script tools/visual-compare/shot.mjs   (ref)
 //   node ~/.claude/skills/browser-automation/browser.mjs http://localhost:5173/login --script tools/visual-compare/shot.mjs   (new)
 //
-// Prereqs: emulator + both APIs seeded (BetterPlacemaking.SERVER.EXPRESS/scripts/seed-demo.mjs). Login: demo@example.com / DemoPass123!
+// Prereqs: both APIs running on a dev database seeded with `npm run db:seed-demo` (BetterPlacemaking.SERVER.EXPRESS). Login: demo@example.com / DemoPass123!
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
