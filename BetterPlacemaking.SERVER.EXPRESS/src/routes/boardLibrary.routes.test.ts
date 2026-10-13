@@ -1,14 +1,40 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import express from "express";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { boardLibrary } from "../db/schema/index.js";
+import type { Db } from "../db/client.js";
 
 // boardLibraryRouter isn't wired into app.ts yet (that happens in a follow-up
 // step), so these tests mount it directly on a minimal express app rather
 // than going through createApp() - avoids depending on other in-flight work.
 
-const fake = new FakeFirestore();
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
+let db: Db;
+beforeEach(async () => {
+  db = await createTestDb();
+});
+
+/** Seeds a board_library row from the API-shaped (PascalCase) fields used throughout these tests. */
+async function seedBoard(id: string, d: Record<string, unknown> & { UserId: string; CreatedAtUtc: Date }) {
+  await db.insert(boardLibrary).values({
+    id,
+    userId: d.UserId,
+    type: d.Type as string,
+    nickname: d.Nickname as string,
+    dictionary: d.Dictionary as string,
+    units: d.Units as string,
+    cols: (d.Cols as number) ?? null,
+    rows: (d.Rows as number) ?? null,
+    markerId: (d.MarkerId as number) ?? null,
+    squareSize: (d.SquareSize as number) ?? null,
+    markerSize: d.MarkerSize as number,
+    squareSizeMm: (d.SquareSizeMm as number) ?? null,
+    markerSizeMm: d.MarkerSizeMm as number,
+    previewSvg: d.PreviewSvg as string,
+    createdAtUtc: d.CreatedAtUtc,
+  });
+}
 
 const { boardLibraryRouter } = await import("./boardLibrary.routes.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
@@ -51,7 +77,7 @@ const validAruco = {
 
 describe("GET /api/board-library", () => {
   it("returns only the caller's own boards, newest first", async () => {
-    await fake.collection("board_library").doc("mine-old").set({
+    await seedBoard("mine-old", {
       UserId: "user-1",
       Type: "charuco",
       Nickname: "Old",
@@ -64,9 +90,9 @@ describe("GET /api/board-library", () => {
       SquareSizeMm: 30,
       MarkerSizeMm: 20,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 1000, toDate: () => new Date(1000) },
+      CreatedAtUtc: new Date(1000),
     });
-    await fake.collection("board_library").doc("mine-new").set({
+    await seedBoard("mine-new", {
       UserId: "user-1",
       Type: "charuco",
       Nickname: "New",
@@ -79,9 +105,9 @@ describe("GET /api/board-library", () => {
       SquareSizeMm: 30,
       MarkerSizeMm: 20,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 2000, toDate: () => new Date(2000) },
+      CreatedAtUtc: new Date(2000),
     });
-    await fake.collection("board_library").doc("someone-elses").set({
+    await seedBoard("someone-elses", {
       UserId: "user-2",
       Type: "charuco",
       Nickname: "Not mine",
@@ -94,7 +120,7 @@ describe("GET /api/board-library", () => {
       SquareSizeMm: 30,
       MarkerSizeMm: 20,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 3000, toDate: () => new Date(3000) },
+      CreatedAtUtc: new Date(3000),
     });
 
     const app = buildApp();
@@ -113,7 +139,7 @@ describe("GET /api/board-library", () => {
 
 describe("GET /api/board-library/:id", () => {
   it("returns 404 for a board owned by a different user", async () => {
-    await fake.collection("board_library").doc("their-board").set({
+    await seedBoard("their-board", {
       UserId: "user-2",
       Type: "charuco",
       Nickname: "Theirs",
@@ -122,7 +148,7 @@ describe("GET /api/board-library/:id", () => {
       MarkerSize: 20,
       MarkerSizeMm: 20,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 1000, toDate: () => new Date(1000) },
+      CreatedAtUtc: new Date(1000),
     });
 
     const app = buildApp();
@@ -148,8 +174,8 @@ describe("POST /api/board-library", () => {
     expect(res.body.MarkerSizeMm).toBe(20);
     expect(res.body.Id).toBeTruthy();
 
-    const stored = fake.peek(`board_library/${res.body.Id}`);
-    expect(stored?.UserId).toBe("user-1");
+    const [stored] = await db.select().from(boardLibrary).where(eq(boardLibrary.id, res.body.Id));
+    expect(stored?.userId).toBe("user-1");
   });
 
   it("saves a valid ArUco board and converts cm to millimeters", async () => {
@@ -184,8 +210,8 @@ describe("POST /api/board-library", () => {
 
 describe("PUT /api/board-library/:id", () => {
   it("updates the caller's own board and preserves CreatedAtUtc", async () => {
-    const created = { toMillis: () => 1000, toDate: () => new Date(1000) };
-    await fake.collection("board_library").doc("board-1").set({
+    const created = new Date(1000);
+    await seedBoard("board-1", {
       UserId: "user-1",
       Type: "charuco",
       Nickname: "Old Name",
@@ -213,7 +239,7 @@ describe("PUT /api/board-library/:id", () => {
   });
 
   it("returns 404 when updating a board owned by a different user", async () => {
-    await fake.collection("board_library").doc("their-board").set({
+    await seedBoard("their-board", {
       UserId: "user-2",
       Type: "charuco",
       Nickname: "Theirs",
@@ -222,7 +248,7 @@ describe("PUT /api/board-library/:id", () => {
       MarkerSize: 20,
       MarkerSizeMm: 20,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 1000, toDate: () => new Date(1000) },
+      CreatedAtUtc: new Date(1000),
     });
 
     const app = buildApp();
@@ -237,7 +263,7 @@ describe("PUT /api/board-library/:id", () => {
 
 describe("DELETE /api/board-library/:id", () => {
   it("deletes the caller's own board", async () => {
-    await fake.collection("board_library").doc("board-2").set({
+    await seedBoard("board-2", {
       UserId: "user-1",
       Type: "aruco",
       Nickname: "Delete Me",
@@ -247,18 +273,18 @@ describe("DELETE /api/board-library/:id", () => {
       MarkerSize: 5,
       MarkerSizeMm: 50,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 1000, toDate: () => new Date(1000) },
+      CreatedAtUtc: new Date(1000),
     });
 
     const app = buildApp();
     const res = await request(app).delete("/api/board-library/board-2").set("Authorization", authHeader("user-1"));
 
     expect(res.status).toBe(204);
-    expect(fake.peek("board_library/board-2")).toBeUndefined();
+    expect(await db.select().from(boardLibrary).where(eq(boardLibrary.id, "board-2"))).toHaveLength(0);
   });
 
   it("returns 404 when deleting a board owned by a different user, and leaves it intact", async () => {
-    await fake.collection("board_library").doc("their-board").set({
+    await seedBoard("their-board", {
       UserId: "user-2",
       Type: "aruco",
       Nickname: "Theirs",
@@ -268,7 +294,7 @@ describe("DELETE /api/board-library/:id", () => {
       MarkerSize: 5,
       MarkerSizeMm: 50,
       PreviewSvg: "<svg></svg>",
-      CreatedAtUtc: { toMillis: () => 1000, toDate: () => new Date(1000) },
+      CreatedAtUtc: new Date(1000),
     });
 
     const app = buildApp();
@@ -277,7 +303,7 @@ describe("DELETE /api/board-library/:id", () => {
       .set("Authorization", authHeader("user-1"));
 
     expect(res.status).toBe(404);
-    expect(fake.peek("board_library/their-board")).toBeDefined();
+    expect(await db.select().from(boardLibrary).where(eq(boardLibrary.id, "their-board"))).toHaveLength(1);
   });
 
   it("rejects requests without a bearer token", async () => {

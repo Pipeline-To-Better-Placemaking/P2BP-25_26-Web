@@ -1,13 +1,12 @@
-import { getDb } from "../config/firebase.js";
-import { getBucket } from "../config/storage.js";
+import { and, desc, eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { floorplanLibrary } from "../db/schema/index.js";
+import { uploadObject } from "./cloudStorageService.js";
 import {
   unflattenReferencePoints,
   type FloorplanCalibrationDoc,
   type FloorplanLibraryItem,
-  type FloorplanLibraryItemDoc,
 } from "../models/floorplanLibrary.js";
-
-const COLLECTION = "floorplan_library";
 
 /** Mirrors ArgumentException usage in FloorplanLibraryService.cs (-> 400 Bad Request). */
 export class FloorplanValidationError extends Error {}
@@ -15,8 +14,21 @@ export class FloorplanValidationError extends Error {}
 /** Mirrors KeyNotFoundException usage in FloorplanLibraryService.cs (-> 404 Not Found). */
 export class FloorplanNotFoundError extends Error {}
 
-function toItem(id: string, data: FirebaseFirestore.DocumentData): FloorplanLibraryItem {
-  return { Id: id, ...(data as FloorplanLibraryItemDoc) };
+function toItem(row: typeof floorplanLibrary.$inferSelect): FloorplanLibraryItem {
+  return {
+    Id: row.id,
+    UserId: row.userId,
+    ProjectId: row.projectId,
+    Nickname: row.nickname,
+    ImagePath: row.imagePath,
+    ImageContentType: row.imageContentType,
+    ImageSizeBytes: row.imageSizeBytes,
+    ImageWidth: row.imageWidth,
+    ImageHeight: row.imageHeight,
+    Calibration: row.calibration ?? null,
+    CreatedAtUtc: row.createdAtUtc.toISOString(),
+    UpdatedAtUtc: row.updatedAtUtc.toISOString(),
+  };
 }
 
 function cleanNullable(value?: string | null): string | null {
@@ -24,38 +36,29 @@ function cleanNullable(value?: string | null): string | null {
   return cleaned ? cleaned : null;
 }
 
-/**
- * Lists items for a user, optionally filtered by project.
- *
- * The ASP.NET service issues a composite Firestore query (WhereEqualTo UserId,
- * then WhereEqualTo ProjectId). Here the ProjectId filter is applied in memory
- * after a single UserId query instead - functionally equivalent, avoids
- * needing a composite index, and matches this server's fake-Firestore test
- * double, which only supports a single `where()` clause per query.
- */
+/** Lists items for a user (newest-updated first), optionally filtered by project. */
 export async function listForUser(userId: string, projectId?: string | null): Promise<FloorplanLibraryItem[]> {
   if (!userId?.trim()) return [];
-  const db = getDb();
-  const snapshot = await db.collection(COLLECTION).where("UserId", "==", userId).get();
-  let items = snapshot.docs.map((doc) => toItem(doc.id, doc.data()));
-
   const normalizedProjectId = cleanNullable(projectId);
-  if (normalizedProjectId) {
-    items = items.filter((item) => item.ProjectId === normalizedProjectId);
-  }
-
-  return items.sort((a, b) => b.UpdatedAtUtc.localeCompare(a.UpdatedAtUtc));
+  const rows = await getDb()
+    .select()
+    .from(floorplanLibrary)
+    .where(
+      normalizedProjectId
+        ? and(eq(floorplanLibrary.userId, userId), eq(floorplanLibrary.projectId, normalizedProjectId))
+        : eq(floorplanLibrary.userId, userId),
+    )
+    .orderBy(desc(floorplanLibrary.updatedAtUtc));
+  return rows.map(toItem);
 }
 
 export async function getByIdForUser(userId: string, id: string): Promise<FloorplanLibraryItem | null> {
   if (!userId?.trim() || !id?.trim()) return null;
-  const db = getDb();
-  const doc = await db.collection(COLLECTION).doc(id).get();
-  if (!doc.exists) return null;
-
-  const item = toItem(doc.id, doc.data()!);
-  if (item.UserId !== userId) return null;
-  return item;
+  const [row] = await getDb()
+    .select()
+    .from(floorplanLibrary)
+    .where(and(eq(floorplanLibrary.id, id), eq(floorplanLibrary.userId, userId)));
+  return row ? toItem(row) : null;
 }
 
 function normalizeImageContentType(rawContentType?: string | null): string {
@@ -151,11 +154,6 @@ function buildObjectPath(userId: string, projectId: string, docId: string, fileN
   return `users/${userId}/floorplans/${projectId}/${docId}_${withoutExt}${extension}`;
 }
 
-/** Uploads the floorplan image bytes directly to GCS, mirroring CloudStorageService.UploadFromStreamAsync. */
-async function uploadImageBytes(objectPath: string, contentType: string, bytes: Buffer): Promise<void> {
-  await getBucket().file(objectPath).save(bytes, { contentType, resumable: false });
-}
-
 export interface UploadFloorplanInput {
   ImageBuffer: Buffer;
   FileName?: string | null;
@@ -179,29 +177,31 @@ export async function uploadForUser(userId: string, input: UploadFloorplanInput)
     throw new FloorplanValidationError("The uploaded file is not a valid or supported image.");
   }
 
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc();
-  const objectPath = buildObjectPath(userId, normalizedProjectId, ref.id, input.FileName, extension);
+  const docId = crypto.randomUUID();
+  const objectPath = buildObjectPath(userId, normalizedProjectId, docId, input.FileName, extension);
 
-  await uploadImageBytes(objectPath, contentType, input.ImageBuffer);
+  // Uploads the image bytes to Supabase Storage (mirrors CloudStorageService.UploadFromStreamAsync).
+  await uploadObject(objectPath, contentType, input.ImageBuffer);
 
-  const nowIso = new Date().toISOString();
-  const doc: FloorplanLibraryItemDoc = {
-    UserId: userId,
-    ProjectId: cleanNullable(input.ProjectId),
-    Nickname: normalizeNickname(input.Nickname, input.FileName ?? "Floorplan"),
-    ImagePath: objectPath,
-    ImageContentType: contentType,
-    ImageSizeBytes: input.ImageBuffer.length,
-    ImageWidth: width,
-    ImageHeight: height,
-    Calibration: null,
-    CreatedAtUtc: nowIso,
-    UpdatedAtUtc: nowIso,
-  };
-
-  await ref.set(doc);
-  return toItem(ref.id, doc as FirebaseFirestore.DocumentData);
+  const now = new Date();
+  const [row] = await getDb()
+    .insert(floorplanLibrary)
+    .values({
+      id: docId,
+      userId,
+      projectId: cleanNullable(input.ProjectId),
+      nickname: normalizeNickname(input.Nickname, input.FileName ?? "Floorplan"),
+      imagePath: objectPath,
+      imageContentType: contentType,
+      imageSizeBytes: input.ImageBuffer.length,
+      imageWidth: width,
+      imageHeight: height,
+      calibration: null,
+      createdAtUtc: now,
+      updatedAtUtc: now,
+    })
+    .returning();
+  return toItem(row);
 }
 
 export interface UpdateFloorplanInput {
@@ -269,42 +269,29 @@ export async function updateForUser(userId: string, id: string, input: UpdateFlo
   if (!userId?.trim()) throw new FloorplanValidationError("Missing user id.");
   if (!id?.trim()) throw new FloorplanValidationError("id is required.");
 
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) throw new FloorplanNotFoundError("Floorplan not found.");
+  const existing = await getByIdForUser(userId, id);
+  if (!existing) throw new FloorplanNotFoundError("Floorplan not found.");
 
-  const existing = toItem(snapshot.id, snapshot.data()!);
-  if (existing.UserId !== userId) throw new FloorplanNotFoundError("Floorplan not found.");
-
-  const updatedDoc: FloorplanLibraryItemDoc = {
-    UserId: existing.UserId,
-    ProjectId: input.ProjectId != null ? cleanNullable(input.ProjectId) : existing.ProjectId,
-    Nickname: input.Nickname != null ? normalizeNickname(input.Nickname, existing.Nickname ?? existing.Id) : existing.Nickname,
-    ImagePath: existing.ImagePath,
-    ImageContentType: existing.ImageContentType,
-    ImageSizeBytes: existing.ImageSizeBytes,
-    ImageWidth: existing.ImageWidth,
-    ImageHeight: existing.ImageHeight,
-    Calibration: mergeCalibration(existing, input),
-    CreatedAtUtc: existing.CreatedAtUtc,
-    UpdatedAtUtc: new Date().toISOString(),
-  };
-
-  await ref.set(updatedDoc);
-  return toItem(id, updatedDoc as FirebaseFirestore.DocumentData);
+  const [row] = await getDb()
+    .update(floorplanLibrary)
+    .set({
+      projectId: input.ProjectId != null ? cleanNullable(input.ProjectId) : existing.ProjectId,
+      nickname:
+        input.Nickname != null ? normalizeNickname(input.Nickname, existing.Nickname ?? existing.Id) : existing.Nickname,
+      calibration: mergeCalibration(existing, input),
+      updatedAtUtc: new Date(),
+    })
+    .where(and(eq(floorplanLibrary.id, id), eq(floorplanLibrary.userId, userId)))
+    .returning();
+  if (!row) throw new FloorplanNotFoundError("Floorplan not found.");
+  return toItem(row);
 }
 
 export async function deleteForUser(userId: string, id: string): Promise<boolean> {
   if (!userId?.trim() || !id?.trim()) return false;
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) return false;
-
-  const existing = toItem(snapshot.id, snapshot.data()!);
-  if (existing.UserId !== userId) return false;
-
-  await ref.delete();
-  return true;
+  const deleted = await getDb()
+    .delete(floorplanLibrary)
+    .where(and(eq(floorplanLibrary.id, id), eq(floorplanLibrary.userId, userId)))
+    .returning({ id: floorplanLibrary.id });
+  return deleted.length > 0;
 }

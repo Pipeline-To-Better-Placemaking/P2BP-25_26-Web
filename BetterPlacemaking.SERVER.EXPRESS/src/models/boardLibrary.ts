@@ -5,12 +5,10 @@
  * created it (there is no project scoping or sharing for this resource).
  */
 
-import type { Timestamp } from "firebase-admin/firestore";
-
 export type BoardType = "charuco" | "aruco";
 export type BoardUnits = "mm" | "cm" | "in";
 
-/** Firestore doc shape for the `board_library` collection - PascalCase, unchanged from the ASP.NET server. */
+/** API shape of a `board_library` row - PascalCase, unchanged from the ASP.NET server (mapped from snake_case columns in the service). */
 export interface BoardLibraryDoc {
   UserId: string;
   Type: string;
@@ -25,7 +23,7 @@ export interface BoardLibraryDoc {
   SquareSizeMm?: number | null;
   MarkerSizeMm: number;
   PreviewSvg: string;
-  CreatedAtUtc: Timestamp;
+  CreatedAtUtc: Date;
 }
 
 export interface BoardLibraryItem extends BoardLibraryDoc {
@@ -79,6 +77,6 @@ export function toBoardLibraryItemDto(item: BoardLibraryItem): BoardLibraryItemD
     SquareSizeMm: item.SquareSizeMm ?? null,
     MarkerSizeMm: item.MarkerSizeMm,
     PreviewSvg: item.PreviewSvg,
-    CreatedAtUtc: item.CreatedAtUtc.toDate().toISOString(),
+    CreatedAtUtc: item.CreatedAtUtc.toISOString(),
   };
 }

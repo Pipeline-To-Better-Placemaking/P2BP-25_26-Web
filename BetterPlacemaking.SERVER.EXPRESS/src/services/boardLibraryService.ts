@@ -1,5 +1,6 @@
-import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
+import { and, desc, eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { boardLibrary } from "../db/schema/index.js";
 import type {
   BoardLibraryDoc,
   BoardLibraryItem,
@@ -7,8 +8,6 @@ import type {
   BoardUnits,
   SaveBoardLibraryItemDto,
 } from "../models/boardLibrary.js";
-
-const COLLECTION = "board_library";
 
 /** Ported verbatim from BoardLibraryService.DictionaryMaxMarkerId. */
 const DICTIONARY_MAX_MARKER_ID: Record<string, number> = {
@@ -23,38 +22,70 @@ const DICTIONARY_MAX_MARKER_ID: Record<string, number> = {
 /** Mirrors the ArgumentException thrown by BoardLibraryService's validation helpers; routes map this to 400. */
 export class BoardLibraryValidationError extends Error {}
 
-function toItem(id: string, data: FirebaseFirestore.DocumentData): BoardLibraryItem {
-  return { Id: id, ...(data as BoardLibraryDoc) };
+function toItem(row: typeof boardLibrary.$inferSelect): BoardLibraryItem {
+  return {
+    Id: row.id,
+    UserId: row.userId,
+    Type: row.type,
+    Nickname: row.nickname,
+    Dictionary: row.dictionary,
+    Units: row.units,
+    Cols: row.cols,
+    Rows: row.rows,
+    MarkerId: row.markerId,
+    SquareSize: row.squareSize,
+    MarkerSize: row.markerSize,
+    SquareSizeMm: row.squareSizeMm,
+    MarkerSizeMm: row.markerSizeMm,
+    PreviewSvg: row.previewSvg,
+    CreatedAtUtc: row.createdAtUtc,
+  };
+}
+
+function toRow(doc: BoardLibraryDoc): Omit<typeof boardLibrary.$inferInsert, "id"> {
+  return {
+    userId: doc.UserId,
+    type: doc.Type,
+    nickname: doc.Nickname,
+    dictionary: doc.Dictionary,
+    units: doc.Units,
+    cols: doc.Cols ?? null,
+    rows: doc.Rows ?? null,
+    markerId: doc.MarkerId ?? null,
+    squareSize: doc.SquareSize ?? null,
+    markerSize: doc.MarkerSize,
+    squareSizeMm: doc.SquareSizeMm ?? null,
+    markerSizeMm: doc.MarkerSizeMm,
+    previewSvg: doc.PreviewSvg,
+    createdAtUtc: doc.CreatedAtUtc,
+  };
 }
 
 export async function listForUser(userId: string): Promise<BoardLibraryItem[]> {
   if (!userId?.trim()) return [];
-  const db = getDb();
-  const snapshot = await db.collection(COLLECTION).where("UserId", "==", userId).get();
-  return snapshot.docs
-    .map((doc) => toItem(doc.id, doc.data()))
-    .sort((a, b) => b.CreatedAtUtc.toMillis() - a.CreatedAtUtc.toMillis());
+  const rows = await getDb()
+    .select()
+    .from(boardLibrary)
+    .where(eq(boardLibrary.userId, userId))
+    .orderBy(desc(boardLibrary.createdAtUtc));
+  return rows.map(toItem);
 }
 
 export async function getByIdForUser(userId: string, id: string): Promise<BoardLibraryItem | null> {
   if (!userId?.trim() || !id?.trim()) return null;
-  const db = getDb();
-  const doc = await db.collection(COLLECTION).doc(id).get();
-  if (!doc.exists) return null;
-
-  const item = toItem(doc.id, doc.data()!);
-  if (item.UserId !== userId) return null;
-  return item;
+  const [row] = await getDb()
+    .select()
+    .from(boardLibrary)
+    .where(and(eq(boardLibrary.id, id), eq(boardLibrary.userId, userId)));
+  return row ? toItem(row) : null;
 }
 
 export async function saveForUser(userId: string, dto: SaveBoardLibraryItemDto): Promise<BoardLibraryItem> {
   if (!userId?.trim()) throw new BoardLibraryValidationError("Missing user id.");
 
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc();
-  const doc = buildValidatedItem(userId, dto, Timestamp.now());
-  await ref.set(doc);
-  return toItem(ref.id, doc as FirebaseFirestore.DocumentData);
+  const doc = buildValidatedItem(userId, dto, new Date());
+  const [row] = await getDb().insert(boardLibrary).values(toRow(doc)).returning();
+  return toItem(row);
 }
 
 /** Returns null when the board doesn't exist or belongs to a different user - routes map that to 404. */
@@ -66,36 +97,30 @@ export async function updateForUser(
   if (!userId?.trim()) throw new BoardLibraryValidationError("Missing user id.");
   if (!id?.trim()) throw new BoardLibraryValidationError("id is required.");
 
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const existingSnap = await ref.get();
-  if (!existingSnap.exists) return null;
-
-  const existing = toItem(id, existingSnap.data()!);
-  if (existing.UserId !== userId) return null;
+  const existing = await getByIdForUser(userId, id);
+  if (!existing) return null;
 
   const doc = buildValidatedItem(userId, dto, existing.CreatedAtUtc);
-  await ref.set(doc);
-  return toItem(id, doc as FirebaseFirestore.DocumentData);
+  const [row] = await getDb()
+    .update(boardLibrary)
+    .set(toRow(doc))
+    .where(and(eq(boardLibrary.id, id), eq(boardLibrary.userId, userId)))
+    .returning();
+  return row ? toItem(row) : null;
 }
 
 export async function deleteForUser(userId: string, id: string): Promise<boolean> {
   if (!userId?.trim() || !id?.trim()) return false;
 
-  const db = getDb();
-  const ref = db.collection(COLLECTION).doc(id);
-  const existingSnap = await ref.get();
-  if (!existingSnap.exists) return false;
-
-  const existing = toItem(id, existingSnap.data()!);
-  if (existing.UserId !== userId) return false;
-
-  await ref.delete();
-  return true;
+  const deleted = await getDb()
+    .delete(boardLibrary)
+    .where(and(eq(boardLibrary.id, id), eq(boardLibrary.userId, userId)))
+    .returning({ id: boardLibrary.id });
+  return deleted.length > 0;
 }
 
 /** Ported from BoardLibraryService.BuildValidatedItem - normalizes/validates the whole payload, throwing BoardLibraryValidationError on failure. */
-function buildValidatedItem(userId: string, dto: SaveBoardLibraryItemDto, createdAtUtc: Timestamp): BoardLibraryDoc {
+function buildValidatedItem(userId: string, dto: SaveBoardLibraryItemDto, createdAtUtc: Date): BoardLibraryDoc {
   const type = normalizeBoardType(dto.Type);
   const dictionary = normalizeDictionary(dto.Dictionary);
   const units = normalizeUnits(dto.Units);

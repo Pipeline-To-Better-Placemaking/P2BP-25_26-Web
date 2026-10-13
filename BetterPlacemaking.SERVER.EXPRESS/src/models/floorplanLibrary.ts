@@ -2,7 +2,7 @@
  * Ported from BetterPlacemaking.SERVER/Models/FloorplanLibraryItem.cs and
  * Models/Dtos/FloorplanLibraryDtos.cs.
  *
- * Firestore cannot store an array of arrays directly, so - exactly like the
+ * Reference points are stored flattened (jsonb) - exactly like the
  * ASP.NET model's `ReferencePointsFlat` property - calibration reference
  * points are persisted flattened ([x0, y0, x1, y1]) and reconstructed into
  * [x, y] pairs when building the wire DTO.
@@ -17,7 +17,7 @@ export interface FloorplanCalibrationDoc {
   CalibratedAtUtc: string;
 }
 
-/** Firestore doc shape for the `floorplan_library` collection. */
+/** API shape of a `floorplan_library` row (calibration is stored as jsonb; timestamps surface as ISO strings). */
 export interface FloorplanLibraryItemDoc {
   UserId?: string | null;
   ProjectId?: string | null;
