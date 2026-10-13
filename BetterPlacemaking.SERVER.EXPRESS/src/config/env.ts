@@ -39,6 +39,7 @@ export const env = {
   databaseUrl: optional("DATABASE_URL"),
   supabaseUrl: optional("SUPABASE_URL"),
   supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
+  supabaseStorageBucket: optional("SUPABASE_STORAGE_BUCKET", "media") as string,
 
   jwtKey: required("JWT_KEY"),
   jwtIssuer: required("JWT_ISSUER"),
@@ -79,8 +80,8 @@ export const env = {
   trackingScaleX: optionalFloat("TRACKING_SCALE_X", 1),
   trackingScaleZ: optionalFloat("TRACKING_SCALE_Z", 1),
 
-  // --- GCS (signed URLs for media upload/download), mirrors appsettings.json "Gcs" section ---
-  gcsBucketName: required("GCS_BUCKET_NAME"),
+  // --- Signed URL TTL (name kept from the GCS era); bucket is SUPABASE_STORAGE_BUCKET above ---
+  gcsBucketName: optional("GCS_BUCKET_NAME"), // legacy; unused once on Supabase Storage
   gcsUrlTtlMinutes: optionalInt("GCS_URL_TTL_MINUTES", 10080),
 
   // --- RplidarScan (mirrors appsettings.json "RplidarScan" section) ---

@@ -1,16 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
-
-const getSignedUrl = vi.fn(async (opts: { action: "read" | "write" }) => {
-  return [`https://storage.googleapis.com/fake-bucket/signed?action=${opts.action}`];
-});
-const file = vi.fn(() => ({ getSignedUrl }));
-
-vi.mock("../config/storage.js", () => ({
-  getStorage: () => ({ bucket: () => ({ file }) }),
-  getBucket: () => ({ file }),
-}));
+import { createFakeStorage } from "../test/fakeStorage.js";
 
 // cloudStorageRouter isn't wired into app.ts yet (that happens in a follow-up step once every
 // ported resource lands), so these tests build a minimal app around the router directly rather
@@ -32,13 +23,14 @@ function authHeader(): string {
   return `Bearer ${token}`;
 }
 
+let storage: ReturnType<typeof createFakeStorage>;
+
 beforeEach(() => {
-  getSignedUrl.mockClear();
-  file.mockClear();
+  storage = createFakeStorage();
 });
 
 describe("POST /api/cloud-storage/request-upload", () => {
-  it("returns a signed PUT URL for a sanitized object path when authenticated", async () => {
+  it("returns a signed upload URL for a sanitized object path when authenticated", async () => {
     const app = buildApp();
     const res = await request(app)
       .post("/api/cloud-storage/request-upload")
@@ -47,9 +39,9 @@ describe("POST /api/cloud-storage/request-upload", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.PathFromRoot).toBe("projects/proj-1/scans/raw scan.ply");
-    expect(res.body.SignedUrl).toContain("action=write");
+    expect(res.body.SignedUrl).toContain("/object/upload/sign/");
     expect(res.body.ExpiresAt).toBeTruthy();
-    expect(file).toHaveBeenCalledWith("projects/proj-1/scans/raw scan.ply");
+    expect(storage.bucket.createSignedUploadUrl).toHaveBeenCalledWith("projects/proj-1/scans/raw scan.ply", { upsert: true });
   });
 
   it("rejects requests without a valid bearer token", async () => {
@@ -59,7 +51,8 @@ describe("POST /api/cloud-storage/request-upload", () => {
       .send({ PathFromRoot: "projects/proj-1/scans", FileName: "raw scan", Extension: "ply", SizeBytes: 1024 });
 
     expect(res.status).toBe(401);
-    expect(getSignedUrl).not.toHaveBeenCalled();
+    expect(storage.bucket.createSignedUploadUrl).not.toHaveBeenCalled();
+    expect(storage.bucket.createSignedUrl).not.toHaveBeenCalled();
   });
 
   it("rejects a non-positive SizeBytes with 400", async () => {
@@ -74,7 +67,7 @@ describe("POST /api/cloud-storage/request-upload", () => {
 });
 
 describe("POST /api/cloud-storage/request-download", () => {
-  it("returns a signed GET URL with a forced-download disposition when authenticated", async () => {
+  it("returns a signed download URL with a forced-download disposition when authenticated", async () => {
     const app = buildApp();
     const res = await request(app)
       .post("/api/cloud-storage/request-download")
@@ -83,9 +76,11 @@ describe("POST /api/cloud-storage/request-download", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.PathFromRoot).toBe("projects/proj-1/scans/raw scan.ply");
-    expect(res.body.SignedUrl).toContain("action=read");
-    expect(getSignedUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "read", responseDisposition: expect.stringContaining("raw scan.ply") }),
+    expect(res.body.SignedUrl).toContain("/object/sign/");
+    expect(storage.bucket.createSignedUrl).toHaveBeenCalledWith(
+      "projects/proj-1/scans/raw scan.ply",
+      expect.any(Number),
+      { download: "raw scan.ply" },
     );
   });
 
@@ -96,6 +91,7 @@ describe("POST /api/cloud-storage/request-download", () => {
       .send({ PathFromRoot: "projects/proj-1/scans/raw scan.ply" });
 
     expect(res.status).toBe(401);
-    expect(getSignedUrl).not.toHaveBeenCalled();
+    expect(storage.bucket.createSignedUploadUrl).not.toHaveBeenCalled();
+    expect(storage.bucket.createSignedUrl).not.toHaveBeenCalled();
   });
 });
