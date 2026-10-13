@@ -1,3 +1,6 @@
+import { eq, sql } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { visualizerSessions } from "../db/schema/index.js";
 import type { GalleryGeometry, LidarPoint3D, Mesh, MeshGenerationRequest, ScannerUploadRequest } from "../models/visualizer.js";
 import { meshFaceCount, meshVertexCount } from "../models/visualizer.js";
 import { extractPointCloudFromObj, parseObjFile, parsePlyStream, parseXyzFiles } from "./visualizerParserService.js";
@@ -31,10 +34,40 @@ import { createMeshFromPointCloud, createWatertightMesh, exportMeshToObj, optimi
 
 // ─── In-memory session state ────────────────────────────────────────────────
 
-let currentPoints: LidarPoint3D[] = [];
-let currentMesh: Mesh | null = null;
-/** Mirrors VisualizerController's `_sessionRevision` - incremented whenever the session cloud is replaced or cleared. */
-let sessionRevision = 0;
+// Persisted in the single `visualizer_sessions` row (id "global") instead of module-level
+// variables, so the session survives serverless instances. `revision` mirrors
+// VisualizerController's `_sessionRevision` - incremented whenever the session cloud is replaced
+// or cleared.
+const SESSION_ID = "global";
+
+interface Session {
+  points: LidarPoint3D[];
+  mesh: Mesh | null;
+  revision: number;
+}
+
+async function loadSession(): Promise<Session> {
+  const [row] = await getDb().select().from(visualizerSessions).where(eq(visualizerSessions.id, SESSION_ID));
+  if (!row) return { points: [], mesh: null, revision: 0 };
+  const points = row.points as LidarPoint3D[];
+  // jsonb round-trips Dates as ISO strings; restore them so callers see what they always saw.
+  for (const p of points) {
+    if (typeof p.Timestamp === "string") p.Timestamp = new Date(p.Timestamp);
+  }
+  return { points, mesh: (row.mesh as Mesh | null) ?? null, revision: row.revision };
+}
+
+/** Replace the session cloud + mesh and bump the revision atomically. */
+async function replaceSession(points: LidarPoint3D[], mesh: Mesh | null): Promise<void> {
+  const values = { points, pointCount: points.length, mesh, updatedAt: new Date() };
+  await getDb()
+    .insert(visualizerSessions)
+    .values({ id: SESSION_ID, revision: 1, ...values })
+    .onConflictDoUpdate({
+      target: visualizerSessions.id,
+      set: { ...values, revision: sql`${visualizerSessions.revision} + 1` },
+    });
+}
 
 // ─── Error types (route handlers map these to the exact BadRequest bodies the C# actions returned) ───
 
@@ -69,30 +102,32 @@ export class NoValidPointsError extends Error {
 // ─── Basic accessors ─────────────────────────────────────────────────────────
 
 /** Mirrors VisualizerController.GetPoints. */
-export function getPoints(): LidarPoint3D[] {
-  return currentPoints;
+export async function getPoints(): Promise<LidarPoint3D[]> {
+  return (await loadSession()).points;
 }
 
 /** Mirrors VisualizerController.GetPointsMeta / PointsMetaResponse. */
-export function getPointsMeta(): { PointCount: number; Revision: number } {
-  return { PointCount: currentPoints.length, Revision: sessionRevision };
+export async function getPointsMeta(): Promise<{ PointCount: number; Revision: number }> {
+  const [row] = await getDb()
+    .select({ pointCount: visualizerSessions.pointCount, revision: visualizerSessions.revision })
+    .from(visualizerSessions)
+    .where(eq(visualizerSessions.id, SESSION_ID));
+  return { PointCount: row?.pointCount ?? 0, Revision: row?.revision ?? 0 };
 }
 
 /** Mirrors VisualizerController.GetRoomGeometry / ExportGeometryJson's shared geometry calc. */
-export function getGeometry(): GalleryGeometry {
-  return calculateFullGeometry(currentPoints);
+export async function getGeometry(): Promise<GalleryGeometry> {
+  return calculateFullGeometry((await loadSession()).points);
 }
 
 /** Mirrors the mesh half of VisualizerController's session state, for direct inspection (e.g. tests). */
-export function getCurrentMesh(): Mesh | null {
-  return currentMesh;
+export async function getCurrentMesh(): Promise<Mesh | null> {
+  return (await loadSession()).mesh;
 }
 
 /** Mirrors VisualizerController.ClearPoints. */
-export function clearPoints(): void {
-  currentPoints = [];
-  currentMesh = null;
-  sessionRevision++;
+export async function clearPoints(): Promise<void> {
+  await replaceSession([], null);
 }
 
 /**
@@ -100,8 +135,8 @@ export function clearPoints(): void {
  * `GET /from-scan` to read this session's point cloud without exposing the mutable live array.
  * Returns a defensive copy, matching the original's `new List<LidarPoint3D>(_currentPoints)`.
  */
-export function snapshotPointsForRplidar(): LidarPoint3D[] {
-  return [...currentPoints];
+export async function snapshotPointsForRplidar(): Promise<LidarPoint3D[]> {
+  return [...(await loadSession()).points];
 }
 
 // ─── Shared "replace the session cloud, best-effort (re)generate a mesh" step ───
@@ -114,9 +149,8 @@ export function snapshotPointsForRplidar(): LidarPoint3D[] {
  * tryIngestFromScanDocument TODO stub for why that caller isn't wired up in this port). Returns
  * the newly (or not) generated mesh, same as each of those callers needs for its response body.
  */
-export function replacePoints(points: LidarPoint3D[], meshFailureContext = ""): Mesh | null {
-  currentPoints = points;
-  currentMesh = null;
+export async function replacePoints(points: LidarPoint3D[], meshFailureContext = ""): Promise<Mesh | null> {
+  let currentMesh: Mesh | null = null;
 
   if (points.length >= 3) {
     try {
@@ -128,7 +162,7 @@ export function replacePoints(points: LidarPoint3D[], meshFailureContext = ""): 
     }
   }
 
-  sessionRevision++;
+  await replaceSession(points, currentMesh);
   return currentMesh;
 }
 
@@ -163,7 +197,7 @@ function toHex2(value: number): string {
  * Caller (visualizer.routes.ts) is responsible for the `request.Points` empty-check, which the
  * original does as a plain-string BadRequest before this logic ever runs.
  */
-export function uploadScannerData(request: ScannerUploadRequest): UploadSummary {
+export async function uploadScannerData(request: ScannerUploadRequest): Promise<UploadSummary> {
   const convertFromMm = request.ConvertFromMillimeters ?? true;
   const scaleFactor = convertFromMm ? 0.1 : 1.0;
 
@@ -191,16 +225,16 @@ export function uploadScannerData(request: ScannerUploadRequest): UploadSummary 
     };
   });
 
-  const mesh = replacePoints(points, " from scanner upload");
+  const mesh = await replacePoints(points, " from scanner upload");
   return summarize(points, mesh, "Point cloud uploaded successfully.");
 }
 
 /** Mirrors VisualizerController.UploadObjFile's parse + session-replace logic (file I/O is the route's concern - see visualizer.routes.ts). */
-export function loadFromObj(content: string): { vertexCount: number; faceCount: number; pointCloudCount: number } {
+export async function loadFromObj(content: string): Promise<{ vertexCount: number; faceCount: number; pointCloudCount: number }> {
   const meshData = parseObjFile(content);
   const pointCloud = extractPointCloudFromObj(content);
 
-  replacePoints(pointCloud, " from OBJ");
+  await replacePoints(pointCloud, " from OBJ");
 
   return {
     vertexCount: meshData.Vertices.length,
@@ -215,31 +249,31 @@ export function loadFromObj(content: string): { vertexCount: number; faceCount: 
  * payload to a temp file first, since parseXyzFiles's signature (unlike the OBJ/PLY parsers)
  * reads from disk, not from a content string - see visualizerParserService.ts's file header.
  */
-export function loadFromXyzFiles(
+export async function loadFromXyzFiles(
   filePathA: string,
   filePathB: string | null | undefined,
   sensorId: string | null | undefined,
   units: string,
-): UploadSummary {
-  const points = parseXyzFiles(filePathA, filePathB, sensorId, units);
+): Promise<UploadSummary> {
+  const points = await parseXyzFiles(filePathA, filePathB, sensorId, units);
 
   if (points.length === 0) {
     throw new NoValidPointsError("No valid points found in .xyz files");
   }
 
-  const mesh = replacePoints(points, " from .xyz upload");
+  const mesh = await replacePoints(points, " from .xyz upload");
   return summarize(points, mesh, "Point cloud loaded from .xyz files.");
 }
 
 /** Mirrors VisualizerController.UploadPlyFile's parse + session-replace logic. */
-export function loadFromPly(content: string, maxPoints: number): UploadSummary {
+export async function loadFromPly(content: string, maxPoints: number): Promise<UploadSummary> {
   const points = parsePlyStream(content, undefined, maxPoints);
 
   if (points.length === 0) {
     throw new NoValidPointsError("No valid points found in PLY file");
   }
 
-  const mesh = replacePoints(points, " from PLY");
+  const mesh = await replacePoints(points, " from PLY");
   return summarize(points, mesh, "Point cloud loaded from PLY file.");
 }
 
@@ -254,7 +288,10 @@ export function loadFromPly(content: string, maxPoints: number): UploadSummary {
  * `catch (Exception ex) { return BadRequest($"Error generating mesh: {ex.Message}"); }` wrapping
  * everything else.
  */
-export function generateMesh(request: MeshGenerationRequest | undefined): string {
+export async function generateMesh(request: MeshGenerationRequest | undefined): Promise<string> {
+  const session = await loadSession();
+  const currentMesh = session.mesh;
+  const currentPoints = session.points;
   const targetMeshPoints = request?.TargetMeshPoints ?? 20000;
   const alphaValue = request?.AlphaValue ?? 30.0;
   const smoothingIterations = request?.SmoothingIterations ?? 5;
@@ -287,6 +324,9 @@ export function generateMesh(request: MeshGenerationRequest | undefined): string
     throw new NoFacesGeneratedError();
   }
 
-  currentMesh = mesh;
+  await getDb()
+    .update(visualizerSessions)
+    .set({ mesh, updatedAt: new Date() })
+    .where(eq(visualizerSessions.id, SESSION_ID));
   return exportMeshToObj(mesh);
 }

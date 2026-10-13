@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import { getWorkstation } from "../workstation/index.js";
 import { getDb } from "../config/firebase.js";
 import { getBucket } from "../config/storage.js";
 import {
@@ -240,9 +240,10 @@ export function undistortPoint(
 // `outer[0] is List<object> ? outer[0] : outer` fallback) - not a general YAML parser.
 // ─────────────────────────────────────────────
 
-export function loadCameraIntrinsicsFromYamlFile(path: string): FusionCameraIntrinsics | null {
-  if (!fs.existsSync(path)) return null;
-  return parseIntrinsicsYaml(fs.readFileSync(path, "utf-8"));
+export async function loadCameraIntrinsicsFromYamlFile(path: string): Promise<FusionCameraIntrinsics | null> {
+  const ws = getWorkstation();
+  if (!(await ws.exists(path))) return null;
+  return parseIntrinsicsYaml(await ws.readText(path));
 }
 
 export function parseIntrinsicsYaml(yamlText: string): FusionCameraIntrinsics | null {

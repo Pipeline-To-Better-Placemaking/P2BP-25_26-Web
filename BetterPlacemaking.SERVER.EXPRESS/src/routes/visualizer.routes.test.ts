@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
+import { createTestDb } from "../test/db.js";
+import { setDbForTesting } from "../db/client.js";
 import { visualizerRouter } from "./visualizer.routes.js";
 import { errorHandler } from "../middleware/errorHandler.js";
 import { createUserToken } from "../services/tokenService.js";
@@ -13,8 +15,8 @@ import type { ScannerPoint } from "../models/visualizer.js";
  * builds a minimal app around the router directly, same pattern rplidar.routes.test.ts/
  * fusion.routes.test.ts use.
  *
- * visualizerSessionService holds module-level (process-wide) session state - the same singleton
- * across every test in this file - so `beforeEach` resets it for isolation.
+ * visualizerSessionService persists its session in one shared Postgres row (PGlite here) - so
+ * `beforeEach` resets it for isolation.
  */
 function buildApp() {
   const app = express();
@@ -76,8 +78,13 @@ function squareFixturePly(): string {
   ].join("\n");
 }
 
-beforeEach(() => {
-  sessionService.clearPoints();
+beforeAll(async () => {
+  await createTestDb();
+});
+afterAll(() => setDbForTesting(null));
+
+beforeEach(async () => {
+  await sessionService.clearPoints();
 });
 
 describe("GET /api/visualizer/points", () => {

@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import { getWorkstation } from "../workstation/index.js";
 import type { LidarPoint, LidarPoint3D, Point3D } from "../models/visualizer.js";
 
 /**
@@ -303,14 +303,15 @@ function unitsToCmFactor(units: string): number {
  * is skipped entirely (mirrors the original's `catch (FormatException) continue`
  * wrapping the whole per-line parse block, not just individual fields).
  */
-export function parseXyzFile(filePath: string, sensorId?: string | null, units = "mm"): LidarPoint3D[] {
-  if (!fs.existsSync(filePath)) {
+export async function parseXyzFile(filePath: string, sensorId?: string | null, units = "mm"): Promise<LidarPoint3D[]> {
+  const ws = getWorkstation();
+  if (!(await ws.exists(filePath))) {
     throw new Error(`XYZ file not found: ${filePath}`);
   }
 
   const factor = unitsToCmFactor(units);
   const points: LidarPoint3D[] = [];
-  const content = fs.readFileSync(filePath, "utf-8");
+  const content = await ws.readText(filePath);
   const lines = splitLines(content);
   const scanTimestamp = new Date();
 
@@ -372,20 +373,21 @@ export function parseXyzFile(filePath: string, sensorId?: string | null, units =
 }
 
 /** Mirrors XyzParserService.ParseXyzFiles - parse and merge two .xyz files (filePathB is optional). */
-export function parseXyzFiles(
+export async function parseXyzFiles(
   filePathA: string,
   filePathB?: string | null,
   sensorId?: string | null,
   units = "mm",
-): LidarPoint3D[] {
+): Promise<LidarPoint3D[]> {
+  const ws = getWorkstation();
   const points: LidarPoint3D[] = [];
 
-  if (fs.existsSync(filePathA)) {
-    points.push(...parseXyzFile(filePathA, sensorId, units));
+  if (await ws.exists(filePathA)) {
+    points.push(...(await parseXyzFile(filePathA, sensorId, units)));
   }
 
-  if (filePathB && fs.existsSync(filePathB)) {
-    points.push(...parseXyzFile(filePathB, sensorId, units));
+  if (filePathB && (await ws.exists(filePathB))) {
+    points.push(...(await parseXyzFile(filePathB, sensorId, units)));
   }
 
   return points;

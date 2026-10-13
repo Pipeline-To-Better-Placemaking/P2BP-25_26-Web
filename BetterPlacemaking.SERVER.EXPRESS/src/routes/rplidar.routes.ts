@@ -1,7 +1,7 @@
-import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import { env } from "../config/env.js";
+import { getWorkstation } from "../workstation/index.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import * as rplidarService from "../services/rplidarService.js";
 import * as visualizerSessionService from "../services/visualizerSessionService.js";
@@ -100,9 +100,9 @@ function parseIntQuery(value: unknown, fallback: number): number {
 }
 
 /** Mirrors RplidarController.ListScans. */
-rplidarRouter.get("/scans", (_req, res, next) => {
+rplidarRouter.get("/scans", async (_req, res, next) => {
   try {
-    const files = rplidarService.listScanFiles(scanDirectory());
+    const files = await rplidarService.listScanFiles(scanDirectory());
     res.status(200).json(files);
   } catch (err) {
     next(err);
@@ -116,15 +116,15 @@ rplidarRouter.get("/scans", (_req, res, next) => {
  * never called from GetScan) - ported faithfully, including that gap: the
  * params are parsed here too but have no effect on the response.
  */
-rplidarRouter.get("/scans/:filename", (req, res, next) => {
+rplidarRouter.get("/scans/:filename", async (req, res, next) => {
   try {
     const filePath = resolveScanFilePath(req.params.filename);
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !(await getWorkstation().exists(filePath))) {
       res.status(404).json({ error: `Scan file '${req.params.filename}' not found` });
       return;
     }
 
-    const result = rplidarService.parseXyzFile(filePath);
+    const result = await rplidarService.parseXyzFile(filePath);
     const maxFloorPoints = parseIntQuery(req.query.maxFloorPoints, 1500);
     const maxCeilingPoints = parseIntQuery(req.query.maxCeilingPoints, 800);
 
@@ -135,15 +135,15 @@ rplidarRouter.get("/scans/:filename", (req, res, next) => {
 });
 
 /** Mirrors RplidarController.GetObstacles. */
-rplidarRouter.get("/scans/:filename/obstacles", (req, res, next) => {
+rplidarRouter.get("/scans/:filename/obstacles", async (req, res, next) => {
   try {
     const filePath = resolveScanFilePath(req.params.filename);
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !(await getWorkstation().exists(filePath))) {
       res.status(404).json({ error: `Scan file '${req.params.filename}' not found` });
       return;
     }
 
-    const result = rplidarService.parseXyzFile(filePath);
+    const result = await rplidarService.parseXyzFile(filePath);
     res.status(200).json(result.Clusters);
   } catch (err) {
     next(err);
@@ -151,15 +151,15 @@ rplidarRouter.get("/scans/:filename/obstacles", (req, res, next) => {
 });
 
 /** Mirrors RplidarController.GetFloorplan. */
-rplidarRouter.get("/scans/:filename/floorplan", (req, res, next) => {
+rplidarRouter.get("/scans/:filename/floorplan", async (req, res, next) => {
   try {
     const filePath = resolveScanFilePath(req.params.filename);
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !(await getWorkstation().exists(filePath))) {
       res.status(404).json({ error: `Scan file '${req.params.filename}' not found` });
       return;
     }
 
-    const result = rplidarService.parseXyzFile(filePath);
+    const result = await rplidarService.parseXyzFile(filePath);
 
     let fMinX = Number.POSITIVE_INFINITY;
     let fMaxX = Number.NEGATIVE_INFINITY;
@@ -209,7 +209,7 @@ rplidarRouter.get("/scans/:filename/floorplan", (req, res, next) => {
  * raw base64 string or a data: URL (the prefix up to the first comma is
  * stripped), matching floorplanLibrary.routes.ts's convention.
  */
-rplidarRouter.post("/upload", (req, res, next) => {
+rplidarRouter.post("/upload", async (req, res, next) => {
   try {
     const { FileName, FileBase64 } = req.body ?? {};
 
@@ -224,7 +224,7 @@ rplidarRouter.post("/upload", (req, res, next) => {
     }
 
     const dir = scanDirectory();
-    fs.mkdirSync(dir, { recursive: true });
+    await getWorkstation().ensureDir(dir);
     const destPath = resolveScanFilePath(FileName);
     if (!destPath) {
       res.status(400).json({ error: "Invalid file name" });
@@ -234,9 +234,9 @@ rplidarRouter.post("/upload", (req, res, next) => {
     const commaIndex = FileBase64.indexOf(",");
     const base64Data = commaIndex >= 0 ? FileBase64.slice(commaIndex + 1) : FileBase64;
     const fileBuffer = Buffer.from(base64Data, "base64");
-    fs.writeFileSync(destPath, fileBuffer);
+    await getWorkstation().writeFile(destPath, fileBuffer);
 
-    const result = rplidarService.parseXyzFile(destPath);
+    const result = await rplidarService.parseXyzFile(destPath);
     res.status(200).json({
       filename: FileName,
       meta: result.Meta,
@@ -257,8 +257,14 @@ rplidarRouter.post("/upload", (req, res, next) => {
  * here). An empty snapshot takes the same 404 branch the original did (either because nothing
  * was ever loaded, or because DELETE /api/visualizer/points cleared it).
  */
-rplidarRouter.get("/from-scan", (req, res) => {
-  const points = visualizerSessionService.snapshotPointsForRplidar();
+rplidarRouter.get("/from-scan", async (req, res, next) => {
+  let points;
+  try {
+    points = await visualizerSessionService.snapshotPointsForRplidar();
+  } catch (err) {
+    next(err);
+    return;
+  }
   if (points.length === 0) {
     res.status(404).json({ error: "No point cloud loaded. Upload a scan or load a room in the 3D view first." });
     return;

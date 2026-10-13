@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import { env } from "../config/env.js";
+import { getWorkstation } from "../workstation/index.js";
 import type { LidarPoint3D, ObstacleCluster, Point2, Point3, RplidarScanResult, ScanFileInfo } from "../models/rplidar.js";
 
 /**
@@ -91,8 +91,8 @@ function maxObstacleDimensionConfig(): number {
 // ─── Public API ───
 
 /** Mirrors RplidarScanService.ParseXyzFile. */
-export function parseXyzFile(filePath: string): RplidarScanResult {
-  const content = fs.readFileSync(filePath, "utf-8");
+export async function parseXyzFile(filePath: string): Promise<RplidarScanResult> {
+  const content = await getWorkstation().readText(filePath);
   const lines = content.split(/\r\n|\r|\n/);
   // File.ReadAllLines does not yield a trailing empty entry for a file ending in
   // a newline; String.split does, so drop it to match.
@@ -161,16 +161,13 @@ export function parseFromPointCloud(points: LidarPoint3D[]): RplidarScanResult {
 }
 
 /** Mirrors RplidarController.ListScans's directory listing (kept in the service since it's filesystem I/O, matching trackingService.ts's convention). */
-export function listScanFiles(directory: string): ScanFileInfo[] {
-  if (!fs.existsSync(directory)) return [];
+export async function listScanFiles(directory: string): Promise<ScanFileInfo[]> {
+  const ws = getWorkstation();
+  if (!(await ws.exists(directory))) return [];
 
-  const files = fs
-    .readdirSync(directory)
-    .filter((f) => f.toLowerCase().endsWith(".xyz"))
-    .map((f) => {
-      const stat = fs.statSync(`${directory}/${f}`);
-      return { filename: f, sizeBytes: stat.size, modified: stat.mtime.toISOString() };
-    });
+  const files = (await ws.listStats(directory))
+    .filter((f) => f.name.toLowerCase().endsWith(".xyz"))
+    .map((f) => ({ filename: f.name, sizeBytes: f.size, modified: new Date(f.mtimeMs).toISOString() }));
 
   files.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
   return files;
