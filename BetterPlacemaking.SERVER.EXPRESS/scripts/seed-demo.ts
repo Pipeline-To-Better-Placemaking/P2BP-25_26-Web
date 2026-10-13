@@ -1,27 +1,26 @@
-// Seeds a local Firestore EMULATOR through the running Express API so the app has something to show.
-// Creates (idempotently): a verified SuperAdmin user, one project, one device. Emulator only - never run against real Firestore.
+import "dotenv/config";
+import { eq } from "drizzle-orm";
+import { getDb } from "../src/db/client.js";
+import { userGlobalRoles, users } from "../src/db/schema/index.js";
+
+// Seeds demo data through the running Express API plus the database in DATABASE_URL.
+// Creates (idempotently): a verified SuperAdmin user, one project, one device.
+// Use a dev/throwaway database - never run this against production.
 //
-//   1. npx firebase-tools emulators:start --only firestore --project better-placemaking-vision
-//   2. npm run dev                     (API on http://localhost:5200)
-//   3. FIRESTORE_EMULATOR_HOST=localhost:8080 node scripts/seed-demo.mjs
+//   1. npm run db:migrate && npm run db:seed-roles     (DATABASE_URL / DATABASE_DIRECT_URL in .env)
+//   2. npm run dev                                     (API on http://localhost:5200)
+//   3. npm run db:seed-demo
 //
 // Login afterwards: demo@example.com / DemoPass123!
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-
-if (!process.env.FIRESTORE_EMULATOR_HOST) {
-  console.error("Refusing to run: FIRESTORE_EMULATOR_HOST is not set (this script must only touch the emulator).");
-  process.exit(1);
-}
 
 const API = process.env.SEED_API ?? "http://localhost:5200";
 const email = "demo@example.com";
 const password = "DemoPass123!";
 
-const json = async (path, opts = {}) => {
+const json = async (path: string, opts: RequestInit = {}) => {
   const res = await fetch(API + path, { ...opts, headers: { "Content-Type": "application/json", ...(opts.headers ?? {}) } });
   const text = await res.text();
-  let body;
+  let body: any;
   try {
     body = JSON.parse(text);
   } catch {
@@ -30,22 +29,25 @@ const json = async (path, opts = {}) => {
   return { status: res.status, body };
 };
 
-initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? "better-placemaking-vision" });
-const db = getFirestore();
+const db = getDb();
 
 const reg = await json("/api/register", { method: "POST", body: JSON.stringify({ FirstName: "Demo", LastName: "Admin", Email: email, Password: password }) });
-let userId = reg.body?.User?.Id;
+let userId: string | undefined = reg.body?.User?.Id;
 if (!userId) {
-  const snap = await db.collection("users").where("Email", "==", email).limit(1).get();
-  userId = snap.docs[0]?.id;
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  userId = existing?.id;
   console.log("user already existed:", userId);
 } else {
   console.log("registered:", userId);
 }
+if (!userId) throw new Error("could not register or find the demo user: " + JSON.stringify(reg));
 
 // No self-serve admin bootstrap exists, so verify the email and grant SuperAdmin directly.
-await db.collection("users").doc(userId).set({ EmailVerified: true, EmailVerificationToken: null }, { merge: true });
-await db.collection("user_global_roles").doc(userId).set({ roles: ["SuperAdmin"] }, { merge: true });
+await db.update(users).set({ emailVerified: true, emailVerificationToken: null }).where(eq(users.id, userId));
+await db
+  .insert(userGlobalRoles)
+  .values({ userId, roles: ["SuperAdmin"] })
+  .onConflictDoUpdate({ target: userGlobalRoles.userId, set: { roles: ["SuperAdmin"], updatedAt: new Date() } });
 
 const login = await json("/api/login/authenticate", { method: "POST", body: JSON.stringify({ email, password }) });
 const token = login.body?.Token;
@@ -53,7 +55,7 @@ if (!token) throw new Error("login failed: " + JSON.stringify(login));
 const auth = { Authorization: `Bearer ${token}` };
 
 const projects = await json("/api/project", { headers: auth });
-let project = Array.isArray(projects.body) ? projects.body.find((p) => p.Title === "Demo Plaza") : null;
+let project = Array.isArray(projects.body) ? projects.body.find((p: any) => p.Title === "Demo Plaza") : null;
 if (!project) {
   project = (
     await json("/api/project", {
@@ -76,3 +78,5 @@ if (!Array.isArray(devices.body) || devices.body.length === 0) {
 }
 
 console.log(JSON.stringify({ email, password, projectId: project.Id }));
+
+process.exit(0);
