@@ -1,17 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
-import { Timestamp } from "firebase-admin/firestore";
-import { FakeFirestore } from "../test/fakeFirestore.js";
-
-const fake = new FakeFirestore();
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
+import { and, eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { devices, projects, scans } from "../db/schema/index.js";
+import type { Db } from "../db/client.js";
 
 // Not wired into app.ts yet (another migration step mounts it), so the test builds a
 // minimal app around the router directly - same middleware stack app.ts uses.
 const { scanDeviceRouter } = await import("./scanDevice.routes.js");
 const { computeApiKeyHash } = await import("../middleware/requireDeviceApiKey.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
+
+let db: Db;
+
+beforeEach(async () => {
+  db = await createTestDb();
+  await db.insert(projects).values({ id: "proj-1", title: "P" });
+});
 
 function buildApp() {
   const app = express();
@@ -21,19 +27,30 @@ function buildApp() {
   return app;
 }
 
-// Each device gets its own API key (derived from its id) - ApiKeyHash lookups query
-// across the whole shared `devices` collection, so reusing one key for every seeded
-// device would make the lookup ambiguous across tests in this file.
+// Each device gets its own API key (derived from its id).
 function apiKeyFor(id: string): string {
   return `test-api-key-${id}`;
 }
 
 async function seedDevice(id: string, projectId: string | null) {
-  await fake.collection("devices").doc(id).set({
-    ProjectId: projectId,
-    Name: "Jetson Unit",
-    ApiKeyHash: computeApiKeyHash(apiKeyFor(id)),
+  await db.insert(devices).values({
+    id,
+    projectId,
+    name: "Jetson Unit",
+    apiKeyHash: computeApiKeyHash(apiKeyFor(id)),
   });
+}
+
+async function seedScan(deviceId: string, id: string, values: Partial<typeof scans.$inferInsert>) {
+  await db.insert(scans).values({ id, projectId: "proj-1", deviceId, ...values });
+}
+
+async function peekScan(deviceId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(scans)
+    .where(and(eq(scans.id, id), eq(scans.projectId, "proj-1"), eq(scans.deviceId, deviceId)));
+  return row;
 }
 
 function deviceAuthHeader(id: string): string {
@@ -60,18 +77,9 @@ describe("device API key auth (requireDeviceApiKey)", () => {
 describe("GET /api/scan-device/next-pending", () => {
   it("returns the oldest pending scan for the device's project", async () => {
     await seedDevice("dev-2", "proj-1");
-    await fake
-      .collection("projects/proj-1/devices/dev-2/scans")
-      .doc("scan-newer")
-      .set({ Status: "pending", CreatedAt: Timestamp.fromDate(new Date("2026-01-02T00:00:00Z")) });
-    await fake
-      .collection("projects/proj-1/devices/dev-2/scans")
-      .doc("scan-older")
-      .set({ Status: "pending", CreatedAt: Timestamp.fromDate(new Date("2026-01-01T00:00:00Z")) });
-    await fake
-      .collection("projects/proj-1/devices/dev-2/scans")
-      .doc("scan-running")
-      .set({ Status: "running", CreatedAt: Timestamp.fromDate(new Date("2025-12-31T00:00:00Z")) });
+    await seedScan("dev-2", "scan-newer", { status: "pending", createdAt: new Date("2026-01-02T00:00:00Z") });
+    await seedScan("dev-2", "scan-older", { status: "pending", createdAt: new Date("2026-01-01T00:00:00Z") });
+    await seedScan("dev-2", "scan-running", { status: "running", createdAt: new Date("2025-12-31T00:00:00Z") });
 
     const app = buildApp();
     const res = await request(app)
@@ -108,10 +116,7 @@ describe("GET /api/scan-device/next-pending", () => {
 describe("PATCH /api/scan-device/:scanId/status", () => {
   it("updates the scan's Status and stamps StartedAt when transitioning to running", async () => {
     await seedDevice("dev-5", "proj-1");
-    await fake
-      .collection("projects/proj-1/devices/dev-5/scans")
-      .doc("scan-1")
-      .set({ Status: "pending" });
+    await seedScan("dev-5", "scan-1", { status: "pending" });
 
     const app = buildApp();
     const res = await request(app)
@@ -121,17 +126,14 @@ describe("PATCH /api/scan-device/:scanId/status", () => {
 
     expect(res.status).toBe(204);
 
-    const stored = fake.peek("projects/proj-1/devices/dev-5/scans/scan-1");
-    expect(stored?.Status).toBe("running");
-    expect(stored?.StartedAt).toBeTruthy();
+    const stored = await peekScan("dev-5", "scan-1");
+    expect(stored?.status).toBe("running");
+    expect(stored?.startedAt).toBeTruthy();
   });
 
   it("stamps FinishedAt and stores ObjUrl when transitioning to complete", async () => {
     await seedDevice("dev-6", "proj-1");
-    await fake
-      .collection("projects/proj-1/devices/dev-6/scans")
-      .doc("scan-2")
-      .set({ Status: "running" });
+    await seedScan("dev-6", "scan-2", { status: "running" });
 
     const app = buildApp();
     const res = await request(app)
@@ -141,10 +143,10 @@ describe("PATCH /api/scan-device/:scanId/status", () => {
 
     expect(res.status).toBe(204);
 
-    const stored = fake.peek("projects/proj-1/devices/dev-6/scans/scan-2");
-    expect(stored?.Status).toBe("complete");
-    expect(stored?.ObjUrl).toBe("gs://bucket/scan-2.obj");
-    expect(stored?.FinishedAt).toBeTruthy();
+    const stored = await peekScan("dev-6", "scan-2");
+    expect(stored?.status).toBe("complete");
+    expect(stored?.objUrl).toBe("gs://bucket/scan-2.obj");
+    expect(stored?.finishedAt).toBeTruthy();
   });
 
   it("returns 404 for a scan that does not exist", async () => {
@@ -161,10 +163,7 @@ describe("PATCH /api/scan-device/:scanId/status", () => {
 
   it("rejects requests without a valid device API key", async () => {
     await seedDevice("dev-8", "proj-1");
-    await fake
-      .collection("projects/proj-1/devices/dev-8/scans")
-      .doc("scan-3")
-      .set({ Status: "pending" });
+    await seedScan("dev-8", "scan-3", { status: "pending" });
 
     const app = buildApp();
     const res = await request(app)
