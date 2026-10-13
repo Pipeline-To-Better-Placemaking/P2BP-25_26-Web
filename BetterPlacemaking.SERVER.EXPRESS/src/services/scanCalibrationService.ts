@@ -1,9 +1,10 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "../config/firebase.js";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { scanCalibrationRecords } from "../db/schema/index.js";
+import { getWorkstation } from "../workstation/index.js";
 import * as scanDeviceService from "./scanDeviceService.js";
 import type {
   CombineCloudInput,
@@ -85,11 +86,12 @@ function parseXyzPoints(raw: string): XyzPoint[] {
 }
 
 /** Mirrors CombineCloudsService.ReadXyz (file-existence check + read + parse). */
-function readXyz(filePath: string): XyzPoint[] {
-  if (!fs.existsSync(filePath)) {
+async function readXyz(filePath: string): Promise<XyzPoint[]> {
+  const ws = getWorkstation();
+  if (!(await ws.exists(filePath))) {
     throw new ScanCalibrationNotFoundError(`XYZ file not found: ${filePath}`);
   }
-  const raw = fs.readFileSync(filePath, "utf8");
+  const raw = await ws.readText(filePath);
   return parseXyzPoints(raw);
 }
 
@@ -147,12 +149,13 @@ function formatLocalTimestamp(date: Date): string {
  * (the route also checks this first, same as the old controller does before calling
  * the service - this is a redundant defense-in-depth check here too, not new logic).
  */
-export function combineClouds(inputs: CombineCloudInput[], outputDirectory: string, outputName: string | null | undefined): CombinedScanResult {
+export async function combineClouds(inputs: CombineCloudInput[], outputDirectory: string, outputName: string | null | undefined): Promise<CombinedScanResult> {
   if (!inputs || inputs.length < 2) {
     throw new ScanCalibrationValidationError("At least two scans are required to combine point clouds.");
   }
 
-  fs.mkdirSync(outputDirectory, { recursive: true });
+  const ws = getWorkstation();
+  await ws.ensureDir(outputDirectory);
 
   const safeBaseName = !outputName || !outputName.trim() ? "calibrationScan" : outputName.trim();
   const fileName = `${safeBaseName}_${formatLocalTimestamp(new Date())}.xyz`;
@@ -160,7 +163,7 @@ export function combineClouds(inputs: CombineCloudInput[], outputDirectory: stri
 
   const lines: string[] = [];
   for (const cloud of inputs) {
-    const points = readXyz(cloud.XyzFilePath);
+    const points = await readXyz(cloud.XyzFilePath);
     const transformed = manipulatePoints(points, cloud.XTranslation, cloud.YTranslation, cloud.Theta);
 
     for (const p of transformed) {
@@ -184,7 +187,7 @@ export function combineClouds(inputs: CombineCloudInput[], outputDirectory: stri
   }
 
   // Every source line ends with WriteLine, including the last - trailing newline mirrors that.
-  fs.writeFileSync(outputPath, lines.length > 0 ? lines.join("\n") + "\n" : "");
+  await ws.writeFile(outputPath, lines.length > 0 ? lines.join("\n") + "\n" : "");
 
   return { OutputFilePath: outputPath, OutputFileName: fileName };
 }
@@ -196,11 +199,12 @@ export function combineClouds(inputs: CombineCloudInput[], outputDirectory: stri
  * Throws the same InvalidOperationException-equivalent as the source when no valid
  * point survives filtering.
  */
-export function buildPreviewPoints(xyzFilePath: string, threshold = -2.75, useThreshold = true): { points: PreviewPoint[]; maxDistance: number } {
-  if (!fs.existsSync(xyzFilePath)) {
+export async function buildPreviewPoints(xyzFilePath: string, threshold = -2.75, useThreshold = true): Promise<{ points: PreviewPoint[]; maxDistance: number }> {
+  const ws = getWorkstation();
+  if (!(await ws.exists(xyzFilePath))) {
     throw new ScanCalibrationNotFoundError(`XYZ file not found: ${xyzFilePath}`);
   }
-  const raw = fs.readFileSync(xyzFilePath, "utf8");
+  const raw = await ws.readText(xyzFilePath);
 
   const points: PreviewPoint[] = [];
   let maxDistance = 0;
@@ -378,8 +382,8 @@ export function renderPreviewPng(points: PreviewPoint[], maxDistance: number): B
 }
 
 /** Mirrors ScanFlattenPreviewService.RenderPreviewPng end to end. */
-export function renderPreviewPngFromFile(xyzFilePath: string, threshold = -2.75, useThreshold = true): Buffer {
-  const { points, maxDistance } = buildPreviewPoints(xyzFilePath, threshold, useThreshold);
+export async function renderPreviewPngFromFile(xyzFilePath: string, threshold = -2.75, useThreshold = true): Promise<Buffer> {
+  const { points, maxDistance } = await buildPreviewPoints(xyzFilePath, threshold, useThreshold);
   return renderPreviewPng(points, maxDistance);
 }
 
@@ -394,7 +398,10 @@ export function renderPreviewPngFromFile(xyzFilePath: string, threshold = -2.75,
  * way.
  */
 export async function resolveLocalXyzPath(projectId: string, deviceId: string, scanId: string): Promise<string> {
-  const scan = await scanDeviceService.getScan(projectId, deviceId, scanId);
+  // Calibration scans (uploaded/combined) live in scan_calibration_records; ordinary device
+  // scans still resolve through scanDeviceService.
+  const record = await getCalibrationRecord(projectId, deviceId, scanId);
+  const scan = record ? { ObjUrl: record.objUrl } : await scanDeviceService.getScan(projectId, deviceId, scanId);
   if (!scan) {
     throw new ScanCalibrationNotFoundError(`Scan not found: ${scanId}`);
   }
@@ -405,17 +412,18 @@ export async function resolveLocalXyzPath(projectId: string, deviceId: string, s
   }
 
   // Uploaded calibration files and combined files are already local paths.
-  if (fs.existsSync(objUrl)) {
+  const ws = getWorkstation();
+  if (await ws.exists(objUrl)) {
     return objUrl;
   }
 
   // Normal scan files may be signed URLs.
   if (/^https?:\/\//i.test(objUrl)) {
     const tempDir = path.join(os.tmpdir(), "bp-scan-calibration");
-    fs.mkdirSync(tempDir, { recursive: true });
+    await ws.ensureDir(tempDir);
 
     const localPath = path.join(tempDir, `${scanId}.xyz`);
-    if (fs.existsSync(localPath)) {
+    if (await ws.exists(localPath)) {
       return localPath;
     }
 
@@ -424,18 +432,25 @@ export async function resolveLocalXyzPath(projectId: string, deviceId: string, s
       throw new Error(`Failed to download ${objUrl}: ${response.status} ${response.statusText}`);
     }
     const buffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(localPath, buffer);
+    await ws.writeFile(localPath, buffer);
     return localPath;
   }
 
   throw new ScanCalibrationValidationError(`Scan ${scanId} ObjUrl is neither a valid local file nor an absolute URL: ${objUrl}`);
 }
 
-function scansCollection(projectId: string, deviceId: string) {
-  // Same direct-Firestore-access rationale as scanDeviceService.ts's identical
-  // private helper: ScanCalibrationController talks to FirestoreDb directly too,
-  // rather than through ScanService, for this subtree.
-  return getDb().collection("projects").doc(projectId).collection("devices").doc(deviceId).collection("scans");
+async function getCalibrationRecord(projectId: string, deviceId: string, scanId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(scanCalibrationRecords)
+    .where(
+      and(
+        eq(scanCalibrationRecords.id, scanId),
+        eq(scanCalibrationRecords.projectId, projectId),
+        eq(scanCalibrationRecords.deviceId, deviceId),
+      ),
+    );
+  return row ?? null;
 }
 
 /** Mirrors ScanCalibrationController.UploadXyz's docRef.SetAsync call. */
@@ -446,16 +461,19 @@ export async function createUploadedCalibrationScanDoc(
   localPath: string,
   originalFileName: string,
 ): Promise<void> {
-  const now = Timestamp.now();
-  await scansCollection(projectId, deviceId).doc(scanId).set({
-    Status: "complete",
-    CreatedAt: now,
-    StartedAt: now,
-    FinishedAt: now,
-    ObjUrl: localPath,
-    Error: null,
-    IsUploadedCalibrationScan: true,
-    OriginalFileName: originalFileName,
+  const now = new Date();
+  await getDb().insert(scanCalibrationRecords).values({
+    id: scanId,
+    projectId,
+    deviceId,
+    status: "complete",
+    createdAt: now,
+    startedAt: now,
+    finishedAt: now,
+    objUrl: localPath,
+    error: null,
+    isUploadedCalibrationScan: true,
+    originalFileName,
   });
 }
 
@@ -467,24 +485,27 @@ export async function createCombinedCalibrationScanDoc(
   combined: CombinedScanResult,
   request: CombineScansRequest,
 ): Promise<void> {
-  const now = Timestamp.now();
-  await scansCollection(projectId, deviceId)
-    .doc(scanId)
-    .set({
-      Status: "complete",
-      CreatedAt: now,
-      StartedAt: now,
-      FinishedAt: now,
+  const now = new Date();
+  await getDb()
+    .insert(scanCalibrationRecords)
+    .values({
+      id: scanId,
+      projectId,
+      deviceId,
+      status: "complete",
+      createdAt: now,
+      startedAt: now,
+      finishedAt: now,
       // Same storage style as uploaded calibration scans for now. Later this can
-      // become a Firebase Storage signed URL.
-      ObjUrl: combined.OutputFilePath,
-      Error: null,
-      IsCombinedCalibrationScan: true,
-      OriginalFileName: combined.OutputFileName,
-      OutputName: request.OutputName ?? null,
-      ScalarMmPerPixel: request.ScalarMmPerPixel ?? null,
-      SourceScanIds: request.Items.map((i) => i.ScanId),
-      CombineTransforms: request.Items.map((i) => ({
+      // become a Supabase Storage signed URL.
+      objUrl: combined.OutputFilePath,
+      error: null,
+      isCombinedCalibrationScan: true,
+      originalFileName: combined.OutputFileName,
+      outputName: request.OutputName ?? null,
+      scalarMmPerPixel: request.ScalarMmPerPixel ?? null,
+      sourceScanIds: request.Items.map((i) => i.ScanId),
+      combineTransforms: request.Items.map((i) => ({
         ScanId: i.ScanId,
         XTranslation: i.XTranslation,
         YTranslation: i.YTranslation,

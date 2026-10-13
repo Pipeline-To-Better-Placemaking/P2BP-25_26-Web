@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Router } from "express";
 import type { Response } from "express";
+import { getWorkstation } from "../workstation/index.js";
 import * as scanCalibrationService from "../services/scanCalibrationService.js";
 import { bindCombineScansRequest } from "../models/scanCalibration.js";
 import type { CombineCloudInput } from "../models/scanCalibration.js";
@@ -50,7 +50,7 @@ scanCalibrationRouter.get("/:projectId/:deviceId/:scanId/preview", async (req, r
   try {
     const { projectId, deviceId, scanId } = req.params;
     const xyzPath = await scanCalibrationService.resolveLocalXyzPath(projectId, deviceId, scanId);
-    const png = scanCalibrationService.renderPreviewPngFromFile(xyzPath);
+    const png = await scanCalibrationService.renderPreviewPngFromFile(xyzPath);
 
     // Matches `return File(png, "image/png");`
     res.status(200).contentType("image/png").send(png);
@@ -89,12 +89,12 @@ scanCalibrationRouter.post("/:projectId/:deviceId/upload-xyz", async (req, res) 
     }
 
     const tempDir = path.join(os.tmpdir(), "bp-uploaded-xyz");
-    fs.mkdirSync(tempDir, { recursive: true });
+    await getWorkstation().ensureDir(tempDir);
 
     // Guid.NewGuid().ToString("N") - 32 hex characters, no dashes.
     const scanId = randomUUID().replace(/-/g, "");
     const localPath = path.join(tempDir, `${scanId}.xyz`);
-    fs.writeFileSync(localPath, contents);
+    await getWorkstation().writeFile(localPath, contents);
 
     await scanCalibrationService.createUploadedCalibrationScanDoc(
       projectId,
@@ -121,7 +121,7 @@ scanCalibrationRouter.get("/:projectId/:deviceId/:scanId/download", async (req, 
     const { projectId, deviceId, scanId } = req.params;
     const localPath = await scanCalibrationService.resolveLocalXyzPath(projectId, deviceId, scanId);
 
-    if (!fs.existsSync(localPath)) {
+    if (!(await getWorkstation().exists(localPath))) {
       res.status(404).send("File not found.");
       return;
     }
@@ -134,7 +134,7 @@ scanCalibrationRouter.get("/:projectId/:deviceId/:scanId/download", async (req, 
       .status(200)
       .contentType("application/octet-stream")
       .setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.send(fs.readFileSync(localPath));
+    res.send(await getWorkstation().readBytes(localPath));
   } catch (err) {
     problem(res, err);
   }
@@ -167,9 +167,9 @@ scanCalibrationRouter.post("/:projectId/:deviceId/combine", async (req, res) => 
     }
 
     const outputDirectory = path.join(os.tmpdir(), "bp-combined-scans");
-    fs.mkdirSync(outputDirectory, { recursive: true });
+    await getWorkstation().ensureDir(outputDirectory);
 
-    const combined = scanCalibrationService.combineClouds(inputs, outputDirectory, request.OutputName);
+    const combined = await scanCalibrationService.combineClouds(inputs, outputDirectory, request.OutputName);
 
     const scanId = randomUUID().replace(/-/g, "");
     await scanCalibrationService.createCombinedCalibrationScanDoc(
