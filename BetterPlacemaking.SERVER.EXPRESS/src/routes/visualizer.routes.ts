@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { getWorkstation } from "../workstation/index.js";
 import * as sessionService from "../services/visualizerSessionService.js";
 import * as geometryService from "../services/visualizerGeometryService.js";
 import { Delaunay3DNotSupportedError } from "../services/visualizerMeshService.js";
@@ -90,6 +90,13 @@ function tryNotifyScanCompleted(req: Request, projectId: unknown): void {
   }
 }
 
+/** Express 4 does not catch rejected promises from async handlers; forward them to errorHandler. */
+function safe(fn: (req: Request, res: Response) => Promise<void>) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    fn(req, res).catch(next);
+  };
+}
+
 /** Decodes a raw-base64-or-data-URL string to a Buffer, matching floorplanLibrary.routes.ts/rplidar.routes.ts's convention. */
 function decodeBase64(base64: string): Buffer {
   const commaIndex = base64.indexOf(",");
@@ -102,17 +109,18 @@ function visualizerTempUploadsDir(): string {
 }
 
 /** Writes a decoded upload to a uniquely-named temp file, mirroring the original's `{Guid.NewGuid()}_{file.FileName}` naming under its uploads dir. */
-function writeTempUpload(fileName: string, base64: string): string {
+async function writeTempUpload(fileName: string, base64: string): Promise<string> {
+  const ws = getWorkstation();
   const dir = visualizerTempUploadsDir();
-  fs.mkdirSync(dir, { recursive: true });
+  await ws.ensureDir(dir);
   const destPath = path.join(dir, `${randomUUID()}_${fileName}`);
-  fs.writeFileSync(destPath, decodeBase64(base64));
+  await ws.writeFile(destPath, decodeBase64(base64));
   return destPath;
 }
 
 /** Shared `_currentPoints.Count == 0` guard used by export/{xyz,xyz-rgb,txt,pts,ply} - export/{obj,csv} have no such guard in the original. */
-function requireNonEmptyPoints(res: Response): LidarPoint3D[] | null {
-  const points = sessionService.getPoints();
+async function requireNonEmptyPoints(res: Response): Promise<LidarPoint3D[] | null> {
+  const points = await sessionService.getPoints();
   if (points.length === 0) {
     res.status(400).json("No point cloud loaded.");
     return null;
@@ -123,17 +131,17 @@ function requireNonEmptyPoints(res: Response): LidarPoint3D[] | null {
 // ─── Point Cloud Endpoints ───────────────────────────────────────────────────
 
 /** Mirrors VisualizerController.GetPoints. */
-visualizerRouter.get("/points", (_req, res) => {
-  res.status(200).json(sessionService.getPoints());
-});
+visualizerRouter.get("/points", safe(async (_req, res) => {
+  res.status(200).json(await sessionService.getPoints());
+}));
 
 /** Mirrors VisualizerController.GetPointsMeta. */
-visualizerRouter.get("/points-meta", (_req, res) => {
-  res.status(200).json(sessionService.getPointsMeta());
-});
+visualizerRouter.get("/points-meta", safe(async (_req, res) => {
+  res.status(200).json(await sessionService.getPointsMeta());
+}));
 
 /** Mirrors VisualizerController.UploadScannerData. */
-visualizerRouter.post("/scanner/upload", (req, res) => {
+visualizerRouter.post("/scanner/upload", async (req, res) => {
   const body = req.body as ScannerUploadRequest | undefined;
   if (!body?.Points || body.Points.length === 0) {
     res.status(400).json("No points provided");
@@ -141,7 +149,7 @@ visualizerRouter.post("/scanner/upload", (req, res) => {
   }
 
   try {
-    const result = sessionService.uploadScannerData(body);
+    const result = await sessionService.uploadScannerData(body);
     tryNotifyScanCompleted(req, req.query.projectId);
     res.status(200).json(result);
   } catch (err) {
@@ -150,7 +158,7 @@ visualizerRouter.post("/scanner/upload", (req, res) => {
 });
 
 /** Mirrors VisualizerController.UploadObjFile. */
-visualizerRouter.post("/upload/obj", (req, res, next) => {
+visualizerRouter.post("/upload/obj", async (req, res, next) => {
   try {
     const { FileName, FileBase64 } = (req.body ?? {}) as { FileName?: string; FileBase64?: string };
 
@@ -165,7 +173,7 @@ visualizerRouter.post("/upload/obj", (req, res, next) => {
 
     const content = decodeBase64(FileBase64).toString("utf-8");
     const fileName = `${randomUUID()}_${FileName}`;
-    const result = sessionService.loadFromObj(content);
+    const result = await sessionService.loadFromObj(content);
 
     tryNotifyScanCompleted(req, req.query.projectId);
     res.status(200).json({ fileName, ...result });
@@ -179,7 +187,7 @@ visualizerRouter.post("/upload/obj", (req, res, next) => {
 });
 
 /** Mirrors VisualizerController.UploadXyzFile. */
-visualizerRouter.post("/upload/xyz", (req, res) => {
+visualizerRouter.post("/upload/xyz", async (req, res) => {
   const { FileNameA, FileBase64A, FileNameB, FileBase64B, Units } = (req.body ?? {}) as {
     FileNameA?: string;
     FileBase64A?: string;
@@ -200,8 +208,8 @@ visualizerRouter.post("/upload/xyz", (req, res) => {
   let filePathB: string | null = null;
 
   try {
-    if (hasA) filePathA = writeTempUpload(FileNameA ?? "a.xyz", FileBase64A as string);
-    if (hasB) filePathB = writeTempUpload(FileNameB ?? "b.xyz", FileBase64B as string);
+    if (hasA) filePathA = await writeTempUpload(FileNameA ?? "a.xyz", FileBase64A as string);
+    if (hasB) filePathB = await writeTempUpload(FileNameB ?? "b.xyz", FileBase64B as string);
 
     const unitsVal = typeof Units === "string" && Units.toLowerCase() === "m" ? "m" : "mm";
 
@@ -211,7 +219,7 @@ visualizerRouter.post("/upload/xyz", (req, res) => {
     // surrounding try/catch turns into a 400 `{ error }` response rather than a crash. Passing
     // `filePathA` through as-is (possibly null) reproduces that behavior via the catch below,
     // rather than special-casing a "fileA is required" rule the original never actually enforced.
-    const result = sessionService.loadFromXyzFiles(filePathA as string, filePathB, sensorId, unitsVal);
+    const result = await sessionService.loadFromXyzFiles(filePathA as string, filePathB, sensorId, unitsVal);
 
     tryNotifyScanCompleted(req, req.query.projectId);
     res.status(200).json(result);
@@ -223,8 +231,8 @@ visualizerRouter.post("/upload/xyz", (req, res) => {
     res.status(400).json({ error: (err as Error).message });
   } finally {
     try {
-      if (filePathA) fs.unlinkSync(filePathA);
-      if (filePathB) fs.unlinkSync(filePathB);
+      if (filePathA) await getWorkstation().remove(filePathA);
+      if (filePathB) await getWorkstation().remove(filePathB);
     } catch {
       // Best-effort cleanup, mirrors the original's empty `catch { }` around file deletion.
     }
@@ -232,7 +240,7 @@ visualizerRouter.post("/upload/xyz", (req, res) => {
 });
 
 /** Mirrors VisualizerController.UploadPlyFile. */
-visualizerRouter.post("/upload/ply", (req, res) => {
+visualizerRouter.post("/upload/ply", async (req, res) => {
   const { FileName, FileBase64 } = (req.body ?? {}) as { FileName?: string; FileBase64?: string };
 
   if (!FileBase64 || typeof FileBase64 !== "string") {
@@ -249,7 +257,7 @@ visualizerRouter.post("/upload/ply", (req, res) => {
 
   try {
     const content = decodeBase64(FileBase64).toString("utf-8");
-    const result = sessionService.loadFromPly(content, maxPoints);
+    const result = await sessionService.loadFromPly(content, maxPoints);
 
     tryNotifyScanCompleted(req, req.query.projectId);
     res.status(200).json(result);
@@ -265,17 +273,17 @@ visualizerRouter.post("/upload/ply", (req, res) => {
 // ─── Geometry Endpoints ──────────────────────────────────────────────────────
 
 /** Mirrors VisualizerController.GetRoomGeometry. */
-visualizerRouter.get("/geometry/room", (_req, res) => {
-  res.status(200).json(sessionService.getGeometry());
-});
+visualizerRouter.get("/geometry/room", safe(async (_req, res) => {
+  res.status(200).json(await sessionService.getGeometry());
+}));
 
 // ─── Mesh Endpoints ──────────────────────────────────────────────────────────
 
 /** Mirrors VisualizerController.GenerateMesh. */
-visualizerRouter.post("/geometry/mesh", (req, res) => {
+visualizerRouter.post("/geometry/mesh", async (req, res) => {
   try {
     const body = req.body as MeshGenerationRequest | undefined;
-    const content = sessionService.generateMesh(body);
+    const content = await sessionService.generateMesh(body);
     res.status(200).type("text/plain").send(content);
   } catch (err) {
     if (err instanceof sessionService.NoPointsAvailableError || err instanceof sessionService.NoFacesGeneratedError) {
@@ -296,58 +304,58 @@ visualizerRouter.post("/geometry/mesh", (req, res) => {
 // ─── Export Endpoints ────────────────────────────────────────────────────────
 
 /** Mirrors VisualizerController.ExportObj. */
-visualizerRouter.get("/export/obj", (_req, res) => {
-  res.status(200).type("text/plain").send(geometryService.exportPointCloudToObj(sessionService.getPoints()));
-});
+visualizerRouter.get("/export/obj", safe(async (_req, res) => {
+  res.status(200).type("text/plain").send(geometryService.exportPointCloudToObj(await sessionService.getPoints()));
+}));
 
 /** Mirrors VisualizerController.ExportCsv. */
-visualizerRouter.get("/export/csv", (_req, res) => {
-  res.status(200).type("text/csv").send(geometryService.exportToCsv(sessionService.getPoints()));
-});
+visualizerRouter.get("/export/csv", safe(async (_req, res) => {
+  res.status(200).type("text/csv").send(geometryService.exportToCsv(await sessionService.getPoints()));
+}));
 
 /** Mirrors VisualizerController.ExportXyz. */
-visualizerRouter.get("/export/xyz", (_req, res) => {
-  const points = requireNonEmptyPoints(res);
+visualizerRouter.get("/export/xyz", safe(async (_req, res) => {
+  const points = await requireNonEmptyPoints(res);
   if (!points) return;
   res.status(200).type("text/plain").send(geometryService.exportToXyz(points));
-});
+}));
 
 /** Mirrors VisualizerController.ExportXyzRgb. */
-visualizerRouter.get("/export/xyz-rgb", (_req, res) => {
-  const points = requireNonEmptyPoints(res);
+visualizerRouter.get("/export/xyz-rgb", safe(async (_req, res) => {
+  const points = await requireNonEmptyPoints(res);
   if (!points) return;
   res.status(200).type("text/plain").send(geometryService.exportToXyzRgb(points));
-});
+}));
 
 /** Mirrors VisualizerController.ExportTxt. */
-visualizerRouter.get("/export/txt", (_req, res) => {
-  const points = requireNonEmptyPoints(res);
+visualizerRouter.get("/export/txt", safe(async (_req, res) => {
+  const points = await requireNonEmptyPoints(res);
   if (!points) return;
   res.status(200).type("text/plain").send(geometryService.exportToTxt(points));
-});
+}));
 
 /** Mirrors VisualizerController.ExportPts. */
-visualizerRouter.get("/export/pts", (_req, res) => {
-  const points = requireNonEmptyPoints(res);
+visualizerRouter.get("/export/pts", safe(async (_req, res) => {
+  const points = await requireNonEmptyPoints(res);
   if (!points) return;
   res.status(200).type("text/plain").send(geometryService.exportToPts(points));
-});
+}));
 
 /** Mirrors VisualizerController.ExportPly. */
-visualizerRouter.get("/export/ply", (_req, res) => {
-  const points = requireNonEmptyPoints(res);
+visualizerRouter.get("/export/ply", safe(async (_req, res) => {
+  const points = await requireNonEmptyPoints(res);
   if (!points) return;
   res.status(200).type("text/plain").send(geometryService.exportToPly(points));
-});
+}));
 
 /** Mirrors VisualizerController.ExportGeometryJson. exportGeometryToJson already returns a serialized JSON string, so this sends it verbatim with the right Content-Type rather than res.json() (which would double-encode it as a JSON string literal). */
-visualizerRouter.get("/export/geometry/json", (_req, res) => {
-  const geometry = sessionService.getGeometry();
+visualizerRouter.get("/export/geometry/json", safe(async (_req, res) => {
+  const geometry = await sessionService.getGeometry();
   res.status(200).type("application/json").send(geometryService.exportGeometryToJson(geometry));
-});
+}));
 
 /** Mirrors VisualizerController.ClearPoints. */
-visualizerRouter.delete("/points", (_req, res) => {
-  sessionService.clearPoints();
+visualizerRouter.delete("/points", safe(async (_req, res) => {
+  await sessionService.clearPoints();
   res.status(200).json({ message: "Point cloud cleared." });
-});
+}));

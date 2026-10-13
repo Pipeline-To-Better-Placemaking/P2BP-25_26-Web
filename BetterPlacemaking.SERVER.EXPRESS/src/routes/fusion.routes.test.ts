@@ -1,15 +1,17 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { setDbForTesting, type Db } from "../db/client.js";
+import { fusionConfig, fusionRuns } from "../db/schema/index.js";
 
-const fake = new FakeFirestore();
+let db: Db;
 const hasGlobalPermission = vi.fn(async () => false);
 const hasProjectPermission = vi.fn(
   async (_userId: string, _role: string | undefined, projectId: string) => projectId === "proj-1",
 );
 
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 vi.mock("../authorization/authorizationService.js", () => ({
   hasGlobalPermission: (...args: unknown[]) => hasGlobalPermission(...(args as [string, string | undefined, string])),
   hasProjectPermission: (...args: unknown[]) =>
@@ -60,6 +62,54 @@ function flushMicrotasks(ms = 20): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Insert a legacy-shaped (PascalCase) doc into the matching Postgres table. */
+async function seed(col: "fusion_runs" | "fusion_config", id: string, d: Record<string, unknown>): Promise<void> {
+  if (col === "fusion_runs") {
+    await db.insert(fusionRuns).values({
+      id,
+      status: d.Status as string,
+      triggeredBy: d.TriggeredBy as string,
+      startedAtUnix: d.StartedAtUnix as number,
+      outputGcsPath: d.OutputGcsPath as string,
+      projectId: d.ProjectId as string,
+    });
+  } else {
+    await db.insert(fusionConfig).values({
+      id,
+      scheduledHourUtc: d.ScheduledHourUtc as number,
+      scheduledMinuteUtc: d.ScheduledMinuteUtc as number,
+      enabled: d.Enabled as boolean,
+      projectId: d.ProjectId as string,
+    });
+  }
+}
+
+async function peekRun(id: string) {
+  const [r] = await db.select().from(fusionRuns).where(eq(fusionRuns.id, id));
+  return r && {
+    Status: r.status,
+    ErrorMessage: r.errorMessage,
+    FromDateUnix: r.fromDateUnix,
+    ToDateUnix: r.toDateUnix,
+    OutputGcsPath: r.outputGcsPath,
+  };
+}
+
+async function peekConfig(id: string) {
+  const [r] = await db.select().from(fusionConfig).where(eq(fusionConfig.id, id));
+  return r && { ScheduledHourUtc: r.scheduledHourUtc, ProjectId: r.projectId };
+}
+
+beforeAll(async () => {
+  db = await createTestDb();
+});
+afterAll(() => setDbForTesting(null));
+
+beforeEach(async () => {
+  await db.delete(fusionRuns);
+  await db.delete(fusionConfig);
+});
+
 beforeEach(() => {
   runFusionEngineMock.mockClear();
   runFusionEngineMock.mockImplementation(async () => ({ success: true, message: "" }));
@@ -70,19 +120,19 @@ beforeEach(() => {
 
 describe("GET /api/fusion/history", () => {
   it("returns a project's runs sorted newest-first", async () => {
-    await fake.collection("fusion_runs").doc("run-old").set({
+    await seed("fusion_runs", "run-old", {
       Status: "success",
       TriggeredBy: "manual",
       ProjectId: "proj-1",
       StartedAtUnix: 1000,
     });
-    await fake.collection("fusion_runs").doc("run-new").set({
+    await seed("fusion_runs", "run-new", {
       Status: "running",
       TriggeredBy: "manual",
       ProjectId: "proj-1",
       StartedAtUnix: 2000,
     });
-    await fake.collection("fusion_runs").doc("other-project").set({
+    await seed("fusion_runs", "other-project", {
       Status: "success",
       TriggeredBy: "manual",
       ProjectId: "proj-other",
@@ -134,7 +184,7 @@ describe("POST /api/fusion/trigger", () => {
     // The mocked engine run resolves near-instantly, so by the time we inspect the doc the
     // background job (see triggerFusion in fusionService.ts) has already written its terminal
     // state - FromDateUnix/ToDateUnix set at creation survive the later partial `update()`.
-    const completed = fake.peek(`fusion_runs/${res.body.Id}`);
+    const completed = (await peekRun(res.body.Id));
     expect(completed?.FromDateUnix).toBe(1700000000);
     expect(completed?.ToDateUnix).toBe(1700003600);
     expect(completed?.Status).toBe("success");
@@ -152,7 +202,7 @@ describe("POST /api/fusion/trigger", () => {
 
     await flushMicrotasks();
 
-    const completed = fake.peek(`fusion_runs/${res.body.Id}`);
+    const completed = (await peekRun(res.body.Id));
     expect(completed?.Status).toBe("failed");
     expect(completed?.ErrorMessage).toBe("No track files found");
   });
@@ -188,13 +238,13 @@ describe("POST /api/fusion/trigger", () => {
 
 describe("DELETE /api/fusion/:runId", () => {
   it("deletes a run the caller is authorized for (via the run's own ProjectId)", async () => {
-    await fake.collection("fusion_runs").doc("run-del").set({ Status: "success", ProjectId: "proj-1" });
+    await seed("fusion_runs", "run-del", { Status: "success", ProjectId: "proj-1" });
 
     const app = buildApp();
     const res = await request(app).delete("/api/fusion/run-del").set("Authorization", authHeader());
 
     expect(res.status).toBe(204);
-    expect(fake.peek("fusion_runs/run-del")).toBeUndefined();
+    expect((await peekRun("run-del"))).toBeUndefined();
   });
 
   it("returns 404 for a run that does not exist", async () => {
@@ -204,7 +254,7 @@ describe("DELETE /api/fusion/:runId", () => {
   });
 
   it("returns 403 when the run belongs to a project the caller lacks Project.Scans.Delete on", async () => {
-    await fake.collection("fusion_runs").doc("run-other").set({ Status: "success", ProjectId: "proj-2" });
+    await seed("fusion_runs", "run-other", { Status: "success", ProjectId: "proj-2" });
 
     const app = buildApp();
     const res = await request(app).delete("/api/fusion/run-other").set("Authorization", authHeader());
@@ -212,7 +262,7 @@ describe("DELETE /api/fusion/:runId", () => {
   });
 
   it("returns 403 when the run has no ProjectId at all", async () => {
-    await fake.collection("fusion_runs").doc("run-orphan").set({ Status: "success" });
+    await seed("fusion_runs", "run-orphan", { Status: "success" });
 
     const app = buildApp();
     const res = await request(app).delete("/api/fusion/run-orphan").set("Authorization", authHeader());
@@ -243,25 +293,25 @@ describe("POST /api/fusion/:runId/cancel", () => {
     expect(cancelRes.status).toBe(202);
     expect(cancelRes.body).toEqual({ status: "cancelling" });
 
-    const stored = fake.peek(`fusion_runs/${runId}`);
+    const stored = (await peekRun(runId));
     expect(stored?.Status).toBe("failed");
     expect(stored?.ErrorMessage).toBe("Cancelled by user");
     expect(capturedSignal?.aborted).toBe(true);
   });
 
   it("returns 200 cancelled (stale) when the run is marked running but has no live registration", async () => {
-    await fake.collection("fusion_runs").doc("run-stale").set({ Status: "running", ProjectId: "proj-1" });
+    await seed("fusion_runs", "run-stale", { Status: "running", ProjectId: "proj-1" });
 
     const app = buildApp();
     const res = await request(app).post("/api/fusion/run-stale/cancel").set("Authorization", authHeader());
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: "cancelled" });
-    expect(fake.peek("fusion_runs/run-stale")?.Status).toBe("failed");
+    expect((await peekRun("run-stale"))?.Status).toBe("failed");
   });
 
   it("returns 409 when the run is not in a running state", async () => {
-    await fake.collection("fusion_runs").doc("run-done").set({ Status: "success", ProjectId: "proj-1" });
+    await seed("fusion_runs", "run-done", { Status: "success", ProjectId: "proj-1" });
 
     const app = buildApp();
     const res = await request(app).post("/api/fusion/run-done/cancel").set("Authorization", authHeader());
@@ -278,7 +328,7 @@ describe("POST /api/fusion/:runId/cancel", () => {
 
 describe("GET /api/fusion/:runId/download-url", () => {
   it("returns a signed download URL for a completed run", async () => {
-    await fake.collection("fusion_runs").doc("run-ok").set({
+    await seed("fusion_runs", "run-ok", {
       Status: "success",
       ProjectId: "proj-1",
       OutputGcsPath: "vision/tracks-fused/proj-1/fused_tracks-20250101.json",
@@ -295,7 +345,7 @@ describe("GET /api/fusion/:runId/download-url", () => {
   });
 
   it("returns 404 when the run has no output file yet", async () => {
-    await fake.collection("fusion_runs").doc("run-pending").set({ Status: "running", ProjectId: "proj-1" });
+    await seed("fusion_runs", "run-pending", { Status: "running", ProjectId: "proj-1" });
 
     const app = buildApp();
     const res = await request(app).get("/api/fusion/run-pending/download-url").set("Authorization", authHeader());
@@ -305,7 +355,7 @@ describe("GET /api/fusion/:runId/download-url", () => {
 
 describe("GET /api/fusion/:runId/download", () => {
   it("streams the fused output JSON as an attachment", async () => {
-    await fake.collection("fusion_runs").doc("run-dl").set({
+    await seed("fusion_runs", "run-dl", {
       Status: "success",
       ProjectId: "proj-1",
       OutputGcsPath: "vision/tracks-fused/proj-1/fused_tracks-20250101.json",
@@ -321,7 +371,7 @@ describe("GET /api/fusion/:runId/download", () => {
   });
 
   it("returns 404 when the run has no output file", async () => {
-    await fake.collection("fusion_runs").doc("run-nofile").set({ Status: "failed", ProjectId: "proj-1" });
+    await seed("fusion_runs", "run-nofile", { Status: "failed", ProjectId: "proj-1" });
 
     const app = buildApp();
     const res = await request(app).get("/api/fusion/run-nofile/download").set("Authorization", authHeader());
@@ -339,7 +389,7 @@ describe("GET /api/fusion/config", () => {
   });
 
   it("returns the stored config when a doc exists", async () => {
-    await fake.collection("fusion_config").doc("proj-1").set({
+    await seed("fusion_config", "proj-1", {
       ScheduledHourUtc: 3,
       ScheduledMinuteUtc: 30,
       Enabled: false,
@@ -377,7 +427,7 @@ describe("PUT /api/fusion/config", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ScheduledHourUtc: 5, ScheduledMinuteUtc: 45, Enabled: false, ProjectId: "proj-1" });
 
-    const stored = fake.peek("fusion_config/proj-1");
+    const stored = (await peekConfig("proj-1"));
     expect(stored?.ScheduledHourUtc).toBe(5);
     expect(stored?.ProjectId).toBe("proj-1");
   });

@@ -1,6 +1,6 @@
-import fs from "node:fs";
 import path from "node:path";
 import { env } from "../config/env.js";
+import { getWorkstation } from "../workstation/index.js";
 import type { ActiveTrackSummary, PathPoint, TrackingPath, TrackingPoint3D, TrackingPosition } from "../models/tracking.js";
 
 /**
@@ -14,8 +14,8 @@ import type { ActiveTrackSummary, PathPoint, TrackingPath, TrackingPoint3D, Trac
  * original's no-caching behavior.
  */
 
-function readLines(filePath: string): string[] {
-  const content = fs.readFileSync(filePath, "utf-8");
+async function readLines(filePath: string): Promise<string[]> {
+  const content = await getWorkstation().readText(filePath);
   const lines = content.split(/\r\n|\r|\n/);
   // File.ReadAllLines in .NET does not yield a trailing empty entry for a file
   // that ends with a newline; String.split does, so drop it to match.
@@ -110,13 +110,13 @@ function parsePositionLine(line: string): TrackingPosition | null {
 }
 
 /** Mirrors TrackingDataService.GetRecentPositions. */
-export function getRecentPositions(limit = 1000): TrackingPosition[] {
+export async function getRecentPositions(limit = 1000): Promise<TrackingPosition[]> {
   const csvPath = env.trackingPositionsCsv;
-  if (!csvPath || !fs.existsSync(csvPath)) {
+  if (!csvPath || !(await getWorkstation().exists(csvPath))) {
     return [];
   }
 
-  const lines = readLines(csvPath);
+  const lines = await readLines(csvPath);
   const startIndex = lines.length > 0 && lines[0].includes("global_id") ? 1 : 0;
   const endIndex = Math.max(startIndex, lines.length - limit);
 
@@ -149,9 +149,9 @@ function transformCameraToLidar(xGround: number, yGround: number): TrackingPoint
 }
 
 /** Mirrors LoadTrackFromJson - returns null (and logs) on any malformed track file, same as the original. */
-function loadTrackFromJson(filePath: string): TrackingPath | null {
+async function loadTrackFromJson(filePath: string): Promise<TrackingPath | null> {
   try {
-    const json = fs.readFileSync(filePath, "utf-8");
+    const json = await getWorkstation().readText(filePath);
     const root = JSON.parse(json) as {
       global_id: number;
       local_cam?: string | null;
@@ -216,35 +216,35 @@ function loadTrackFromJson(filePath: string): TrackingPath | null {
 }
 
 /** Mirrors TrackingDataService.GetAllTracks. */
-export function getAllTracks(): TrackingPath[] {
+export async function getAllTracks(): Promise<TrackingPath[]> {
   const tracksDir = env.trackingTracksDir;
-  if (!tracksDir || !fs.existsSync(tracksDir)) {
+  if (!tracksDir || !(await getWorkstation().exists(tracksDir))) {
     return [];
   }
 
-  const jsonFiles = fs.readdirSync(tracksDir).filter((f) => f.endsWith(".json"));
+  const jsonFiles = (await getWorkstation().listNames(tracksDir)).filter((f) => f.endsWith(".json"));
 
   const tracks: TrackingPath[] = [];
   for (const file of jsonFiles) {
-    const track = loadTrackFromJson(path.join(tracksDir, file));
+    const track = await loadTrackFromJson(path.join(tracksDir, file));
     if (track) tracks.push(track);
   }
   return tracks;
 }
 
 /** Mirrors TrackingDataService.GetTrackByGlobalId. */
-export function getTrackByGlobalId(globalId: number): TrackingPath | null {
-  const tracks = getAllTracks();
+export async function getTrackByGlobalId(globalId: number): Promise<TrackingPath | null> {
+  const tracks = await getAllTracks();
   return tracks.find((t) => t.GlobalId === globalId) ?? null;
 }
 
 /** Mirrors TrackingDataService.GetActiveTracks. */
-export function getActiveTracks(seconds = 30): ActiveTrackSummary[] {
+export async function getActiveTracks(seconds = 30): Promise<ActiveTrackSummary[]> {
   const cutoffTime = new Date(Date.now() - seconds * 1000);
-  const tracks = getAllTracks();
+  const tracks = await getAllTracks();
   const activeTracks = tracks.filter((t) => new Date(t.EndTime) >= cutoffTime);
 
-  const recentPositions = getRecentPositions(1000);
+  const recentPositions = await getRecentPositions(1000);
 
   const results: ActiveTrackSummary[] = [];
   for (const track of activeTracks) {

@@ -1,4 +1,6 @@
-import { getDb } from "../config/firebase.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/client.js";
+import { fusionConfig, fusionRuns } from "../db/schema/index.js";
 import { createSignedDownloadUrl } from "./cloudStorageService.js";
 import { runFusionEngine } from "./fusionEngineService.js";
 import {
@@ -25,8 +27,6 @@ import {
  * The config CRUD they would read from (GET/PUT /api/fusion/config) is fully ported.
  */
 
-const ColFusionRuns = "fusion_runs";
-const ColFusionConfig = "fusion_config";
 const DefaultConfigDocId = "default";
 
 function configDocIdFor(projectId: string | null | undefined): string {
@@ -50,8 +50,34 @@ function yyyymmddUtc(d: Date): string {
   return `${y}${m}${day}`;
 }
 
-function runsCollection() {
-  return getDb().collection(ColFusionRuns);
+type RunRow = typeof fusionRuns.$inferSelect;
+
+/** DB row -> the legacy PascalCase run shape (nulls preserved as Firestore stored them). */
+function rowToRun(r: RunRow): FusionRun {
+  return {
+    Id: r.id,
+    Status: r.status,
+    TriggeredBy: r.triggeredBy,
+    FromDateUnix: r.fromDateUnix,
+    ToDateUnix: r.toDateUnix,
+    StartedAtUnix: r.startedAtUnix,
+    CompletedAtUnix: r.completedAtUnix,
+    RecordsFused: r.recordsFused,
+    ErrorMessage: r.errorMessage,
+    OutputGcsPath: r.outputGcsPath,
+    ProjectId: r.projectId,
+  };
+}
+
+/** Partial update of a run row from the legacy field names. */
+async function updateRun(runId: string, patch: Partial<FusionRunDoc>): Promise<void> {
+  const set: Partial<typeof fusionRuns.$inferInsert> = {};
+  if (patch.Status !== undefined) set.status = patch.Status;
+  if (patch.ErrorMessage !== undefined) set.errorMessage = patch.ErrorMessage;
+  if (patch.CompletedAtUnix !== undefined) set.completedAtUnix = patch.CompletedAtUnix;
+  if (patch.RecordsFused !== undefined) set.recordsFused = patch.RecordsFused;
+  if (patch.OutputGcsPath !== undefined) set.outputGcsPath = patch.OutputGcsPath;
+  await getDb().update(fusionRuns).set(set).where(eq(fusionRuns.id, runId));
 }
 
 // ── Cancellation registry ──────────────────────────────────────────────────
@@ -104,8 +130,8 @@ export const fusionCancellationRegistry = new FusionCancellationRegistry();
  * thousands of runs.
  */
 export async function getHistory(projectId: string, limit = 50): Promise<FusionRunDto[]> {
-  const snap = await runsCollection().where("ProjectId", "==", projectId).get();
-  const runs = snap.docs.map((d) => toFusionRunDto({ Id: d.id, ...(d.data() as FusionRunDoc) }));
+  const rows = await getDb().select().from(fusionRuns).where(eq(fusionRuns.projectId, projectId));
+  const runs = rows.map((r) => toFusionRunDto(rowToRun(r)));
   return runs.sort((a, b) => (b.StartedAtUnix ?? 0) - (a.StartedAtUnix ?? 0)).slice(0, limit);
 }
 
@@ -113,9 +139,8 @@ export async function getHistory(projectId: string, limit = 50): Promise<FusionR
  * FusionController.GetAuthorizedRunAsync, which loads the run to discover its ProjectId before
  * checking the caller's permission on that project). */
 export async function getRun(runId: string): Promise<FusionRun | null> {
-  const snap = await runsCollection().doc(runId).get();
-  if (!snap.exists) return null;
-  return { Id: snap.id, ...(snap.data() as FusionRunDoc) };
+  const [row] = await getDb().select().from(fusionRuns).where(eq(fusionRuns.id, runId));
+  return row ? rowToRun(row) : null;
 }
 
 // ── Sweep stale / orphaned runs ─────────────────────────────────────────────
@@ -128,20 +153,19 @@ export async function getRun(runId: string): Promise<FusionRun | null> {
  */
 export async function sweepStaleRuns(): Promise<void> {
   const cutoffUnix = nowUnix() - (FUSION_TIMEOUT_MINUTES * 60 + 5 * 60); // +5 min grace buffer
-  const snap = await runsCollection().where("Status", "==", "running").get();
+  const rows = await getDb().select().from(fusionRuns).where(eq(fusionRuns.status, "running"));
 
   let swept = 0;
-  for (const doc of snap.docs) {
-    const run = doc.data() as FusionRunDoc;
-    if (typeof run.StartedAtUnix !== "number" || run.StartedAtUnix >= cutoffUnix) continue;
+  for (const run of rows) {
+    if (typeof run.startedAtUnix !== "number" || run.startedAtUnix >= cutoffUnix) continue;
 
-    await runsCollection().doc(doc.id).update({
+    await updateRun(run.id, {
       Status: "failed",
       ErrorMessage: "Run abandoned (process exited before completion — likely OOM, restart, or crash)",
       CompletedAtUnix: nowUnix(),
     });
     swept++;
-    console.warn(`Swept stale fusion run ${doc.id} → failed`);
+    console.warn(`Swept stale fusion run ${run.id} → failed`);
   }
 
   if (swept > 0) console.log(`Fusion stale-run sweep completed: ${swept} run(s) marked failed`);
@@ -151,7 +175,7 @@ export async function sweepStaleRuns(): Promise<void> {
 
 /** Ported from FusionService.DeleteRunAsync. */
 export async function deleteRun(runId: string): Promise<void> {
-  await runsCollection().doc(runId).delete();
+  await getDb().delete(fusionRuns).where(eq(fusionRuns.id, runId));
 }
 
 // ── Cancel a run ─────────────────────────────────────────────────────────
@@ -160,11 +184,9 @@ export type CancelResult = "cancelling" | "stale" | "not_running" | "not_found";
 
 /** Ported from FusionService.CancelRunAsync. */
 export async function cancelRun(runId: string): Promise<CancelResult> {
-  const ref = runsCollection().doc(runId);
-  const snap = await ref.get();
-  if (!snap.exists) return "not_found";
+  const run = await getRun(runId);
+  if (!run) return "not_found";
 
-  const run = snap.data() as FusionRunDoc;
   if (run.Status !== "running") return "not_running";
 
   if (fusionCancellationRegistry.tryCancel(runId)) {
@@ -172,7 +194,7 @@ export async function cancelRun(runId: string): Promise<CancelResult> {
     // task (triggerFusion below) will also write the same "failed" status when its catch block
     // observes the abort - that second write is a no-op (identical values); if the process dies
     // before that unwinds, we already have a correct terminal row.
-    await ref.update({
+    await updateRun(runId, {
       Status: "failed",
       ErrorMessage: "Cancelled by user",
       CompletedAtUnix: nowUnix(),
@@ -183,7 +205,7 @@ export async function cancelRun(runId: string): Promise<CancelResult> {
 
   // DB says running but no live AbortController - the previous process died mid-run. Flip the
   // row so the UI stops treating it as active.
-  await ref.update({
+  await updateRun(runId, {
     Status: "failed",
     ErrorMessage: "Cancelled by user (run was not active in this process)",
     CompletedAtUnix: nowUnix(),
@@ -216,9 +238,16 @@ export async function triggerFusion(
     ProjectId: projectId,
   };
 
-  const docRef = runsCollection().doc();
-  await docRef.set(runDoc);
-  const runId = docRef.id;
+  const runId = crypto.randomUUID();
+  await getDb().insert(fusionRuns).values({
+    id: runId,
+    status: runDoc.Status,
+    triggeredBy: runDoc.TriggeredBy,
+    fromDateUnix: runDoc.FromDateUnix,
+    toDateUnix: runDoc.ToDateUnix,
+    startedAtUnix: runDoc.StartedAtUnix,
+    projectId: runDoc.ProjectId,
+  });
 
   // Hard timeout on the whole run - when this fires, controller.signal is aborted, which
   // runFusionEngine observes at every checkpoint (same role as the linked timeout/user
@@ -257,7 +286,7 @@ export async function triggerFusion(
           ? `${folder}/fused_tracks-${fromStr}.json`
           : `${folder}/fused_tracks-${fromStr}_${toStr}.json`;
 
-      await docRef.update({
+      await updateRun(runId, {
         Status: "success",
         RecordsFused: 0,
         OutputGcsPath: outputKey,
@@ -270,7 +299,7 @@ export async function triggerFusion(
         const timedOut = reason === timeoutError;
         if (timedOut) {
           console.error(`Fusion ${runId} timed out after ${FUSION_TIMEOUT_MINUTES} minutes`);
-          await docRef.update({
+          await updateRun(runId, {
             Status: "failed",
             ErrorMessage: timeoutError.message,
             CompletedAtUnix: nowUnix(),
@@ -281,7 +310,7 @@ export async function triggerFusion(
           // terminal state synchronously when the cancel request came in - this write is the
           // same idempotent no-op the C# comment describes.
           console.warn(`Fusion ${runId} cancelled by user (marked failed)`);
-          await docRef.update({
+          await updateRun(runId, {
             Status: "failed",
             ErrorMessage: "Cancelled by user",
             CompletedAtUnix: nowUnix(),
@@ -290,7 +319,7 @@ export async function triggerFusion(
       } else {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Fusion ${runId} failed: ${message}`);
-        await docRef.update({
+        await updateRun(runId, {
           Status: "failed",
           ErrorMessage: message,
           CompletedAtUnix: nowUnix(),
@@ -331,18 +360,17 @@ export async function getDownloadUrl(runId: string): Promise<string | null> {
  */
 export async function getConfig(projectId?: string | null): Promise<FusionConfigDto> {
   const docId = configDocIdFor(projectId);
-  const snap = await getDb().collection(ColFusionConfig).doc(docId).get();
+  const [cfg] = await getDb().select().from(fusionConfig).where(eq(fusionConfig.id, docId));
 
-  if (!snap.exists) {
+  if (!cfg) {
     return { ScheduledHourUtc: 21, ScheduledMinuteUtc: 0, Enabled: true, ProjectId: projectId ?? undefined };
   }
 
-  const cfg = snap.data() as FusionConfigDoc;
   return {
-    ScheduledHourUtc: cfg.ScheduledHourUtc,
-    ScheduledMinuteUtc: cfg.ScheduledMinuteUtc,
-    Enabled: cfg.Enabled,
-    ProjectId: cfg.ProjectId ?? projectId ?? undefined,
+    ScheduledHourUtc: cfg.scheduledHourUtc,
+    ScheduledMinuteUtc: cfg.scheduledMinuteUtc,
+    Enabled: cfg.enabled,
+    ProjectId: cfg.projectId ?? projectId ?? undefined,
   };
 }
 
@@ -359,8 +387,6 @@ export async function updateConfig(dto: UpdateFusionConfigDto): Promise<FusionCo
   }
 
   const docId = configDocIdFor(dto.ProjectId);
-  const ref = getDb().collection(ColFusionConfig).doc(docId);
-
   const cfg: FusionConfigDoc = {
     ScheduledHourUtc: dto.ScheduledHourUtc,
     ScheduledMinuteUtc: dto.ScheduledMinuteUtc,
@@ -369,7 +395,17 @@ export async function updateConfig(dto: UpdateFusionConfigDto): Promise<FusionCo
     UpdatedAtUnix: nowUnix(),
   };
 
-  await ref.set(cfg);
+  const values = {
+    scheduledHourUtc: cfg.ScheduledHourUtc,
+    scheduledMinuteUtc: cfg.ScheduledMinuteUtc,
+    enabled: cfg.Enabled,
+    updatedAtUnix: cfg.UpdatedAtUnix,
+    projectId: cfg.ProjectId,
+  };
+  await getDb()
+    .insert(fusionConfig)
+    .values({ id: docId, ...values })
+    .onConflictDoUpdate({ target: fusionConfig.id, set: values });
   console.log(
     `Fusion config updated for project=${dto.ProjectId ?? "<default>"}: ${cfg.ScheduledHourUtc}:${cfg.ScheduledMinuteUtc} enabled=${cfg.Enabled}`,
   );

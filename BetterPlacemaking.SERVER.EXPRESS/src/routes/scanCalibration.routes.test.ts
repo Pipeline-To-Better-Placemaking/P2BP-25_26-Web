@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +6,22 @@ import express from "express";
 import request from "supertest";
 import { FakeFirestore } from "../test/fakeFirestore.js";
 
+import { eq } from "drizzle-orm";
+import { createTestDb } from "../test/db.js";
+import { setDbForTesting, type Db } from "../db/client.js";
+import { scanCalibrationRecords } from "../db/schema/index.js";
+
 const fake = new FakeFirestore();
+let db: Db;
+
+beforeAll(async () => {
+  db = await createTestDb();
+});
+
+async function storedRecord(id: string) {
+  const [r] = await db.select().from(scanCalibrationRecords).where(eq(scanCalibrationRecords.id, id));
+  return r;
+}
 
 vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 
@@ -46,6 +61,7 @@ function seedScan(projectId: string, deviceId: string, scanId: string, objUrl: s
 }
 
 afterAll(() => {
+  setDbForTesting(null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -90,11 +106,11 @@ describe("manipulatePoints (CombineCloudsService.Manipulate)", () => {
 });
 
 describe("combineClouds (CombineCloudsService.CombineClouds)", () => {
-  it("concatenates both transformed clouds in input order", () => {
+  it("concatenates both transformed clouds in input order", async () => {
     const a = writeXyz("a.xyz", "1 0 0\n0 1 0\n");
     const b = writeXyz("b.xyz", "5 5 2\n");
 
-    const result = scanCalibrationService.combineClouds(
+    const result = await scanCalibrationService.combineClouds(
       [
         { XyzFilePath: a, XTranslation: 0, YTranslation: 0, Theta: 0 },
         { XyzFilePath: b, XTranslation: 1, YTranslation: 2, Theta: 0 },
@@ -124,18 +140,18 @@ describe("combineClouds (CombineCloudsService.CombineClouds)", () => {
     expect(result.OutputFileName.endsWith(".xyz")).toBe(true);
   });
 
-  it("rejects fewer than two inputs, matching the source's ArgumentException", () => {
+  it("rejects fewer than two inputs, matching the source's ArgumentException", async () => {
     const a = writeXyz("solo.xyz", "1 1 1\n");
-    expect(() =>
+    await expect(
       scanCalibrationService.combineClouds([{ XyzFilePath: a, XTranslation: 0, YTranslation: 0, Theta: 0 }], tempRoot, null),
-    ).toThrow(/At least two scans/);
+    ).rejects.toThrow(/At least two scans/);
   });
 
-  it("falls back to the 'calibrationScan' base name when outputName is blank", () => {
+  it("falls back to the 'calibrationScan' base name when outputName is blank", async () => {
     const a = writeXyz("c.xyz", "1 1 1\n");
     const b = writeXyz("d.xyz", "2 2 2\n");
 
-    const result = scanCalibrationService.combineClouds(
+    const result = await scanCalibrationService.combineClouds(
       [
         { XyzFilePath: a, XTranslation: 0, YTranslation: 0, Theta: 0 },
         { XyzFilePath: b, XTranslation: 0, YTranslation: 0, Theta: 0 },
@@ -271,9 +287,9 @@ describe("POST /api/scan-calibration/:projectId/:deviceId/upload-xyz", () => {
     expect(res.body.OriginalFileName).toBe("room.xyz");
     expect(res.body.Id).toMatch(/^[0-9a-f]{32}$/);
 
-    const stored = fake.peek(`projects/p1/devices/d1/scans/${res.body.Id}`);
-    expect(stored?.IsUploadedCalibrationScan).toBe(true);
-    expect(stored?.ObjUrl).toBe(res.body.ObjUrl);
+    const stored = await storedRecord(res.body.Id);
+    expect(stored?.isUploadedCalibrationScan).toBe(true);
+    expect(stored?.objUrl).toBe(res.body.ObjUrl);
     expect(fs.readFileSync(res.body.ObjUrl as string, "utf8")).toBe("1 2 3\n");
 
     fs.rmSync(res.body.ObjUrl as string, { force: true });
@@ -341,9 +357,9 @@ describe("POST /api/scan-calibration/:projectId/:deviceId/combine", () => {
     expect(res.status).toBe(200);
     expect(res.body.IsCombinedCalibrationScan).toBe(true);
 
-    const stored = fake.peek(`projects/p1/devices/d1/scans/${res.body.Id}`);
-    expect(stored?.SourceScanIds).toEqual(["ca", "cb"]);
-    expect(stored?.ScalarMmPerPixel).toBe(3.5);
+    const stored = await storedRecord(res.body.Id);
+    expect(stored?.sourceScanIds).toEqual(["ca", "cb"]);
+    expect(stored?.scalarMmPerPixel).toBe(3.5);
 
     // Compared numerically for the same IEEE-754 polar round-trip reason as above.
     const contents = fs

@@ -168,10 +168,10 @@ describe("parsePlyStream", () => {
 });
 
 describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
-  it("parses x y z lines (default mm units) with default gray color/intensity", () => {
+  it("parses x y z lines (default mm units) with default gray color/intensity", async () => {
     const file = writeTempXyz("a.xyz", "10 20 30\n");
     try {
-      const points = parseXyzFile(file);
+      const points = await parseXyzFile(file);
       expect(points).toHaveLength(1);
       expect(points[0].X).toBeCloseTo(1, 9); // 10mm -> 1cm
       expect(points[0].Y).toBeCloseTo(2, 9);
@@ -184,10 +184,10 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
     }
   });
 
-  it("parses x y z intensity lines (grayscale r=g=b=intensity)", () => {
+  it("parses x y z intensity lines (grayscale r=g=b=intensity)", async () => {
     const file = writeTempXyz("b.xyz", "40 50 60 200\n");
     try {
-      const points = parseXyzFile(file);
+      const points = await parseXyzFile(file);
       expect(points[0].Color).toBe("#C8C8C8"); // 200 = 0xC8
       expect(points[0].Intensity).toBeCloseTo(200 / 255, 9);
     } finally {
@@ -195,10 +195,10 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
     }
   });
 
-  it("parses x y z r g b lines and honors 'm' units", () => {
+  it("parses x y z r g b lines and honors 'm' units", async () => {
     const file = writeTempXyz("c.xyz", "0.07 0.08 0.09 10 20 30\n");
     try {
-      const points = parseXyzFile(file, "sensor-c", "m");
+      const points = await parseXyzFile(file, "sensor-c", "m");
       expect(points[0].X).toBeCloseTo(7, 9); // 0.07m -> 7cm
       expect(points[0].Y).toBeCloseTo(8, 9);
       expect(points[0].Z).toBeCloseTo(9, 9);
@@ -209,30 +209,30 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
     }
   });
 
-  it("skips malformed lines instead of throwing", () => {
+  it("skips malformed lines instead of throwing", async () => {
     const file = writeTempXyz("d.xyz", "1 2 3\nnot a point\n4 5 6\n\n");
     try {
-      const points = parseXyzFile(file);
+      const points = await parseXyzFile(file);
       expect(points).toHaveLength(2);
     } finally {
       fs.unlinkSync(file);
     }
   });
 
-  it("throws when the file does not exist", () => {
-    expect(() => parseXyzFile("/no/such/file.xyz")).toThrow();
+  it("throws when the file does not exist", async () => {
+    await expect(parseXyzFile("/no/such/file.xyz")).rejects.toThrow();
   });
 
-  it("parseXyzFiles merges two files in order, skipping a missing second file", () => {
+  it("parseXyzFiles merges two files in order, skipping a missing second file", async () => {
     const fileA = writeTempXyz("e.xyz", "1 1 1\n");
     const fileB = writeTempXyz("f.xyz", "2 2 2\n");
     try {
-      const merged = parseXyzFiles(fileA, fileB);
+      const merged = await parseXyzFiles(fileA, fileB);
       expect(merged).toHaveLength(2);
       expect(merged[0].X).toBeCloseTo(0.1, 9);
       expect(merged[1].X).toBeCloseTo(0.2, 9);
 
-      const onlyA = parseXyzFiles(fileA, "/no/such/file.xyz");
+      const onlyA = await parseXyzFiles(fileA, "/no/such/file.xyz");
       expect(onlyA).toHaveLength(1);
     } finally {
       fs.unlinkSync(fileA);
@@ -240,7 +240,7 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
     }
   });
 
-  it("convertToLidarPoint3D converts mm to cm and computes intensity/color", () => {
+  it("convertToLidarPoint3D converts mm to cm and computes intensity/color", async () => {
     const p = convertToLidarPoint3D(100, 200, 300, 255, 0, 0, "sensor-b");
     expect(p.X).toBeCloseTo(10, 9);
     expect(p.Y).toBeCloseTo(20, 9);
@@ -251,7 +251,7 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
     expect(p.SensorId).toBe("sensor-b");
   });
 
-  it("convertToLidarPoint3D defaults sensorId to 'rplidar' and rgb to mid-gray", () => {
+  it("convertToLidarPoint3D defaults sensorId to 'rplidar' and rgb to mid-gray", async () => {
     const p = convertToLidarPoint3D(10, 10, 10);
     expect(p.Color).toBe("#969696");
     expect(p.SensorId).toBe("rplidar");
@@ -259,7 +259,7 @@ describe("parseXyzFile / parseXyzFiles (disk-backed)", () => {
 });
 
 describe("convert2DTo3D", () => {
-  it("mirrors PointCloudService.Convert2DTo3D", () => {
+  it("mirrors PointCloudService.Convert2DTo3D", async () => {
     const points = convert2DTo3D([{ X: 1, Y: 2 }, { X: 3, Y: 4 }], 42);
     expect(points).toEqual([
       { X: 1, Y: 2, Z: 42, Intensity: 0.8, Classification: 0 },

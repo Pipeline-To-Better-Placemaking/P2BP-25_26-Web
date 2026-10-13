@@ -1,10 +1,9 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import express from "express";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import * as visualizerSessionService from "../services/visualizerSessionService.js";
 
 /**
  * rplidarRouter is not yet mounted in app.ts (a separate wiring step, out of
@@ -21,6 +20,10 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rplidar-test-"));
 process.env.RPLIDAR_SCAN_DIRECTORY = tmpDir;
 
 const { rplidarRouter } = await import("./rplidar.routes.js");
+// Loaded after RPLIDAR_SCAN_DIRECTORY is set: these transitively import env.ts.
+const { createTestDb } = await import("../test/db.js");
+const { setDbForTesting } = await import("../db/client.js");
+const visualizerSessionService = await import("../services/visualizerSessionService.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
 const { createUserToken } = await import("../services/tokenService.js");
 
@@ -53,7 +56,12 @@ beforeEach(() => {
   clearScans();
 });
 
+beforeAll(async () => {
+  await createTestDb();
+});
+
 afterAll(() => {
+  setDbForTesting(null);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -355,10 +363,10 @@ describe("POST /api/rplidar/upload", () => {
 });
 
 describe("GET /api/rplidar/from-scan", () => {
-  afterEach(() => {
+  afterEach(async () => {
     // The Visualizer session is shared, module-level state (see visualizerSessionService.ts) -
     // reset it after every test in this block so it can't leak into the next test/file.
-    visualizerSessionService.clearPoints();
+    await visualizerSessionService.clearPoints();
   });
 
   it("401s without a bearer token", async () => {
@@ -385,7 +393,7 @@ describe("GET /api/rplidar/from-scan", () => {
       Intensity: 1,
       Classification: 0,
     }));
-    visualizerSessionService.replacePoints(points);
+    await visualizerSessionService.replacePoints(points);
 
     const res = await request(buildApp()).get("/api/rplidar/from-scan").set("Authorization", authHeader());
 
@@ -402,7 +410,7 @@ describe("GET /api/rplidar/from-scan", () => {
       Intensity: 1,
       Classification: 0,
     }));
-    visualizerSessionService.replacePoints(points);
+    await visualizerSessionService.replacePoints(points);
 
     const res = await request(buildApp())
       .get("/api/rplidar/from-scan?maxFloorPoints=3&maxCeilingPoints=2")
