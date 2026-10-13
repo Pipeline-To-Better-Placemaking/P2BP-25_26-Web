@@ -1,4 +1,4 @@
-import { getBucket } from "../config/storage.js";
+import { getStorageBucket } from "../config/storage.js";
 import { env } from "../config/env.js";
 
 /** Ported from CloudStorageService's input-validation exceptions. */
@@ -22,7 +22,7 @@ export interface SignedUrlResult {
 }
 
 /**
- * Collapses repeated slashes and strips characters GCS object names shouldn't
+ * Collapses repeated slashes and strips characters storage object names shouldn't
  * carry, ported char-for-char from CloudStorageService.SanitizeObjectPath:
  * letters, digits, '-' '_' ':' '.' ' ' survive as-is, everything else becomes '_'.
  */
@@ -115,7 +115,14 @@ export function buildObjectPath(rawDirectoryPath: string, rawFileName: string, r
   return normalizeObjectPath(fullPath);
 }
 
-/** Ported from CloudStorageService.CreateSignedUploadUrlAsync (V4 signed URL for PUT). */
+/** Supabase signed upload URLs have a fixed lifetime (2 hours) that can't be configured per call. */
+const UPLOAD_URL_TTL_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Ported from CloudStorageService.CreateSignedUploadUrlAsync. Returns a Supabase Storage signed
+ * upload URL (replaces the GCS V4 PUT URL); the client PUTs the file bytes to `SignedUrl`.
+ * `upsert` keeps GCS's overwrite-on-PUT behavior.
+ */
 export async function createSignedUploadUrl(input: RequestUploadUrlInput): Promise<SignedUrlResult> {
   if (input.SizeBytes === undefined || input.SizeBytes === null || input.SizeBytes <= 0) {
     throw new ValidationError("SizeBytes must be greater than zero.");
@@ -124,34 +131,38 @@ export async function createSignedUploadUrl(input: RequestUploadUrlInput): Promi
   if (!input.FileName?.trim()) throw new ValidationError("FileName required.");
 
   const objectName = buildObjectPath(input.PathFromRoot ?? "", input.FileName, input.Extension);
+  const expiresAt = new Date(Date.now() + UPLOAD_URL_TTL_MS);
 
-  const ttlMinutes = env.gcsUrlTtlMinutes;
-  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+  const { data, error } = await getStorageBucket().createSignedUploadUrl(objectName, { upsert: true });
+  if (error || !data) throw new Error(`Failed to create signed upload URL: ${error?.message ?? "unknown error"}`);
 
-  const [signedUrl] = await getBucket().file(objectName).getSignedUrl({
-    version: "v4",
-    action: "write",
-    expires: expiresAt,
-  });
-
-  return { PathFromRoot: objectName, SignedUrl: signedUrl, ExpiresAt: expiresAt };
+  return { PathFromRoot: objectName, SignedUrl: data.signedUrl, ExpiresAt: expiresAt };
 }
 
-/** Ported from CloudStorageService.CreateSignedDownloadUrlAsync (V4 signed URL for GET, forces download via Content-Disposition). */
+/** Ported from CloudStorageService.CreateSignedDownloadUrlAsync (signed GET URL, forces download via Content-Disposition). */
 export async function createSignedDownloadUrl(input: RequestDownloadUrlInput): Promise<SignedUrlResult> {
   const objectName = normalizeObjectPath(input.PathFromRoot);
   const segments = objectName.split("/");
   const filename = segments[segments.length - 1];
 
-  const ttlMinutes = env.gcsUrlTtlMinutes;
-  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+  const ttlSeconds = env.gcsUrlTtlMinutes * 60;
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-  const [signedUrl] = await getBucket().file(objectName).getSignedUrl({
-    version: "v4",
-    action: "read",
-    expires: expiresAt,
-    responseDisposition: `attachment; filename="${filename}"`,
-  });
+  const { data, error } = await getStorageBucket().createSignedUrl(objectName, ttlSeconds, { download: filename });
+  if (error || !data) throw new Error(`Failed to create signed download URL: ${error?.message ?? "unknown error"}`);
 
-  return { PathFromRoot: objectName, SignedUrl: signedUrl, ExpiresAt: expiresAt };
+  return { PathFromRoot: objectName, SignedUrl: data.signedUrl, ExpiresAt: expiresAt };
+}
+
+/** Uploads bytes server-side (used by the base64 floorplan upload endpoint). */
+export async function uploadObject(objectPath: string, contentType: string, bytes: Buffer): Promise<void> {
+  const { error } = await getStorageBucket().upload(objectPath, bytes, { contentType, upsert: true });
+  if (error) throw new Error(`Failed to upload object: ${error.message}`);
+}
+
+/** Server-side object download (for ports of CloudStorageService.DownloadBytesAsync / DownloadToStreamAsync). */
+export async function downloadObject(objectPath: string): Promise<Buffer> {
+  const { data, error } = await getStorageBucket().download(objectPath);
+  if (error || !data) throw new Error(`Failed to download object: ${error?.message ?? "unknown error"}`);
+  return Buffer.from(await data.arrayBuffer());
 }
