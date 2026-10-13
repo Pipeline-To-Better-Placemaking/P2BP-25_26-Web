@@ -1,17 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import express from "express";
 import request from "supertest";
-import { FakeFirestore } from "../test/fakeFirestore.js";
 
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test/db.js";
 import { setDbForTesting, type Db } from "../db/client.js";
-import { scanCalibrationRecords } from "../db/schema/index.js";
+import { projects, scanCalibrationRecords, scans } from "../db/schema/index.js";
 
-const fake = new FakeFirestore();
 let db: Db;
 
 beforeAll(async () => {
@@ -22,8 +20,6 @@ async function storedRecord(id: string) {
   const [r] = await db.select().from(scanCalibrationRecords).where(eq(scanCalibrationRecords.id, id));
   return r;
 }
-
-vi.mock("../config/firebase.js", () => ({ getDb: () => fake }));
 
 const { scanCalibrationRouter } = await import("./scanCalibration.routes.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
@@ -49,15 +45,9 @@ function writeXyz(name: string, contents: string): string {
   return p;
 }
 
-function seedScan(projectId: string, deviceId: string, scanId: string, objUrl: string | null): void {
-  fake
-    .collection("projects")
-    .doc(projectId)
-    .collection("devices")
-    .doc(deviceId)
-    .collection("scans")
-    .doc(scanId)
-    .set({ Status: "complete", ObjUrl: objUrl });
+async function seedScan(projectId: string, deviceId: string, scanId: string, objUrl: string | null): Promise<void> {
+  await db.insert(projects).values({ id: projectId, title: projectId }).onConflictDoNothing();
+  await db.insert(scans).values({ id: scanId, projectId, deviceId, status: "complete", objUrl });
 }
 
 afterAll(() => {
@@ -249,7 +239,7 @@ describe("renderPreviewPng (Plotter.Render)", () => {
 describe("GET /api/scan-calibration/:projectId/:deviceId/:scanId/preview", () => {
   it("returns a PNG for a scan whose ObjUrl is a local .xyz file", async () => {
     const xyz = writeXyz("preview.xyz", "1 0 0\n0 1 0\n-1 0 0\n");
-    seedScan("p1", "d1", "preview-ok", xyz);
+    await seedScan("p1", "d1", "preview-ok", xyz);
 
     const res = await request(app).get("/api/scan-calibration/p1/d1/preview-ok/preview");
 
@@ -267,7 +257,7 @@ describe("GET /api/scan-calibration/:projectId/:deviceId/:scanId/preview", () =>
   it("returns 500 when every point is filtered out by the Z threshold", async () => {
     // Default threshold is -2.75 and points with z <= threshold are dropped.
     const xyz = writeXyz("all-filtered.xyz", "1 1 -10\n2 2 -99\n");
-    seedScan("p1", "d1", "filtered", xyz);
+    await seedScan("p1", "d1", "filtered", xyz);
 
     const res = await request(app).get("/api/scan-calibration/p1/d1/filtered/preview");
 
@@ -315,7 +305,7 @@ describe("POST /api/scan-calibration/:projectId/:deviceId/upload-xyz", () => {
 describe("GET /api/scan-calibration/:projectId/:deviceId/:scanId/download", () => {
   it("streams the resolved .xyz file as an attachment", async () => {
     const xyz = writeXyz("download.xyz", "7 8 9\n");
-    seedScan("p1", "d1", "dl", xyz);
+    await seedScan("p1", "d1", "dl", xyz);
 
     // responseType("blob") makes superagent buffer the octet-stream body instead of
     // leaving res.text undefined for a non-text content type.
@@ -327,7 +317,7 @@ describe("GET /api/scan-calibration/:projectId/:deviceId/:scanId/download", () =
   });
 
   it("returns 500 when the scan document has no ObjUrl", async () => {
-    seedScan("p1", "d1", "no-url", null);
+    await seedScan("p1", "d1", "no-url", null);
 
     const res = await request(app).get("/api/scan-calibration/p1/d1/no-url/download");
 
@@ -340,8 +330,8 @@ describe("POST /api/scan-calibration/:projectId/:deviceId/combine", () => {
   it("combines two scans and writes a combined-calibration scan doc", async () => {
     const a = writeXyz("combine-a.xyz", "1 0 0\n");
     const b = writeXyz("combine-b.xyz", "0 1 0\n");
-    seedScan("p1", "d1", "ca", a);
-    seedScan("p1", "d1", "cb", b);
+    await seedScan("p1", "d1", "ca", a);
+    await seedScan("p1", "d1", "cb", b);
 
     const res = await request(app)
       .post("/api/scan-calibration/p1/d1/combine")
@@ -387,7 +377,7 @@ describe("POST /api/scan-calibration/:projectId/:deviceId/combine", () => {
 
   it("returns 500 when one of the referenced scans does not exist", async () => {
     const a = writeXyz("combine-c.xyz", "1 0 0\n");
-    seedScan("p1", "d1", "cc", a);
+    await seedScan("p1", "d1", "cc", a);
 
     const res = await request(app)
       .post("/api/scan-calibration/p1/d1/combine")
