@@ -36,4 +36,24 @@ describe("supabase/migrations", () => {
     const actual = rows.map((r) => r.table_name);
     for (const table of expected) expect(actual).toContain(table);
   });
+
+  it("enables row level security on every public table", async () => {
+    const files = readdirSync(migrationsDir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    const client = new PGlite();
+    for (const file of files) {
+      const statements = readFileSync(path.join(migrationsDir, file), "utf8").split("--> statement-breakpoint");
+      for (const statement of statements) {
+        if (statement.trim()) await client.exec(statement);
+      }
+    }
+    // Supabase exposes public tables via its Data API; a table without RLS is world-accessible.
+    // If this fails after adding a table, add `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` in a new migration.
+    const { rows } = await client.query<{ relname: string }>(
+      `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity`,
+    );
+    expect(rows.map((r) => r.relname)).toEqual([]);
+  });
 });
