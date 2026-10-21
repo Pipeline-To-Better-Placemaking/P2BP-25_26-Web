@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { PointCloudViewer, type PointCloudViewerHandle } from "../../../components/PointCloudViewer";
 import { SolidObjectsView, type SolidObjectsViewHandle } from "../../../components/SolidObjectsView";
+import { UploadDataPanel } from "./UploadDataPanel";
 
 export type ScannerVisualMode = "3d" | "solids";
 
@@ -33,37 +34,51 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
   const pointCloudRef = useRef<PointCloudViewerHandle | null>(null);
   const solidRef = useRef<SolidObjectsViewHandle | null>(null);
 
+  const [uploadSelected, setUploadSelected] = useState(false);
+
   return (
     <div className="mt-6 flex min-h-[min(70vh,640px)] flex-col">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => onVisualModeChange("solids")} className={tabBtn(visualMode === "solids")}>
+        <button type="button" onClick={() => {onVisualModeChange("solids"), setUploadSelected(false)}} className={tabBtn(!uploadSelected && visualMode === "solids")}>
           2D View
         </button>
-        <button type="button" onClick={() => onVisualModeChange("3d")} className={tabBtn(visualMode === "3d")}>
+        <button type="button" onClick={() => {onVisualModeChange("3d"), setUploadSelected(false)}} className={tabBtn(!uploadSelected && visualMode === "3d")}>
           3D View
         </button>
-        <button
-          type="button"
-          onClick={() => (visualMode === "3d" ? pointCloudRef.current?.resetView() : solidRef.current?.resetView())}
-          className="ml-auto rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-        >
-          Reset View
+        <button type="button" onClick={() => setUploadSelected(true)} className = {tabBtn(uploadSelected)}>
+          Upload
         </button>
+        {!uploadSelected ? (
+          <button
+            type="button"
+            onClick={() => (visualMode === "3d" ? pointCloudRef.current?.resetView() : solidRef.current?.resetView())}
+            className="ml-auto rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            Reset View
+          </button>
+        ) : (<p></p>)}
       </div>
 
-      <p className="mb-3 rounded-md bg-amber-50 p-3 text-sm text-amber-700">
-        Live point-cloud and detected-object visualization isn't available yet — the Rplidar raw data pipeline and the
-        3D Visualizer/mesh subsystem haven't been ported to the backend. The viewport below is fully functional (orbit,
-        pan, zoom, reset) but shows an empty scene until that data source exists.
-      </p>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-neutral-200">
-        {visualMode === "3d" ? (
-          <PointCloudViewer ref={pointCloudRef} className="h-full w-full" />
-        ) : (
-          <SolidObjectsView ref={solidRef} className="h-full w-full" />
-        )}
-      </div>
+      {uploadSelected ? (
+        <UploadDataPanel />
+      ) : (
+        <div>
+          <p className="mb-3 rounded-md bg-amber-50 p-3 text-sm text-amber-700">
+            Live point-cloud and detected-object visualization isn't available yet — the Rplidar raw data pipeline and the
+            3D Visualizer/mesh subsystem haven't been ported to the backend. The viewport below is fully functional (orbit,
+            pan, zoom, reset) but shows an empty scene until that data source exists.
+          </p>
+
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-neutral-200">
+            {visualMode === "3d" ? (
+              <PointCloudViewer ref={pointCloudRef} className="h-full w-full" />
+            ) : (
+              <SolidObjectsView ref={solidRef} className="h-full w-full" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

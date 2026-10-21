@@ -2,5 +2,8 @@
   "name": "p2bp-web",
   "private": true,
   "type": "module",
-  "description": "Repo root. Exists so Vercel compiles api/*.ts as ESM; real packages live in the two subfolders."
+  "description": "Repo root. Exists so Vercel compiles api/*.ts as ESM; real packages live in the two subfolders.",
+  "dependencies": {
+    "lucide-react": "^1.57.0"
+  }
 }
