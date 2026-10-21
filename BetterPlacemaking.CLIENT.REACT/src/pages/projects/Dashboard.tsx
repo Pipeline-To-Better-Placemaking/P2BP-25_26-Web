@@ -319,17 +319,18 @@ export function Dashboard() {
   function goToDevicesPage() {
     if (projectId) navigate(`/${projectId}/devices`);
   }
-
+  /*
   function goTo3DModelPage() {
     if (projectId) navigate(`/${projectId}/model`);
   }
+  */
 
   async function onRunFullScan() {
     if (!projectId) {
       setScanMessage("No project selected.");
       return;
     }
-
+    
     const lidarDevices = devices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
     if (lidarDevices.length === 0) {
       setScanMessage("No LiDAR devices found for this project.");
@@ -354,6 +355,7 @@ export function Dashboard() {
   return (
     <div>
       <div className="grid grid-cols-12 gap-6">
+        {/*
         <StatsWidget
           project={projectVM}
           deviceCounts={deviceCounts}
@@ -362,7 +364,7 @@ export function Dashboard() {
           onProjectProgressClick={() => setShowChecklistDialog(true)}
           onDevicesClick={goToDevicesPage}
           onAlertsClick={() => setShowAlertsDialog(true)}
-        />
+        />*/}
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
           <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
@@ -376,7 +378,7 @@ export function Dashboard() {
               onOpenDevicesPage={goToDevicesPage}
             />
           </HasPermission>
-
+          {/* 
           <HasPermission permission={Permissions.Project.ScansRead} projectId={projectId}>
             <ScanStatusWidget
               lastScanTime={lastScanTime}
@@ -388,7 +390,14 @@ export function Dashboard() {
               onOpenModelPage={goTo3DModelPage}
               onRunFullScan={onRunFullScan}
             />
-          </HasPermission>
+          </HasPermission>          <AlertsWidget
+            alerts={alerts}
+            alertCounts={alertCounts}
+            formatTimeAgo={formatTimeAgo}
+            onRefresh={loadDashboard}
+            onOpenDevicesPage={goToDevicesPage}
+          />
+          */}
         </div>
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
@@ -399,18 +408,18 @@ export function Dashboard() {
             onRefresh={loadDashboard}
             onOpenDevicesPage={goToDevicesPage}
           />
-
-          <ProjectChecklistWidget
+        {/*
+         <ProjectChecklistWidget
             project={projectVM}
             deviceCounts={deviceCounts}
             onRefresh={loadDashboard}
             onDevicesAddedClick={goToDevicesPage}
             onOfflineDevicesFixedClick={goToDevicesPage}
             onWarningsResolvedClick={goToDevicesPage}
-          />
+          />*/}
         </div>
       </div>
-
+      {/*Checklist isnt normally displayed. This can be removed later vvvv*/}
       {showChecklistDialog && (
         <Modal title="Project Checklist" onClose={() => setShowChecklistDialog(false)} widthClassName="max-w-2xl">
           <ProjectChecklistWidget
