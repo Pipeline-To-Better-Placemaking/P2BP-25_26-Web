@@ -29,23 +29,23 @@ const SEVERITY_BORDER: Record<string, string> = {
 };
 
 const COUNT_BTN =
-  "p-4 rounded-lg text-center bg-surface-50 dark:bg-surface-800 border dark:border-surface-700 hover:opacity-80 transition";
+  "p-4 rounded-lg text-center bg-surface-100 border-surface-100 dark:bg-surface-800 border hover:opacity-80 transition";
 
 /** Mirrors the Angular AlertsWidget (the whole card is clickable; inner clicks bubble like in Angular). */
 export function AlertsWidget({ alerts, alertCounts, formatTimeAgo, onRefresh, onOpenDevicesPage }: AlertsWidgetProps) {
   return (
     <AppAlertsWidget>
       <div
-        className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black"
+        className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black min-h-[50dvh]"
         onClick={onOpenDevicesPage}
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <button type="button" className="text-xl font-semibold text-left hover:underline" onClick={onOpenDevicesPage}>
+            <button type="button" className="text-[#334155] text-xl font-[Inter] font-semibold text-left hover:underline" onClick={onOpenDevicesPage}>
               Alerts
             </button>
 
-            <Button icon="pi pi-refresh" text rounded onClick={onRefresh} />
+            <Button icon="pi pi-refresh text-[#4f39f6]"  text rounded onClick={onRefresh} />
           </div>
 
           <button
@@ -54,25 +54,25 @@ export function AlertsWidget({ alerts, alertCounts, formatTimeAgo, onRefresh, on
             onClick={onOpenDevicesPage}
           >
             {alertCounts.unresolved > 0 && <Badge value={alertCounts.unresolved} severity="danger" />}
-            <span className="text-sm text-gray-600">{alertCounts.unresolved} unresolved</span>
+            <span className="text-sm font-[Inter] text-gray-600">{alertCounts.unresolved} unresolved</span>
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
           <button type="button" className={COUNT_BTN} onClick={onOpenDevicesPage}>
-            <div className="text-3xl font-bold">{alertCounts.high}</div>
-            <div className="text-sm mt-1">High</div>
+            <div className="text-3xl font-[Inter] font-bold text-[#334155]">{alertCounts.high}</div>
+            <div className="text-sm mt-1 text-[#334155]">High</div>
           </button>
 
           <button type="button" className={COUNT_BTN} onClick={onOpenDevicesPage}>
-            <div className="text-3xl font-bold">{alertCounts.critical}</div>
-            <div className="text-sm mt-1">Critical</div>
+            <div className="text-3xl font-[Inter] font-bold text-[#334155]" >{alertCounts.critical}</div>
+            <div className="text-sm mt-1 text-[#334155]">Critical</div>
           </button>
         </div>
 
-        <h4 className="text-lg font-semibold mb-3">Recent Alerts</h4>
+        <h4 className="text-lg  font-Inter font-semibold text-[#334155] mb-3">Recent Alerts</h4>
 
-        {alerts.length === 0 && <div className="text-sm text-gray-500">No active alerts.</div>}
+        {alerts.length === 0 && <div className="text-sm font-[Inter] text-gray-500">No active alerts.</div>}
 
         {alerts.length > 0 && (
           <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
@@ -83,14 +83,14 @@ export function AlertsWidget({ alerts, alertCounts, formatTimeAgo, onRefresh, on
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className={"px-2 py-1 rounded text-xs font-medium " + getStatusColor(alert.severity)}>
+                    <span className={"px-2 py-1 rounded text-xs font-[Inter] font-medium " + getStatusColor(alert.severity)}>
                       {alert.severity.toUpperCase()}
                     </span>
-                    <div className="mt-2 text-sm">{alert.message}</div>
+                    <div className="mt-2 text-sm font-[Inter]">{alert.message}</div>
                   </div>
 
                   <div className="flex items-center">
-                    <span className="text-xs mr-2">{formatTimeAgo(alert.timestamp)}</span>
+                    <span className="text-xs font-[Inter] mr-2">{formatTimeAgo(alert.timestamp)}</span>
                     {alert.resolved ? (
                       <i className="pi pi-check-circle text-green-500"></i>
                     ) : (
