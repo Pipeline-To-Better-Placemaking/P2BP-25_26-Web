@@ -16,6 +16,7 @@ import { UserSettings } from "./pages/UserSettings";
 import { Dashboard } from "./pages/projects/Dashboard";
 import { Vision } from "./pages/projects/vision/Vision";
 import { Fusion } from "./pages/projects/fusion/Fusion";
+import { Calibration } from "./pages/projects/calibration/Calibration";
 import { Puzzle } from "./pages/projects/calibration/Puzzle";
 import { RequirePuzzleReady } from "./routes/RequirePuzzleReady";
 import { MultiLidarCalibration } from "./pages/projects/MultiLidarCalibration";
@@ -83,6 +84,14 @@ export function App() {
               element={
                 <RequirePermission permission={Permissions.Project.ScansRead}>
                   <Fusion />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="calibration"
+              element={
+                <RequirePermission permission={Permissions.Project.VisionRead}>
+                  <Calibration />
                 </RequirePermission>
               }
             />
