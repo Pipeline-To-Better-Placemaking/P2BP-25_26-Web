@@ -17,11 +17,8 @@ import type {
   DeviceStatus,
   ProjectViewModel,
 } from "../../lib/dashboardTypes";
-import { StatsWidget } from "./dashboard/StatsWidget";
 import { DevicesWidget } from "./dashboard/DevicesWidget";
 import { AlertsWidget } from "./dashboard/AlertsWidget";
-import { ScanStatusWidget } from "./dashboard/ScanStatusWidget";
-import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget";
 
 /**
  * Ported from BetterPlacemaking.CLIENT's views/projects/selected/dashboard/dashboard.ts. Mounted
@@ -355,16 +352,6 @@ export function Dashboard() {
   return (
     <div>
       <div className="grid grid-cols-12 gap-6">
-        {/*
-        <StatsWidget
-          project={projectVM}
-          deviceCounts={deviceCounts}
-          alertCounts={alertCounts}
-          onRefresh={loadDashboard}
-          onProjectProgressClick={() => setShowChecklistDialog(true)}
-          onDevicesClick={goToDevicesPage}
-          onAlertsClick={() => setShowAlertsDialog(true)}
-        />*/}
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
           <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
@@ -378,26 +365,6 @@ export function Dashboard() {
               onOpenDevicesPage={goToDevicesPage}
             />
           </HasPermission>
-          {/* 
-          <HasPermission permission={Permissions.Project.ScansRead} projectId={projectId}>
-            <ScanStatusWidget
-              lastScanTime={lastScanTime}
-              formatTimeAgo={formatTimeAgo}
-              projectId={projectId}
-              scanLoading={scanLoading}
-              scanMessage={scanMessage}
-              onRefresh={() => projectId && loadLastScanTime(projectId, devices)}
-              onOpenModelPage={goTo3DModelPage}
-              onRunFullScan={onRunFullScan}
-            />
-          </HasPermission>          <AlertsWidget
-            alerts={alerts}
-            alertCounts={alertCounts}
-            formatTimeAgo={formatTimeAgo}
-            onRefresh={loadDashboard}
-            onOpenDevicesPage={goToDevicesPage}
-          />
-          */}
         </div>
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
@@ -408,39 +375,8 @@ export function Dashboard() {
             onRefresh={loadDashboard}
             onOpenDevicesPage={goToDevicesPage}
           />
-        {/*
-         <ProjectChecklistWidget
-            project={projectVM}
-            deviceCounts={deviceCounts}
-            onRefresh={loadDashboard}
-            onDevicesAddedClick={goToDevicesPage}
-            onOfflineDevicesFixedClick={goToDevicesPage}
-            onWarningsResolvedClick={goToDevicesPage}
-          />*/}
         </div>
       </div>
-      {/*Checklist isnt normally displayed. This can be removed later vvvv*/}
-      {showChecklistDialog && (
-        <Modal title="Project Checklist" onClose={() => setShowChecklistDialog(false)} widthClassName="max-w-2xl">
-          <ProjectChecklistWidget
-            project={projectVM}
-            deviceCounts={deviceCounts}
-            onRefresh={loadDashboard}
-            onDevicesAddedClick={() => {
-              setShowChecklistDialog(false);
-              goToDevicesPage();
-            }}
-            onOfflineDevicesFixedClick={() => {
-              setShowChecklistDialog(false);
-              goToDevicesPage();
-            }}
-            onWarningsResolvedClick={() => {
-              setShowChecklistDialog(false);
-              goToDevicesPage();
-            }}
-          />
-        </Modal>
-      )}
 
       {showAlertsDialog && (
         <Modal title="Alerts" onClose={() => setShowAlertsDialog(false)} widthClassName="max-w-2xl">
