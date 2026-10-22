@@ -21,7 +21,7 @@ import type {
 import { DevicesWidget } from "./dashboard/DevicesWidget";
 import { AlertsWidget } from "./dashboard/AlertsWidget";
 /* import { ScanStatusWidget } from "./dashboard/ScanStatusWidget"; */
-import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget"; */
+/* import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget"; */
 
 /**
  * Ported from BetterPlacemaking.CLIENT's views/projects/selected/dashboard/dashboard.ts. Mounted
