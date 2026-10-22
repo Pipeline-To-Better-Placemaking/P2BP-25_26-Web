@@ -61,12 +61,12 @@ export function AlertsWidget({ alerts, alertCounts, formatTimeAgo, onRefresh, on
         <div className="grid grid-cols-2 gap-4 mb-6">
           <button type="button" className={COUNT_BTN} onClick={onOpenDevicesPage}>
             <div className="text-3xl font-[Inter] font-bold text-[#334155]">{alertCounts.high}</div>
-            <div className="text-sm mt-1 text-[#334155]">High</div>
+            <div className="text-sm mt-1 text-[#334155] font-bold">High</div>
           </button>
 
           <button type="button" className={COUNT_BTN} onClick={onOpenDevicesPage}>
             <div className="text-3xl font-[Inter] font-bold text-[#334155]" >{alertCounts.critical}</div>
-            <div className="text-sm mt-1 text-[#334155]">Critical</div>
+            <div className="text-sm mt-1 text-[#334155] font-bold">Critical</div>
           </button>
         </div>
 
