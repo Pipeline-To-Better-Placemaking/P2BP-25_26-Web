@@ -476,4 +476,3 @@ export function Dashboard() {
       )}
     </div>
   );
-}
