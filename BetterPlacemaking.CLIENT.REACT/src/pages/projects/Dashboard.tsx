@@ -17,8 +17,11 @@ import type {
   DeviceStatus,
   ProjectViewModel,
 } from "../../lib/dashboardTypes";
+import { StatsWidget } from "./dashboard/StatsWidget";
 import { DevicesWidget } from "./dashboard/DevicesWidget";
 import { AlertsWidget } from "./dashboard/AlertsWidget";
+import { ScanStatusWidget } from "./dashboard/ScanStatusWidget";
+import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget";
 
 /**
  * Ported from BetterPlacemaking.CLIENT's views/projects/selected/dashboard/dashboard.ts. Mounted
@@ -327,7 +330,7 @@ export function Dashboard() {
       setScanMessage("No project selected.");
       return;
     }
-    
+
     const lidarDevices = devices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
     if (lidarDevices.length === 0) {
       setScanMessage("No LiDAR devices found for this project.");
@@ -351,7 +354,31 @@ export function Dashboard() {
 
   return (
     <div>
+
+      <div className="-mx-4 -mt-4 mb-6 bg-surface-0 dark:bg-surface-900 px-4 py-4 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700  md:-mx-0 md:-mt-3 md:px-6">
+        <h1 className="text-2xl font-[Inter] font-semibold text-gray-800 dark:text-white/90">
+          {projectVM.title}
+        </h1>
+      </div>
+
+
+
       <div className="grid grid-cols-12 gap-6">
+
+      {/*10/21/26 - For now all widgets that go unused will be in comments. */}
+
+
+      {/*
+        <StatsWidget
+          project={projectVM}
+          deviceCounts={deviceCounts}
+          alertCounts={alertCounts}
+          onRefresh={loadDashboard}
+          onProjectProgressClick={() => setShowChecklistDialog(true)}
+          onDevicesClick={goToDevicesPage}
+          onAlertsClick={() => setShowAlertsDialog(true)}
+        />
+        */}
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
           <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
@@ -365,6 +392,20 @@ export function Dashboard() {
               onOpenDevicesPage={goToDevicesPage}
             />
           </HasPermission>
+        {/* 
+          <HasPermission permission={Permissions.Project.ScansRead} projectId={projectId}>
+            <ScanStatusWidget
+              lastScanTime={lastScanTime}
+              formatTimeAgo={formatTimeAgo}
+              projectId={projectId}
+              scanLoading={scanLoading}
+              scanMessage={scanMessage}
+              onRefresh={() => projectId && loadLastScanTime(projectId, devices)}
+              onOpenModelPage={goTo3DModelPage}
+              onRunFullScan={onRunFullScan}
+            />
+          </HasPermission>
+        */}
         </div>
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
@@ -375,8 +416,46 @@ export function Dashboard() {
             onRefresh={loadDashboard}
             onOpenDevicesPage={goToDevicesPage}
           />
+
+          {/* 
+          <ProjectChecklistWidget
+            project={projectVM}
+            deviceCounts={deviceCounts}
+            onRefresh={loadDashboard}
+            onDevicesAddedClick={goToDevicesPage}
+            onOfflineDevicesFixedClick={goToDevicesPage}
+            onWarningsResolvedClick={goToDevicesPage}
+          />
+          */}
+
         </div>
       </div>
+
+
+
+      {/* 
+      {showChecklistDialog && (
+        <Modal title="Project Checklist" onClose={() => setShowChecklistDialog(false)} widthClassName="max-w-2xl">
+          <ProjectChecklistWidget
+            project={projectVM}
+            deviceCounts={deviceCounts}
+            onRefresh={loadDashboard}
+            onDevicesAddedClick={() => {
+              setShowChecklistDialog(false);
+              goToDevicesPage();
+            }}
+            onOfflineDevicesFixedClick={() => {
+              setShowChecklistDialog(false);
+              goToDevicesPage();
+            }}
+            onWarningsResolvedClick={() => {
+              setShowChecklistDialog(false);
+              goToDevicesPage();
+            }}
+          />
+        </Modal>
+      )}
+      */}
 
       {showAlertsDialog && (
         <Modal title="Alerts" onClose={() => setShowAlertsDialog(false)} widthClassName="max-w-2xl">
