@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 /* Mirrors the original Angular client's tailwind.css + styles.scss. */
 @import "tailwindcss";
 @plugin "tailwindcss-primeui";
@@ -128,4 +129,25 @@ body {
 .bp-stepper-medium.p-inputnumber .p-inputnumber-button {
 	width: 2rem;
 	min-width: 2rem;
+}
+
+/*Font Imported*/
+
+.inter {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+.inter-bold {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
+}
+.inter-semibold {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-style: normal;
 }
