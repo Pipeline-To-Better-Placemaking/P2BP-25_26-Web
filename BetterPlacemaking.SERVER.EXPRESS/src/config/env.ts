@@ -69,6 +69,8 @@ export const env = {
   workstationMode: (optional("WORKSTATION_MODE", "local") === "remote" ? "remote" : "local") as "local" | "remote",
   workstationBaseUrl: optional("WORKSTATION_BASE_URL"),
   workstationApiToken: optional("WORKSTATION_API_TOKEN"),
+  workstationTicketSecret: optional("WORKSTATION_TICKET_SECRET"),
+  workstationTicketMinutes: optionalInt("WORKSTATION_TICKET_MINUTES", 25),
 
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
