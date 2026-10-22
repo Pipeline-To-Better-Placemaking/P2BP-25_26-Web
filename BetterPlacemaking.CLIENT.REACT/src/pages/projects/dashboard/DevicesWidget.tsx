@@ -35,24 +35,23 @@ export function DevicesWidget({
 }: DevicesWidgetProps) {
   return (
     <AppDevicesWidget>
-      <div className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
-        <div className="flex items-center justify-between mb-6">
+      <div className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black min-h-[50dvh]">
+        <div className="flex items-center justify-between mb-7">
           <div>
-            <button type="button" className="text-xl font-semibold text-left hover:underline" onClick={onOpenDevicesPage}>
-              Device Status
+            <button type="button" className="text-xl  font-bold  text-[#334155] text-left hover:underline" onClick={onOpenDevicesPage}>
+              Device List
             </button>
 
             <div className="text-xs text-gray-500 mt-1">
-              Showing all devices temporarily until devices are assigned under projects.
             </div>
           </div>
 
-          <Button icon="pi pi-refresh" text rounded onClick={onRefresh} />
+          <Button icon="pi pi-refresh text-[#4f39f6]" text rounded onClick={onRefresh} />
         </div>
 
-        {loading && <div className="text-sm text-gray-500">Loading devices...</div>}
+        {loading && <div className="text-sm  text-gray-500">Loading devices...</div>}
 
-        {error && <div className="text-sm text-red-500">{error}</div>}
+        {error && <div className="text-sm  text-red-500">{error}</div>}
 
         {!loading && !error && devices.length === 0 && (
           <div className="text-sm text-gray-500">No devices are assigned yet.</div>
@@ -63,24 +62,41 @@ export function DevicesWidget({
             {devices.map((device) => (
               <div
                 key={device.Id}
-                className="flex items-center justify-between p-2 border-b border-surface-200 dark:border-surface-700"
+                className="flex items-center justify-between p-2 border-b border-surface-200 dark:border-surface-700 "
               >
                 <div className="flex items-center">
                   <span className={"w-3 h-3 rounded-full mr-3 " + getStatusColor(getDeviceStatus(device))}></span>
 
                   <div>
-                    <div className="font-medium">{device.Name}</div>
-                    <div className="text-sm text-muted-color">
-                      Resolution: {device.Config?.Camera?.Resolution ?? "N/A"}
+                    <div className="  font-medium text-[#334155]">{device.Name}</div>
+                    <div className="text-sm  text-[#334155]">Device Status: {getDeviceStatus(device)}</div>
+                    <div className="text-sm  text-[#334155]">
+                      Last seen: {getDeviceLastSeen(device)}
                     </div>
-                    <div className="text-sm text-muted-color">Version: {device.Config?.Version ?? "Unknown"}</div>
                   </div>
+                </div>    
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-[#4f39f6] px-3 py-1.5 text-sm text-[#334155]  font-medium text-white hover:bg-[#8464ff] disabled:opacity-60"
+                  >
+                    Start Scan
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md bg-[#f0f5f9] px-3 py-1.5 text-sm  text-[#334155]  font-medium text-[#334155] hover:bg-[#b7bbbe] disabled:opacity-60"
+                  >
+                    Device Details
+                  </button>
                 </div>
-
-                <div className="text-sm text-muted-color">Last seen: {getDeviceLastSeen(device)}</div>
+                                            
+                            
+                 
+                
               </div>
             ))}
           </div>
+          
         )}
       </div>
     </AppDevicesWidget>

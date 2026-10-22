@@ -319,11 +319,11 @@ export function Dashboard() {
   function goToDevicesPage() {
     if (projectId) navigate(`/${projectId}/devices`);
   }
-
+  
   function goTo3DModelPage() {
     if (projectId) navigate(`/${projectId}/model`);
   }
-
+  
   async function onRunFullScan() {
     if (!projectId) {
       setScanMessage("No project selected.");
@@ -353,7 +353,21 @@ export function Dashboard() {
 
   return (
     <div>
+
+      <div className="-mx-4 -mt-4 mb-6 bg-surface-0 dark:bg-surface-900 px-4 py-4 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700  md:-mx-0 md:-mt-3 md:px-6">
+        <h1 className="text-2xl  font-semibold text-gray-800 dark:text-white/90">
+          {projectVM.title}
+        </h1>
+      </div>
+
+
+
       <div className="grid grid-cols-12 gap-6">
+
+      {/*10/21/26 - For now all widgets that go unused will be in comments. */}
+
+
+      {/*
         <StatsWidget
           project={projectVM}
           deviceCounts={deviceCounts}
@@ -363,6 +377,7 @@ export function Dashboard() {
           onDevicesClick={goToDevicesPage}
           onAlertsClick={() => setShowAlertsDialog(true)}
         />
+        */}
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
           <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
@@ -376,7 +391,7 @@ export function Dashboard() {
               onOpenDevicesPage={goToDevicesPage}
             />
           </HasPermission>
-
+        {/* 
           <HasPermission permission={Permissions.Project.ScansRead} projectId={projectId}>
             <ScanStatusWidget
               lastScanTime={lastScanTime}
@@ -389,6 +404,7 @@ export function Dashboard() {
               onRunFullScan={onRunFullScan}
             />
           </HasPermission>
+        */}
         </div>
 
         <div className="col-span-12 flex flex-col gap-6 xl:col-span-6">
@@ -400,6 +416,7 @@ export function Dashboard() {
             onOpenDevicesPage={goToDevicesPage}
           />
 
+          {/* 
           <ProjectChecklistWidget
             project={projectVM}
             deviceCounts={deviceCounts}
@@ -408,9 +425,14 @@ export function Dashboard() {
             onOfflineDevicesFixedClick={goToDevicesPage}
             onWarningsResolvedClick={goToDevicesPage}
           />
+          */}
+
         </div>
       </div>
 
+
+
+      {/* 
       {showChecklistDialog && (
         <Modal title="Project Checklist" onClose={() => setShowChecklistDialog(false)} widthClassName="max-w-2xl">
           <ProjectChecklistWidget
@@ -432,6 +454,7 @@ export function Dashboard() {
           />
         </Modal>
       )}
+      */}
 
       {showAlertsDialog && (
         <Modal title="Alerts" onClose={() => setShowAlertsDialog(false)} widthClassName="max-w-2xl">
