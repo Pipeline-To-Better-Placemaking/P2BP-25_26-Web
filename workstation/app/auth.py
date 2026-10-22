@@ -59,3 +59,40 @@ def safe_path(*parts: str, root: str | Path | None = None) -> Path:
     if candidate != base_path and base_path not in candidate.parents:
         raise UnsafePathError("Path escapes DATA_ROOT")
     return candidate
+
+TICKET_SCOPE = "amc"
+
+
+def verify_ticket(token: str, secret: str) -> dict:
+    """Decode and verify an Express-issued workstation ticket; raises jwt.PyJWTError on any failure."""
+    claims = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        audience=TICKET_AUDIENCE,
+        options={"require": ["exp", "sub"]},
+    )
+    if claims.get("scope") != TICKET_SCOPE:
+        raise jwt.InvalidTokenError("wrong scope")
+    return claims
+
+
+def amc_ticket(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """
+    If AMC_PROJECT_ID is set only tickets for that project are accepted
+    """
+    secret = os.environ.get("WORKSTATION_TICKET_SECRET", "")
+    if not secret:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "WORKSTATION_TICKET_SECRET not configured")
+    if creds is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
+    try:
+        claims = verify_ticket(creds.credentials, secret)
+    except jwt.PyJWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired ticket")
+    allowed = os.environ.get("AMC_PROJECT_ID", "").strip()
+    if allowed and claims.get("pid") != allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ticket is for a different project")
+    return claims

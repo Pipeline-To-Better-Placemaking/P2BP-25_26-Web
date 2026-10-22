@@ -91,3 +91,9 @@ class CalibrationFileInfo(BaseModel):
     Id: str
     FileName: str
     SizeBytes: int
+
+class AmcStatus(BaseModel):
+    State: str = Field(description="down | starting | ready | stopping | error")
+    UiUrl: str = Field(default="", description="Where the user's browser opens AMC; empty unless ready")
+    Error: str = ""
+    UpdatedAt: int
