@@ -17,11 +17,11 @@ import type {
   DeviceStatus,
   ProjectViewModel,
 } from "../../lib/dashboardTypes";
-import { StatsWidget } from "./dashboard/StatsWidget";
+/* import { StatsWidget } from "./dashboard/StatsWidget"; */
 import { DevicesWidget } from "./dashboard/DevicesWidget";
 import { AlertsWidget } from "./dashboard/AlertsWidget";
-import { ScanStatusWidget } from "./dashboard/ScanStatusWidget";
-import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget";
+/* import { ScanStatusWidget } from "./dashboard/ScanStatusWidget"; */
+import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget"; */
 
 /**
  * Ported from BetterPlacemaking.CLIENT's views/projects/selected/dashboard/dashboard.ts. Mounted
@@ -316,19 +316,23 @@ export function Dashboard() {
     };
   }, [project, devices, deviceCounts]);
 
+  /*
   function goToDevicesPage() {
     if (projectId) navigate(`/${projectId}/devices`);
   }
-  
+  */
+  /*
   function goTo3DModelPage() {
     if (projectId) navigate(`/${projectId}/model`);
   }
-  
+  */
+  /*
   async function onRunFullScan() {
     if (!projectId) {
       setScanMessage("No project selected.");
       return;
     }
+  */
 
     const lidarDevices = devices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
     if (lidarDevices.length === 0) {
