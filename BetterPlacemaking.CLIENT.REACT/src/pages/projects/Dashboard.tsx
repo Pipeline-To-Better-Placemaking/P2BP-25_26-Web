@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ApiError } from "../../auth/apiClient";
+// import { ApiError } from "../../auth/apiClient";
 import { HasPermission } from "../../auth/HasPermission";
 import { Modal } from "../../components/Modal";
 import { Permissions } from "../../lib/permissions";
 import * as deviceApi from "../../services/deviceApi";
-import * as scanApi from "../../services/scanApi";
-import { BASE_SCAN_SETTINGS } from "../../lib/scanTypes";
+// import * as scanApi from "../../services/scanApi";
+// import { BASE_SCAN_SETTINGS } from "../../lib/scanTypes";
 import type { DeviceDto } from "../../lib/deviceTypes";
 import type { ProjectDto } from "../../lib/projectTypes";
-import type { ScanRecordDto } from "../../lib/scanTypes";
+// import type { ScanRecordDto } from "../../lib/scanTypes";
 import type {
   AlertCounts,
   DashboardAlert,
@@ -17,11 +17,11 @@ import type {
   DeviceStatus,
   ProjectViewModel,
 } from "../../lib/dashboardTypes";
-/* import { StatsWidget } from "./dashboard/StatsWidget"; */
+// import { StatsWidget } from "./dashboard/StatsWidget";
 import { DevicesWidget } from "./dashboard/DevicesWidget";
 import { AlertsWidget } from "./dashboard/AlertsWidget";
-/* import { ScanStatusWidget } from "./dashboard/ScanStatusWidget"; */
-/* import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget"; */
+// import { ScanStatusWidget } from "./dashboard/ScanStatusWidget";
+// import { ProjectChecklistWidget } from "./dashboard/ProjectChecklistWidget";
 
 /**
  * Ported from BetterPlacemaking.CLIENT's views/projects/selected/dashboard/dashboard.ts. Mounted
@@ -220,39 +220,39 @@ function getProjectChecklistMessage(devices: DeviceDto[], counts: DeviceCounts):
   return "Project is ready.";
 }
 
-function getScanTimestamp(value: unknown): number {
-  if (!value) return 0;
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  if (typeof value === "object" && "seconds" in (value as Record<string, unknown>)) {
-    const seconds = (value as { seconds?: number }).seconds;
-    if (typeof seconds === "number") return seconds * 1000;
-  }
-  return 0;
-}
+// function getScanTimestamp(value: unknown): number {
+//   if (!value) return 0;
+//   if (typeof value === "string") {
+//     const parsed = Date.parse(value);
+//     return Number.isNaN(parsed) ? 0 : parsed;
+//   }
+//   if (typeof value === "object" && "seconds" in (value as Record<string, unknown>)) {
+//     const seconds = (value as { seconds?: number }).seconds;
+//     if (typeof seconds === "number") return seconds * 1000;
+//   }
+//   return 0;
+// }
 
-function computeLastScanTime(scans: ScanRecordDto[]): Date {
-  const completed = scans
-    .filter((s) => {
-      const status = (s.Status ?? "").toLowerCase();
-      return status === "complete" || status === "done";
-    })
-    .sort((a, b) => getScanTimestamp(b.FinishedAt ?? b.CreatedAt) - getScanTimestamp(a.FinishedAt ?? a.CreatedAt));
+// function computeLastScanTime(scans: ScanRecordDto[]): Date {
+//   const completed = scans
+//     .filter((s) => {
+//       const status = (s.Status ?? "").toLowerCase();
+//       return status === "complete" || status === "done";
+//     })
+//     .sort((a, b) => getScanTimestamp(b.FinishedAt ?? b.CreatedAt) - getScanTimestamp(a.FinishedAt ?? a.CreatedAt));
 
-  const last = completed[0];
-  return last ? new Date(getScanTimestamp(last.FinishedAt ?? last.CreatedAt)) : new Date(0);
-}
+//   const last = completed[0];
+//   return last ? new Date(getScanTimestamp(last.FinishedAt ?? last.CreatedAt)) : new Date(0);
+// }
 
-function getScanStartErrorMessage(err: unknown): string {
-  if (err instanceof ApiError && err.status === 409) {
-    const body = err.body as { message?: string } | undefined;
-    if (body?.message?.trim()) return body.message.trim();
-    return "A scan is already in progress for one or more devices.";
-  }
-  return "Failed to start scan.";
-}
+// function getScanStartErrorMessage(err: unknown): string {
+//   if (err instanceof ApiError && err.status === 409) {
+//     const body = err.body as { message?: string } | undefined;
+//     if (body?.message?.trim()) return body.message.trim();
+//     return "A scan is already in progress for one or more devices.";
+//   }
+//   return "Failed to start scan.";
+// }
 
 export function Dashboard() {
   const { projectId } = useParams();
@@ -263,24 +263,24 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [lastScanTime, setLastScanTime] = useState<Date>(new Date(0));
-  const [scanLoading, setScanLoading] = useState(false);
-  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  // const [lastScanTime, setLastScanTime] = useState<Date>(new Date(0));
+  // const [scanLoading, setScanLoading] = useState(false);
+  // const [scanMessage, setScanMessage] = useState<string | null>(null);
 
-  const [showChecklistDialog, setShowChecklistDialog] = useState(false);
+  // const [showChecklistDialog, setShowChecklistDialog] = useState(false);
   const [showAlertsDialog, setShowAlertsDialog] = useState(false);
 
-  function loadLastScanTime(pid: string, currentDevices: DeviceDto[]) {
-    const lidarDevices = currentDevices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
-    if (lidarDevices.length === 0) {
-      setLastScanTime(new Date(0));
-      return;
-    }
+  // function loadLastScanTime(pid: string, currentDevices: DeviceDto[]) {
+  //   const lidarDevices = currentDevices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
+  //   if (lidarDevices.length === 0) {
+  //     setLastScanTime(new Date(0));
+  //     return;
+  //   }
 
-    Promise.all(lidarDevices.map((d) => scanApi.getScans(pid, d.Id).catch(() => [] as ScanRecordDto[])))
-      .then((groups) => setLastScanTime(computeLastScanTime(groups.flat())))
-      .catch(() => setLastScanTime(new Date(0)));
-  }
+  //   Promise.all(lidarDevices.map((d) => scanApi.getScans(pid, d.Id).catch(() => [] as ScanRecordDto[])))
+  //     .then((groups) => setLastScanTime(computeLastScanTime(groups.flat())))
+  //     .catch(() => setLastScanTime(new Date(0)));
+  // }
 
   function loadDashboard() {
     if (!projectId) return;
@@ -290,7 +290,7 @@ export function Dashboard() {
       .getDevicesByProject(projectId)
       .then((fetched) => {
         setDevices(fetched);
-        loadLastScanTime(projectId, fetched);
+        // loadLastScanTime(projectId, fetched);
       })
       .catch(() => {
         setDevices([]);
@@ -316,44 +316,40 @@ export function Dashboard() {
     };
   }, [project, devices, deviceCounts]);
 
-  /*
   function goToDevicesPage() {
     if (projectId) navigate(`/${projectId}/devices`);
   }
-  */
-  /*
-  function goTo3DModelPage() {
-    if (projectId) navigate(`/${projectId}/model`);
-  }
-  */
-  /*
-  async function onRunFullScan() {
-    if (!projectId) {
-      setScanMessage("No project selected.");
-      return;
-    }
-  */
+  
+  // function goTo3DModelPage() {
+  //   if (projectId) navigate(`/${projectId}/model`);
+  // }
+  
+  // async function onRunFullScan() {
+  //   if (!projectId) {
+  //     setScanMessage("No project selected.");
+  //     return;
+  //   }
 
-    const lidarDevices = devices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
-    if (lidarDevices.length === 0) {
-      setScanMessage("No LiDAR devices found for this project.");
-      return;
-    }
+  //   const lidarDevices = devices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
+  //   if (lidarDevices.length === 0) {
+  //     setScanMessage("No LiDAR devices found for this project.");
+  //     return;
+  //   }
 
-    setScanLoading(true);
-    setScanMessage(null);
-    try {
-      const results = await Promise.all(
-        lidarDevices.map((d) => scanApi.startScan(projectId, d.Id, BASE_SCAN_SETTINGS)),
-      );
-      setScanMessage(`Scan requested for ${results.length} device(s).`);
-      setTimeout(() => setScanMessage(null), 5000);
-    } catch (err) {
-      setScanMessage(getScanStartErrorMessage(err));
-    } finally {
-      setScanLoading(false);
-    }
-  }
+  //   setScanLoading(true);
+  //   setScanMessage(null);
+  //   try {
+  //     const results = await Promise.all(
+  //       lidarDevices.map((d) => scanApi.startScan(projectId, d.Id, BASE_SCAN_SETTINGS)),
+  //     );
+  //     setScanMessage(`Scan requested for ${results.length} device(s).`);
+  //     setTimeout(() => setScanMessage(null), 5000);
+  //   } catch (err) {
+  //     setScanMessage(getScanStartErrorMessage(err));
+  //   } finally {
+  //     setScanLoading(false);
+  //   }
+  // }
 
   return (
     <div>
@@ -476,3 +472,4 @@ export function Dashboard() {
       )}
     </div>
   );
+}
