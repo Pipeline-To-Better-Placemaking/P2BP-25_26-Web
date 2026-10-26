@@ -70,6 +70,14 @@ export const env = {
   workstationBaseUrl: optional("WORKSTATION_BASE_URL"),
   workstationApiToken: optional("WORKSTATION_API_TOKEN"),
 
+  // --- Workstation tracking history (browser talks to the workstation directly) ---
+  // Shared HS256 secret for the short-lived tickets minted by trackingTicket.routes.ts;
+  // the workstation verifies them with the same value. Both must be set or the
+  // ticket route answers 503.
+  workstationTicketSecret: optional("WORKSTATION_TICKET_SECRET"),
+  workstationTrackingUrl: optional("WORKSTATION_TRACKING_URL"),
+  workstationTicketMinutes: optionalInt("WORKSTATION_TICKET_MINUTES", 5),
+
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
   // detections + one JSON file per finished track), not a database table - see
