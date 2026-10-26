@@ -10,6 +10,7 @@ interface DevicesWidgetProps {
   getDeviceLastSeen: (device: DeviceDto) => string;
   onRefresh: () => void;
   onOpenDevicesPage: () => void;
+  onViewDetails: (device: DeviceDto) => void;
 }
 
 const AppDevicesWidget = "app-devices-widget" as unknown as "div";
@@ -32,6 +33,7 @@ export function DevicesWidget({
   getDeviceLastSeen,
   onRefresh,
   onOpenDevicesPage,
+  onViewDetails,
 }: DevicesWidgetProps) {
   return (
     <AppDevicesWidget>
@@ -84,6 +86,7 @@ export function DevicesWidget({
                   </button>
                   <button
                     type="button"
+                    onClick={() => onViewDetails(device)}
                     className="rounded-md bg-[#f0f5f9] px-3 py-1.5 text-sm  text-[#334155]  font-medium text-[#334155] hover:bg-[#b7bbbe] disabled:opacity-60"
                   >
                     Device Details

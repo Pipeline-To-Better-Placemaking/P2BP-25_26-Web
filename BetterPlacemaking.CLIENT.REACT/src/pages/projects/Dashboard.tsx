@@ -254,6 +254,101 @@ function getProjectChecklistMessage(devices: DeviceDto[], counts: DeviceCounts):
 //   return "Failed to start scan.";
 // }
 
+/**
+ * Popup shown when "View details" is clicked on a device. The dimmed backdrop covers the
+ * dashboard; clicking it, pressing Escape, or clicking the X closes the popup.
+ * Device information goes in the body section below.
+ */
+const STATUS_DOT_COLORS: Record<DeviceStatus, string> = {
+  online: "bg-green-500",
+  offline: "bg-red-500",
+  warning: "bg-yellow-500",
+};
+
+function DeviceDetailsPopup({
+  device,
+  onClose,
+  onOpenDevicesPage,
+}: {
+  device: DeviceDto;
+  onClose: () => void;
+  onOpenDevicesPage: () => void;
+}) {
+  const status = getDeviceStatus(device);
+  const lastSeen = getDeviceLastSeen(device);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Device details"
+        className="w-full max-w-2xl rounded-xl border border-surface-300 bg-surface-0 shadow-lg dark:border-surface-700 dark:bg-surface-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-surface-300 px-6 py-4 dark:border-surface-700">
+          <div className="flex items-center gap-3">
+            <span
+              className={"h-3 w-3 rounded-full " + STATUS_DOT_COLORS[status]}
+              title={status}
+              aria-label={`Status: ${status}`}
+            ></span>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+              {device.Name || "Unnamed device"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1 text-gray-500 hover:bg-surface-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-surface-800 dark:hover:text-white"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-6 text-gray-700 dark:text-gray-300">
+          <div className="space-y-1 text-sm">
+            <div>
+              <span className="font-medium">Status:</span> {status}
+            </div>
+            <div>
+              <span className="font-medium">Last seen:</span> {lastSeen}
+            </div>
+            <div >
+              <span className="font-medium">Id:</span> {device.Id}
+            </div>
+          </div>
+          {/* TODO: more device information goes here */}
+        </div>
+
+        <div className="flex justify-end border-t border-surface-300 px-6 py-4 dark:border-surface-700">
+          <button
+            type="button"
+            onClick={onOpenDevicesPage}
+            className="rounded-md bg-[#f0f5f9] px-3 py-1.5 text-sm font-medium text-[#334155] hover:bg-[#b7bbbe] disabled:opacity-60"
+          >
+            Device Page
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -269,6 +364,7 @@ export function Dashboard() {
 
   // const [showChecklistDialog, setShowChecklistDialog] = useState(false);
   const [showAlertsDialog, setShowAlertsDialog] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<DeviceDto | null>(null);
 
   // function loadLastScanTime(pid: string, currentDevices: DeviceDto[]) {
   //   const lidarDevices = currentDevices.filter((d) => d.Name?.toLowerCase().includes("lidar"));
@@ -389,6 +485,7 @@ export function Dashboard() {
               getDeviceLastSeen={getDeviceLastSeen}
               onRefresh={loadDashboard}
               onOpenDevicesPage={goToDevicesPage}
+              onViewDetails={(device: DeviceDto) => setSelectedDevice(device)}
             />
           </HasPermission>
         {/* 
@@ -455,6 +552,17 @@ export function Dashboard() {
         </Modal>
       )}
       */}
+
+      {selectedDevice && (
+        <DeviceDetailsPopup
+          device={selectedDevice}
+          onClose={() => setSelectedDevice(null)}
+          onOpenDevicesPage={() => {
+            setSelectedDevice(null);
+            goToDevicesPage();
+          }}
+        />
+      )}
 
       {showAlertsDialog && (
         <Modal title="Alerts" onClose={() => setShowAlertsDialog(false)} widthClassName="max-w-2xl">
