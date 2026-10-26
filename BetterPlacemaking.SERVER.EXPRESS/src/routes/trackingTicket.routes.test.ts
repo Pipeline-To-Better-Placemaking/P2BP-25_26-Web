@@ -21,7 +21,7 @@ vi.mock("../authorization/authorizationService.js", () => ({
 const { trackingTicketRouter, resetTrackingTicketRateLimit } = await import("./trackingTicket.routes.js");
 const { errorHandler } = await import("../middleware/errorHandler.js");
 const { createUserToken } = await import("../services/tokenService.js");
-const { env } = await import("../config/env.js");
+const { env, optionalPositiveInt } = await import("../config/env.js");
 
 const SECRET = "test-workstation-ticket-secret";
 const original = {
@@ -149,5 +149,52 @@ describe("POST /api/workstation-tracking/project/:projectId/ticket", () => {
   it("does not block a different user", async () => {
     expect((await post("proj-1", authHeader("user-1"))).status).toBe(200);
     expect((await post("proj-1", authHeader("user-2"))).status).toBe(200);
+  });
+
+  it("allows a ticket on another project 5 s after a 403", async () => {
+    expect((await post("proj-other")).status).toBe(403);
+    clock += 5_000;
+    expect((await post("proj-1")).status).toBe(200);
+  });
+
+  it("returns 429 on an immediate retry after a 403", async () => {
+    expect((await post("proj-other")).status).toBe(403);
+    clock += 2_000;
+    const res = await post("proj-1");
+    expect(res.status).toBe(429);
+    expect(res.headers["retry-after"]).toBe("3");
+  });
+
+  it("uses the short window after a 503", async () => {
+    env.workstationTicketSecret = undefined;
+    expect((await post()).status).toBe(503);
+    env.workstationTicketSecret = SECRET;
+    clock += 1_000;
+    expect((await post()).status).toBe(429);
+    clock += 4_000;
+    expect((await post()).status).toBe(200);
+  });
+});
+
+describe("optionalPositiveInt (WORKSTATION_TICKET_MINUTES parser)", () => {
+  const NAME = "TEST_POSITIVE_INT_ONLY";
+  afterEach(() => {
+    delete process.env[NAME];
+  });
+
+  it.each([
+    [undefined, 5],
+    ["", 5],
+    ["10", 10],
+    [" 7 ", 7],
+    ["0", 5],
+    ["-3", 5],
+    ["2.5", 5],
+    ["abc", 5],
+    ["3m", 5],
+  ])("parses %j as %i", (raw, expected) => {
+    if (raw === undefined) delete process.env[NAME];
+    else process.env[NAME] = raw;
+    expect(optionalPositiveInt(NAME, 5)).toBe(expected);
   });
 });

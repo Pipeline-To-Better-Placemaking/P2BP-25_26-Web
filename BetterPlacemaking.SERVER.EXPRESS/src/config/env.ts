@@ -20,6 +20,14 @@ function optionalInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Like optionalInt, but zero, negative or non-integer values fall back too. */
+export function optionalPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function optionalFloat(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -76,7 +84,7 @@ export const env = {
   // ticket route answers 503.
   workstationTicketSecret: optional("WORKSTATION_TICKET_SECRET"),
   workstationTrackingUrl: optional("WORKSTATION_TRACKING_URL"),
-  workstationTicketMinutes: optionalInt("WORKSTATION_TICKET_MINUTES", 5),
+  workstationTicketMinutes: optionalPositiveInt("WORKSTATION_TICKET_MINUTES", 5),
 
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
