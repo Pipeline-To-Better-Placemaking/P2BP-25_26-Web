@@ -8,13 +8,15 @@ import type {
   TrackingRange,
 } from "../../../lib/trackingTypes";
 import * as trackingApi from "../../../services/workstationTrackingApi";
-import { TrackingLockedError, TrackingRateLimitedError } from "../../../services/workstationTrackingApi";
+import { isAbortError, TrackingLockedError, TrackingRateLimitedError } from "../../../services/workstationTrackingApi";
 
 /**
  * History replay + export of person tracks recorded on the workstation. Data is fetched directly
  * from the workstation over the tailnet (see workstationTrackingApi.ts). While this panel is
  * mounted it holds the workstation's single data lease for the project (heartbeat every 15 s,
- * released on unmount and page unload), so nobody else can pull data at the same time.
+ * released on unmount and pagehide), so nobody else can pull data at the same time.
+ *
+ * Mount with key={projectId}: all state here (lease, meta, floor plan, loaded data) is per project.
  */
 
 const HEARTBEAT_MS = 15_000;
@@ -85,6 +87,59 @@ function positionAt(p: TrackingPerson, i: number, time: number): [number, number
   return [p.x[i], p.y[i]];
 }
 
+/** One person's trail in canvas CSS px, decimated to the canvas resolution. */
+interface CanvasTrail {
+  t: Float64Array;
+  x: Float32Array;
+  y: Float32Array;
+  /** 1 where the trail restarts after a gap (moveTo instead of lineTo). */
+  brk: Uint8Array;
+}
+
+const TRAIL_MIN_STEP_PX = 1.5;
+
+/**
+ * Projects a trail into canvas space and drops samples closer than TRAIL_MIN_STEP_PX to the
+ * previous kept one, so even a 6 h range has at most a few thousand vertices per person.
+ * Gap starts and the final sample are always kept.
+ */
+function decimateTrail(p: TrackingPerson, toCanvas: (x: number, y: number) => [number, number]): CanvasTrail {
+  const t: number[] = [];
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const brk: number[] = [];
+  let lx = 0;
+  let ly = 0;
+  for (let i = 0; i < p.t.length; i++) {
+    const [cx, cy] = toCanvas(p.x[i], p.y[i]);
+    const isBreak = i === 0 || p.t[i] - p.t[i - 1] > TRAIL_GAP_MS;
+    const isLast = i === p.t.length - 1;
+    if (!isBreak && !isLast && Math.hypot(cx - lx, cy - ly) < TRAIL_MIN_STEP_PX) continue;
+    t.push(p.t[i]);
+    xs.push(cx);
+    ys.push(cy);
+    brk.push(isBreak ? 1 : 0);
+    lx = cx;
+    ly = cy;
+  }
+  return { t: Float64Array.from(t), x: Float32Array.from(xs), y: Float32Array.from(ys), brk: Uint8Array.from(brk) };
+}
+
+/** Like lastIndexAtOrBefore, for typed arrays. */
+function lastIndexAtOrBeforeTyped(t: Float64Array, time: number): number {
+  let lo = 0;
+  let hi = t.length - 1;
+  let ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (t[mid] <= time) {
+      ans = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return ans;
+}
+
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -150,6 +205,20 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   const [attempt, setAttempt] = useState(0);
   /** Stops heartbeating the current lease (set by the lease effect). */
   const stopLeaseRef = useRef<() => void>(() => undefined);
+  /** Controllers of in-flight range/export/floor plan requests. */
+  const controllersRef = useRef(new Set<AbortController>());
+
+  const abortAll = useCallback(() => {
+    for (const c of controllersRef.current) c.abort();
+    controllersRef.current.clear();
+  }, []);
+
+  const newController = () => {
+    const c = new AbortController();
+    controllersRef.current.add(c);
+    return c;
+  };
+  const doneController = (c: AbortController) => controllersRef.current.delete(c);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,80 +281,106 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         });
     }, 0);
 
-    window.addEventListener("pagehide", release);
-    window.addEventListener("beforeunload", release);
+    // Abort data requests first so the release is not rejected as a second in-flight request.
+    const onPageHide = () => {
+      abortAll();
+      release();
+      stop();
+    };
+    // Back from the bfcache: the lease was released on pagehide, so acquire a new one.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setAttempt((a) => a + 1);
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       cancelled = true;
       clearTimeout(start);
       if (autoRetry) clearTimeout(autoRetry);
-      if (heartbeat) clearInterval(heartbeat);
-      window.removeEventListener("pagehide", release);
-      window.removeEventListener("beforeunload", release);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      abortAll();
       release();
+      stop();
     };
-  }, [projectId, attempt]);
+  }, [projectId, attempt, abortAll]);
 
   const sessionId = lease.status === "held" ? lease.sessionId : null;
 
   // Meta + floor plan image -------------------------------------------------------------------
   const [meta, setMeta] = useState<TrackingMeta | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
+  /** True once the initial meta + floor plan fetch has finished (successfully or not). */
+  const [metaSettled, setMetaSettled] = useState(false);
   const [floorImg, setFloorImg] = useState<HTMLImageElement | null>(null);
   const metaLoadedRef = useRef(false);
   const floorUrlRef = useRef<string | null>(null);
 
+  const setFloorUrl = (url: string | null) => {
+    if (floorUrlRef.current && floorUrlRef.current !== url) URL.revokeObjectURL(floorUrlRef.current);
+    floorUrlRef.current = url;
+  };
+
   useEffect(
     () => () => {
       if (floorUrlRef.current) URL.revokeObjectURL(floorUrlRef.current);
+      floorUrlRef.current = null;
     },
     [],
   );
 
   useEffect(() => {
-    // Load once the first lease attempt has resolved (shares its ticket; avoids a second mint).
+    // Load once a lease is held (shares its ticket, so no second mint).
     if (metaLoadedRef.current || lease.status !== "held") return;
     metaLoadedRef.current = true;
     let cancelled = false;
     let done = false;
-    let objectUrl: string | null = null;
+    let pendingUrl: string | null = null;
+    const ctrl = newController();
+    const finish = () => {
+      done = true;
+      doneController(ctrl);
+      if (!cancelled) setMetaSettled(true);
+    };
     (async () => {
       try {
-        const m = await trackingApi.getMeta(projectId);
+        const m = await trackingApi.getMeta(projectId, ctrl.signal);
         if (cancelled) return;
         setMeta(m);
-        if (!m.floorplan) {
-          done = true;
-          return;
-        }
-        const blob = await trackingApi.getFloorplanBlob(projectId);
+        if (!m.floorplan) return finish();
+        const blob = await trackingApi.getFloorplanBlob(projectId, ctrl.signal);
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
+        pendingUrl = URL.createObjectURL(blob);
         const img = new Image();
         img.onload = () => {
-          if (cancelled || !objectUrl) return;
-          done = true;
-          floorUrlRef.current = objectUrl;
+          if (cancelled) return;
+          setFloorUrl(pendingUrl);
+          pendingUrl = null;
           setFloorImg(img);
+          finish();
         };
         img.onerror = () => {
-          if (!cancelled) setMetaError("The floor plan image could not be decoded.");
+          if (pendingUrl) URL.revokeObjectURL(pendingUrl);
+          pendingUrl = null;
+          if (cancelled) return;
+          setMetaError("The floor plan image could not be decoded.");
+          finish();
         };
-        img.src = objectUrl;
+        img.src = pendingUrl;
       } catch (err) {
-        done = true;
-        if (!cancelled) {
-          metaLoadedRef.current = false;
-          setMetaError(`Couldn't load floor plan info: ${errorMessage(err)}`);
-        }
+        if (cancelled || isAbortError(err)) return;
+        setMetaError(`Couldn't load floor plan info: ${errorMessage(err)}`);
+        finish();
+        metaLoadedRef.current = false;
       }
     })();
     return () => {
       cancelled = true;
+      ctrl.abort();
+      doneController(ctrl);
+      if (pendingUrl) URL.revokeObjectURL(pendingUrl);
       // Interrupted before finishing: allow the next held lease to load it again.
-      if (!done) {
-        metaLoadedRef.current = false;
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-      }
+      if (!done) metaLoadedRef.current = false;
     };
   }, [projectId, lease.status]);
 
@@ -343,38 +438,47 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   }, [playhead]);
 
   const load = async () => {
-    if (!sessionId || busy) return;
+    if (!sessionId || busy || !metaSettled) return;
     setActionError(null);
     const r = resolveRange();
     if (typeof r === "string") return setActionError(r);
     if (r.to - r.from > MAX_RANGE_MS) return setActionError("Replay is limited to 6 hours. Choose a shorter range.");
     setBusy("load");
     setPlaying(false);
+    const ctrl = newController();
     try {
-      const res = await trackingApi.getRange(projectId, sessionId, { from: r.from, to: r.to, mode, hz: 5 });
+      const res = await trackingApi.getRange(projectId, sessionId, { from: r.from, to: r.to, mode, hz: 5 }, ctrl.signal);
       setData(res);
       setPlayhead(res.from);
     } catch (err) {
-      if (!handleLeaseFailure(err)) setActionError(errorMessage(err));
+      if (!isAbortError(err) && !handleLeaseFailure(err)) setActionError(errorMessage(err));
     } finally {
+      doneController(ctrl);
       setBusy(null);
     }
   };
 
   const doExport = async () => {
-    if (!sessionId || busy) return;
+    if (!sessionId || busy || !metaSettled) return;
     setActionError(null);
     setExportNote(null);
     const r = resolveRange();
     if (typeof r === "string") return setActionError(r);
     if (r.to - r.from > MAX_EXPORT_MS) return setActionError("Export is limited to 24 hours. Choose a shorter range.");
     setBusy("export");
+    const ctrl = newController();
     try {
-      await trackingApi.downloadExport(projectId, sessionId, { from: r.from, to: r.to, mode, format: exportFormat });
+      await trackingApi.downloadExport(
+        projectId,
+        sessionId,
+        { from: r.from, to: r.to, mode, format: exportFormat },
+        ctrl.signal,
+      );
       setExportNote(`Exported ${fmtDateTime(r.from)} to ${fmtDateTime(r.to)} (${mode}, ${exportFormat.toUpperCase()}).`);
     } catch (err) {
-      if (!handleLeaseFailure(err)) setActionError(errorMessage(err));
+      if (!isAbortError(err) && !handleLeaseFailure(err)) setActionError(errorMessage(err));
     } finally {
+      doneController(ctrl);
       setBusy(null);
     }
   };
@@ -470,10 +574,36 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     };
   }, [width, height, fp, data, meta]);
 
-  const draw = useCallback(() => {
+  // Device pixel ratio as state; the listener is re-registered only when the ratio changes.
+  const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1);
+  useEffect(() => {
+    const mq = window.matchMedia(`(resolution: ${dpr}dppx)`);
+    const onChange = () => setDpr(window.devicePixelRatio || 1);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [dpr]);
+
+  const trails = useMemo(
+    () => (data && project ? data.people.map((p) => decimateTrail(p, project.toCanvas)) : null),
+    [data, project],
+  );
+
+  /**
+   * Trails are drawn incrementally onto an offscreen canvas: each frame only strokes the
+   * segments added since the last frame. Seeking backwards (or new data/size) redraws it once.
+   */
+  const trailLayerRef = useRef<{
+    canvas: HTMLCanvasElement | null;
+    trails: CanvasTrail[] | null;
+    pw: number;
+    ph: number;
+    drawn: number[];
+    playhead: number;
+  }>({ canvas: null, trails: null, pw: 0, ph: 0, drawn: [], playhead: -Infinity });
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !project) return;
-    const dpr = window.devicePixelRatio || 1;
     const pw = Math.round(width * dpr);
     const ph = Math.round(height * dpr);
     if (canvas.width !== pw) canvas.width = pw;
@@ -509,31 +639,71 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       ctx.fillText(cam.name, cx + 8, cy);
     }
 
-    if (!data) return;
+    if (!data || !trails) return;
+
+    // Offscreen trail layer.
+    const layer = trailLayerRef.current;
+    if (!layer.canvas) layer.canvas = document.createElement("canvas");
+    const off = layer.canvas;
+    const octx = off.getContext("2d");
+    if (!octx) return;
+    if (layer.trails !== trails || layer.pw !== pw || layer.ph !== ph || playhead < layer.playhead) {
+      off.width = pw;
+      off.height = ph;
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      octx.clearRect(0, 0, width, height);
+      octx.lineJoin = "round";
+      octx.lineCap = "round";
+      octx.lineWidth = 2;
+      layer.trails = trails;
+      layer.pw = pw;
+      layer.ph = ph;
+      layer.drawn = trails.map(() => -1);
+    }
+    trails.forEach((tr, i) => {
+      const idx = lastIndexAtOrBeforeTyped(tr.t, playhead);
+      const from = layer.drawn[i];
+      if (idx <= from) return;
+      octx.strokeStyle = colorOf(data.people[i].id);
+      octx.beginPath();
+      const k0 = Math.max(from, 0);
+      octx.moveTo(tr.x[k0], tr.y[k0]);
+      for (let k = k0 + 1; k <= idx; k++) {
+        if (tr.brk[k]) octx.moveTo(tr.x[k], tr.y[k]);
+        else octx.lineTo(tr.x[k], tr.y[k]);
+      }
+      octx.stroke();
+      layer.drawn[i] = idx;
+    });
+    layer.playhead = playhead;
+
+    ctx.globalAlpha = 0.7;
+    ctx.drawImage(off, 0, 0, width, height);
+    ctx.globalAlpha = 1;
+
+    // Heads: the short segment from the last trail vertex to the interpolated position, and the dot.
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    for (const p of data.people) {
+    data.people.forEach((p, i) => {
       const idx = lastIndexAtOrBefore(p.t, playhead);
-      if (idx < 0) continue;
+      if (idx < 0) return;
       const color = colorOf(p.id);
-
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i <= idx; i++) {
-        const [cx, cy] = project.toCanvas(p.x[i], p.y[i]);
-        if (i === 0 || p.t[i] - p.t[i - 1] > TRAIL_GAP_MS) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
-      }
       const [hx, hy] = positionAt(p, idx, playhead);
       const [hcx, hcy] = project.toCanvas(hx, hy);
-      if (idx + 1 < p.t.length && p.t[idx + 1] - p.t[idx] <= TRAIL_GAP_MS) ctx.lineTo(hcx, hcy);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+      const tr = trails[i];
+      const ti = layer.drawn[i];
+      if (ti >= 0 && idx + 1 < p.t.length && p.t[idx + 1] - p.t[idx] <= TRAIL_GAP_MS) {
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(tr.x[ti], tr.y[ti]);
+        ctx.lineTo(hcx, hcy);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
 
-      const active = playhead <= p.t[p.t.length - 1] + DOT_LINGER_MS;
-      if (active) {
+      if (playhead <= p.t[p.t.length - 1] + DOT_LINGER_MS) {
         ctx.fillStyle = color;
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
@@ -544,65 +714,55 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         ctx.fillStyle = "#171717";
         ctx.fillText(p.id, hcx + 9, hcy - 8);
       }
-    }
-  }, [project, width, height, floorImg, meta, data, playhead, colorOf]);
-
-  useEffect(() => {
-    draw();
-  }, [draw]);
-
-  // Re-render at the new density when the window moves between screens or zooms.
-  useEffect(() => {
-    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
-    const onChange = () => draw();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [draw]);
+    });
+  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, colorOf]);
 
   // Render ------------------------------------------------------------------------------------
   const held = lease.status === "held";
-  const controlsDisabled = !held || busy !== null;
+  const controlsDisabled = !held || busy !== null || !metaSettled;
   const empty = data !== null && data.people.length === 0;
 
   return (
     <div className="flex flex-col gap-3">
-      {lease.status === "acquiring" && (
-        <p className="rounded-md bg-neutral-50 p-3 text-sm text-neutral-600">Connecting to the workstation...</p>
-      )}
-      {lease.status === "locked" && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-          <span>
-            {lease.heldBy
-              ? `In use by ${lease.heldBy}, try again after ${lease.until ? fmtTime(lease.until) : "they close it"}.`
-              : "Your tracking data session ended. Retry to continue."}
-          </span>
-          <button type="button" className={secondaryBtn} onClick={() => setAttempt((a) => a + 1)}>
-            Retry
-          </button>
-        </div>
-      )}
-      {lease.status === "error" && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
-          <span>
-            {lease.message}
-            {lease.retryAfterSeconds ? " Retrying automatically." : ""}
-          </span>
-          <button type="button" className={secondaryBtn} onClick={() => setAttempt((a) => a + 1)}>
-            Retry
-          </button>
-        </div>
-      )}
+      <div role="status" aria-live="polite" className="flex flex-col gap-3 empty:hidden">
+        {lease.status === "acquiring" && (
+          <p className="rounded-md bg-neutral-50 p-3 text-sm text-neutral-600">Connecting to the workstation...</p>
+        )}
+        {lease.status === "locked" && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+            <span>
+              {lease.heldBy
+                ? `In use by ${lease.heldBy}, try again after ${lease.until ? fmtTime(lease.until) : "they close it"}.`
+                : "Your tracking data session ended. Retry to continue."}
+            </span>
+            <button type="button" className={secondaryBtn} onClick={() => setAttempt((a) => a + 1)}>
+              Retry
+            </button>
+          </div>
+        )}
+        {lease.status === "error" && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <span>
+              {lease.message}
+              {lease.retryAfterSeconds ? " Retrying automatically." : ""}
+            </span>
+            <button type="button" className={secondaryBtn} onClick={() => setAttempt((a) => a + 1)}>
+              Retry
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-white p-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500">Range</span>
           <div className="flex gap-1">
             {PRESETS.map((m) => (
-              <button key={m} type="button" className={toggleBtn(preset === m)} onClick={() => selectPreset(m)}>
+              <button key={m} type="button" aria-pressed={preset === m} className={toggleBtn(preset === m)} onClick={() => selectPreset(m)}>
                 Last {m} min
               </button>
             ))}
-            <button type="button" className={toggleBtn(preset === "custom")} onClick={() => setPreset("custom")}>
+            <button type="button" aria-pressed={preset === "custom"} className={toggleBtn(preset === "custom")} onClick={() => setPreset("custom")}>
               Custom
             </button>
           </div>
@@ -636,10 +796,10 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500">IDs</span>
           <div className="flex gap-1">
-            <button type="button" className={toggleBtn(mode === "stitched")} onClick={() => setMode("stitched")}>
+            <button type="button" aria-pressed={mode === "stitched"} className={toggleBtn(mode === "stitched")} onClick={() => setMode("stitched")}>
               Stitched
             </button>
-            <button type="button" className={toggleBtn(mode === "raw")} onClick={() => setMode("raw")}>
+            <button type="button" aria-pressed={mode === "raw"} className={toggleBtn(mode === "raw")} onClick={() => setMode("raw")}>
               Raw
             </button>
           </div>
@@ -665,21 +825,30 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         </div>
       </div>
 
-      {meta?.span && (
-        <p className="text-xs text-neutral-500">
-          Recorded data available from {fmtDateTime(meta.span[0])} to {fmtDateTime(meta.span[1])}.
-        </p>
-      )}
-      {metaError && <p className="text-xs text-amber-700">{metaError}</p>}
-      {actionError && <p className="rounded-md bg-red-50 p-2 text-sm text-red-700">{actionError}</p>}
-      {exportNote && <p className="text-xs text-green-700">{exportNote}</p>}
+      <div role="status" aria-live="polite" className="flex flex-col gap-1">
+        {held && !metaSettled && <p className="text-xs text-neutral-500">Loading floor plan...</p>}
+        {meta?.span && (
+          <p className="text-xs text-neutral-500">
+            Recorded data available from {fmtDateTime(meta.span[0])} to {fmtDateTime(meta.span[1])}.
+          </p>
+        )}
+        {metaError && <p className="text-xs text-amber-700">{metaError}</p>}
+        {actionError && <p className="rounded-md bg-red-50 p-2 text-sm text-red-700">{actionError}</p>}
+        {exportNote && <p className="text-xs text-green-700">{exportNote}</p>}
+      </div>
 
       <div className="flex flex-col gap-3 lg:flex-row">
         <div className="min-w-0 flex-1">
           <div ref={containerRef} className="relative w-full overflow-hidden rounded-lg border border-neutral-200">
-            <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
+            <canvas
+              ref={canvasRef}
+              role="img"
+              aria-label={
+                data && !empty ? `Floor plan replay of ${data.people.length} people` : "Floor plan replay"
+              }
+              style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
             {(empty || !data) && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <span className="rounded-md bg-white/85 px-3 py-1.5 text-sm text-neutral-600">
                   {empty ? "No tracking data in this range" : "Choose a range and press Load"}
                 </span>
@@ -694,7 +863,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               </button>
               <div className="flex gap-1">
                 {SPEEDS.map((s) => (
-                  <button key={s} type="button" className={toggleBtn(speed === s)} onClick={() => setSpeed(s)}>
+                  <button key={s} type="button" aria-pressed={speed === s} className={toggleBtn(speed === s)} onClick={() => setSpeed(s)}>
                     {s}x
                   </button>
                 ))}

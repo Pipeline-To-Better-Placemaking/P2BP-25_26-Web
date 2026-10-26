@@ -1,4 +1,6 @@
 import { api, ApiError } from "../auth/apiClient";
+import * as authStore from "../auth/authStore";
+import type { StoredAuth } from "../lib/types";
 import type {
   Matrix3,
   TrackingCamera,
@@ -20,9 +22,13 @@ import type {
  * short-lived project-scoped ticket; every data request goes straight from the browser to the
  * workstation over the tailnet with `Authorization: Bearer <ticket>`.
  *
- * The ticket route allows one mint per 60 s per user, so tickets are cached per project and
- * reused until 30 s before they expire, and a new mint is never attempted within 60 s of the
- * previous one.
+ * The ticket route allows one mint per 60 s per user, so tickets are cached per user and project
+ * and reused until 30 s before they expire, and a new mint is never attempted within 60 s of the
+ * previous one. The cache is cleared whenever the signed-in user changes.
+ *
+ * The workstation allows one data request (range or export) in flight per lease, so those go
+ * through a client-side queue. Heartbeats, session calls, meta and the floor plan are not queued,
+ * so a long export can never starve the lease.
  */
 
 const TICKET_REFRESH_MARGIN_MS = 30_000;
@@ -95,6 +101,25 @@ const ticketCache = new Map<string, CachedTicket>();
 const lastMintAt = new Map<string, number>();
 const inflightTickets = new Map<string, Promise<CachedTicket>>();
 
+function userKeyOf(state: StoredAuth | null): string {
+  return state?.User?.Id || state?.User?.Email || "anonymous";
+}
+
+let currentUserKey = userKeyOf(authStore.getState());
+authStore.subscribe((state) => {
+  const next = userKeyOf(state);
+  if (next === currentUserKey) return;
+  currentUserKey = next;
+  ticketCache.clear();
+  lastMintAt.clear();
+  inflightTickets.clear();
+});
+
+/** Cache key: tickets are bound to both the signed-in user and the project. */
+function cacheKey(projectId: string): string {
+  return `${userKeyOf(authStore.getState())}|${projectId}`;
+}
+
 function isFresh(t: CachedTicket | undefined, now = Date.now()): t is CachedTicket {
   return !!t && t.expiresAtMs - TICKET_REFRESH_MARGIN_MS > now;
 }
@@ -107,8 +132,8 @@ function messageOf(body: unknown): string | null {
   return null;
 }
 
-async function mintTicket(projectId: string): Promise<CachedTicket> {
-  lastMintAt.set(projectId, Date.now());
+async function mintTicket(projectId: string, key: string): Promise<CachedTicket> {
+  lastMintAt.set(key, Date.now());
   try {
     const dto = await api.post<TrackingTicketDto>(
       `/api/workstation-tracking/project/${encodeURIComponent(projectId)}/ticket`,
@@ -122,7 +147,8 @@ async function mintTicket(projectId: string): Promise<CachedTicket> {
       expiresAtMs,
       baseUrl: dto.WorkstationUrl.replace(/\/+$/, ""),
     };
-    ticketCache.set(projectId, cached);
+    // Drop the result if the user changed while the mint was in flight.
+    if (key === cacheKey(projectId)) ticketCache.set(key, cached);
     return cached;
   } catch (err) {
     if (err instanceof ApiError) {
@@ -143,25 +169,48 @@ async function mintTicket(projectId: string): Promise<CachedTicket> {
 
 /** A valid ticket for this project, from cache when possible. */
 export function getTicket(projectId: string): Promise<CachedTicket> {
-  const cached = ticketCache.get(projectId);
+  const key = cacheKey(projectId);
+  const cached = ticketCache.get(key);
   if (isFresh(cached)) return Promise.resolve(cached);
 
-  const inflight = inflightTickets.get(projectId);
+  const inflight = inflightTickets.get(key);
   if (inflight) return inflight;
 
-  const last = lastMintAt.get(projectId);
+  const last = lastMintAt.get(key);
   if (last !== undefined) {
     const wait = last + TICKET_MIN_INTERVAL_MS - Date.now();
     if (wait > 0) return Promise.reject(new TrackingRateLimitedError(Math.ceil(wait / 1000)));
   }
 
-  const p = mintTicket(projectId).finally(() => inflightTickets.delete(projectId));
-  inflightTickets.set(projectId, p);
+  const p = mintTicket(projectId, key).finally(() => {
+    if (inflightTickets.get(key) === p) inflightTickets.delete(key);
+  });
+  inflightTickets.set(key, p);
   return p;
 }
 
 function dropTicket(projectId: string) {
-  ticketCache.delete(projectId);
+  ticketCache.delete(cacheKey(projectId));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Data request queue (range + export): never two at once
+// ---------------------------------------------------------------------------------------------
+
+let dataQueue: Promise<unknown> = Promise.resolve();
+
+function abortError(): DOMException {
+  return new DOMException("The request was aborted.", "AbortError");
+}
+
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+function enqueueData<T>(signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+  const result = dataQueue.then(() => (signal?.aborted ? Promise.reject(abortError()) : run()));
+  dataQueue = result.catch(() => undefined);
+  return result;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -228,7 +277,7 @@ async function rawFetch(t: CachedTicket, path: string, opts: WsOptions): Promise
       signal: opts.signal,
     });
   } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    if (isAbortError(err)) throw err;
     if (err instanceof TypeError) throw new TrackingUnreachableError();
     throw err;
   }
@@ -348,13 +397,13 @@ export function normalizeRange(raw: unknown, query: TrackingRangeQuery): Trackin
 // Public API
 // ---------------------------------------------------------------------------------------------
 
-export async function getMeta(projectId: string): Promise<TrackingMeta> {
-  return normalizeMeta(await wsJson(projectId, "/tracking/meta"));
+export async function getMeta(projectId: string, signal?: AbortSignal): Promise<TrackingMeta> {
+  return normalizeMeta(await wsJson(projectId, "/tracking/meta", { signal }));
 }
 
 /** The floor plan image as a Blob (the route needs the Authorization header, so no plain <img src>). */
-export async function getFloorplanBlob(projectId: string): Promise<Blob> {
-  const res = await wsFetch(projectId, "/tracking/floorplan.png");
+export async function getFloorplanBlob(projectId: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await wsFetch(projectId, "/tracking/floorplan.png", { signal });
   return res.blob();
 }
 
@@ -366,13 +415,27 @@ export async function acquireSession(projectId: string, kind: TrackingSessionKin
   return { SessionId: body.SessionId, ExpiresAt: body.ExpiresAt ?? "" };
 }
 
-/** Keeps the lease alive. A 404 or 423 means the lease is gone; both surface as TrackingLockedError. */
+const HEARTBEAT_RETRY_CAP_S = 10;
+
+/**
+ * Keeps the lease alive. A 404 or 423 means the lease is gone; both surface as TrackingLockedError.
+ * A 429 is retried once after Retry-After (capped so it stays well inside the lease timeout).
+ */
 export async function heartbeatSession(projectId: string, sessionId: string): Promise<TrackingHeartbeatDto> {
-  try {
-    const body = (await wsJson(projectId, `/tracking/session/${encodeURIComponent(sessionId)}/heartbeat`, {
-      method: "POST",
-    })) as Partial<TrackingHeartbeatDto> | undefined;
+  const path = `/tracking/session/${encodeURIComponent(sessionId)}/heartbeat`;
+  const once = async () => {
+    const body = (await wsJson(projectId, path, { method: "POST" })) as Partial<TrackingHeartbeatDto> | undefined;
     return { ExpiresAt: body?.ExpiresAt ?? "" };
+  };
+  try {
+    try {
+      return await once();
+    } catch (err) {
+      if (!(err instanceof TrackingRateLimitedError)) throw err;
+      const waitS = Math.min(Math.max(err.retryAfterSeconds, 1), HEARTBEAT_RETRY_CAP_S);
+      await new Promise((r) => setTimeout(r, waitS * 1000));
+      return await once();
+    }
   } catch (err) {
     if (err instanceof TrackingError && err.status === 404) throw new TrackingLockedError(null, null);
     throw err;
@@ -385,7 +448,7 @@ export async function heartbeatSession(projectId: string, sessionId: string): Pr
  * usable ticket is cached the lease simply expires on the workstation after its heartbeat timeout.
  */
 export function releaseSession(projectId: string, sessionId: string): void {
-  const t = ticketCache.get(projectId);
+  const t = ticketCache.get(cacheKey(projectId));
   if (!t || t.expiresAtMs <= Date.now()) return;
   try {
     void fetch(`${t.baseUrl}/tracking/session/${encodeURIComponent(sessionId)}`, {
@@ -398,7 +461,16 @@ export function releaseSession(projectId: string, sessionId: string): void {
   }
 }
 
-export async function getRange(
+export function getRange(
+  projectId: string,
+  sessionId: string,
+  query: TrackingRangeQuery,
+  signal?: AbortSignal,
+): Promise<TrackingRange> {
+  return enqueueData(signal, () => fetchRange(projectId, sessionId, query, signal));
+}
+
+async function fetchRange(
   projectId: string,
   sessionId: string,
   query: TrackingRangeQuery,
@@ -427,19 +499,26 @@ function filenameFrom(res: Response, fallback: string): string {
   return fallback;
 }
 
+type ExportQuery = { from: number; to: number; mode: TrackingMode; format: TrackingExportFormat };
+
 /** Streams an export to a Blob and triggers a browser download. */
-export async function downloadExport(
+export function downloadExport(
   projectId: string,
   sessionId: string,
-  query: { from: number; to: number; mode: TrackingMode; format: TrackingExportFormat },
+  query: ExportQuery,
+  signal?: AbortSignal,
 ): Promise<void> {
+  return enqueueData(signal, () => fetchExport(projectId, sessionId, query, signal));
+}
+
+async function fetchExport(projectId: string, sessionId: string, query: ExportQuery, signal?: AbortSignal): Promise<void> {
   const qs = new URLSearchParams({
     from: String(Math.round(query.from)),
     to: String(Math.round(query.to)),
     mode: query.mode,
     format: query.format,
   });
-  const res = await wsFetch(projectId, `/tracking/export?${qs}`, { sessionId });
+  const res = await wsFetch(projectId, `/tracking/export?${qs}`, { sessionId, signal });
   const blob = await res.blob();
   const stamp = new Date(query.from).toISOString().replace(/[:.]/g, "-");
   const name = filenameFrom(res, `tracking-${query.mode}-${stamp}.${query.format}`);

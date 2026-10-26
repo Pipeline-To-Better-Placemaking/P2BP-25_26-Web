@@ -71,7 +71,7 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
 
       {replaySelected ? (
         projectId ? (
-          <TrackingReplayPanel projectId={projectId} />
+          <TrackingReplayPanel key={projectId} projectId={projectId} />
         ) : (
           <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-700">Select a project to replay tracking history.</p>
         )
