@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { PointCloudViewer, type PointCloudViewerHandle } from "../../../components/PointCloudViewer";
 import { SolidObjectsView, type SolidObjectsViewHandle } from "../../../components/SolidObjectsView";
+import { TrackingReplayPanel } from "./TrackingReplayPanel";
 import { UploadDataPanel } from "./UploadDataPanel";
 
 export type ScannerVisualMode = "3d" | "solids";
@@ -34,21 +36,28 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
   const pointCloudRef = useRef<PointCloudViewerHandle | null>(null);
   const solidRef = useRef<SolidObjectsViewHandle | null>(null);
 
+  const { projectId } = useParams();
   const [uploadSelected, setUploadSelected] = useState(false);
+  // Replay holds the workstation data lease while mounted, so it only mounts when selected.
+  const [replaySelected, setReplaySelected] = useState(false);
+  const viewerSelected = !uploadSelected && !replaySelected;
 
   return (
     <div className="mt-6 flex min-h-[min(70vh,640px)] flex-col">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => {onVisualModeChange("solids"), setUploadSelected(false)}} className={tabBtn(!uploadSelected && visualMode === "solids")}>
+        <button type="button" onClick={() => {onVisualModeChange("solids"); setUploadSelected(false); setReplaySelected(false);}} className={tabBtn(viewerSelected && visualMode === "solids")}>
           2D View
         </button>
-        <button type="button" onClick={() => {onVisualModeChange("3d"), setUploadSelected(false)}} className={tabBtn(!uploadSelected && visualMode === "3d")}>
+        <button type="button" onClick={() => {onVisualModeChange("3d"); setUploadSelected(false); setReplaySelected(false);}} className={tabBtn(viewerSelected && visualMode === "3d")}>
           3D View
         </button>
-        <button type="button" onClick={() => setUploadSelected(true)} className = {tabBtn(uploadSelected)}>
+        <button type="button" onClick={() => {setUploadSelected(true); setReplaySelected(false);}} className = {tabBtn(uploadSelected)}>
           Upload
         </button>
-        {!uploadSelected ? (
+        <button type="button" onClick={() => {setReplaySelected(true); setUploadSelected(false);}} className={tabBtn(replaySelected)}>
+          Replay
+        </button>
+        {viewerSelected ? (
           <button
             type="button"
             onClick={() => (visualMode === "3d" ? pointCloudRef.current?.resetView() : solidRef.current?.resetView())}
@@ -60,7 +69,13 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
       </div>
 
 
-      {uploadSelected ? (
+      {replaySelected ? (
+        projectId ? (
+          <TrackingReplayPanel projectId={projectId} />
+        ) : (
+          <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-700">Select a project to replay tracking history.</p>
+        )
+      ) : uploadSelected ? (
         <UploadDataPanel />
       ) : (
         <div>
