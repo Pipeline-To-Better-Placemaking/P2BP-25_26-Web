@@ -90,6 +90,10 @@ export interface TrackingOffsets {
   needed: boolean;
   gain_m: number | null;
   learned_at_ms: number | null;
+  enabled: boolean;
+  learned: boolean;
+  /** Why offset learning or correction failed, when it did. */
+  error: string | null;
 }
 
 /** `summary` of `GET /tracking/range`, normalized client side (every field may be missing). */
@@ -98,9 +102,15 @@ export interface TrackingSummary {
   max_at_once: number | null;
   occupied_s: number | null;
   persons: TrackingPersonSummary[];
-  /** Points dropped per cleaning stage, reduced to counts. */
+  /**
+   * Numeric `dropped` counters as sent (out_of_bounds, zone, speed, short_tracklet,
+   * short_tracklet_samples, shared_id_joins, duplicate_joins, stitch_joins, post_merge_speed,
+   * short_person, short_person_buckets).
+   */
   dropped: Record<string, number>;
-  /** Sum of `dropped`, or null when the workstation reported none. */
+  /** `dropped.zones`: points dropped per zone name. */
+  droppedZones: Record<string, number>;
+  /** Points dropped (see POINT_DROP_KEYS), or null when the workstation reported no dropped block. */
   droppedTotal: number | null;
   offsets: TrackingOffsets | null;
   preset: string | null;

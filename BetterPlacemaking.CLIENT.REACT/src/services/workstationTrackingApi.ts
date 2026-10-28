@@ -369,26 +369,28 @@ function toMode(v: unknown): TrackingMode | null {
 const asRecord = (v: unknown): Record<string, unknown> | null =>
   typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 
-/** A dropped-points entry is a count, or an object holding one (`count`/`n`/`total`, else its numeric values summed). */
-function droppedCount(v: unknown): number | null {
-  const n = num(v);
-  if (n !== null) return n;
+/**
+ * `dropped` counters that count points (samples). Join counters, `short_tracklet` and
+ * `short_person` count tracks or people instead, so they are not part of "points dropped".
+ */
+const POINT_DROP_KEYS = [
+  "out_of_bounds",
+  "zone",
+  "speed",
+  "short_tracklet_samples",
+  "post_merge_speed",
+  "short_person_buckets",
+] as const;
+
+function numberMap(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
   const r = asRecord(v);
-  if (!r) return null;
-  for (const k of ["count", "n", "total", "dropped"]) {
-    const c = num(r[k]);
-    if (c !== null) return c;
+  if (!r) return out;
+  for (const [k, x] of Object.entries(r)) {
+    const n = num(x);
+    if (n !== null) out[k] = n;
   }
-  let sum = 0;
-  let any = false;
-  for (const x of Object.values(r)) {
-    const c = num(x);
-    if (c !== null) {
-      sum += c;
-      any = true;
-    }
-  }
-  return any ? sum : null;
+  return out;
 }
 
 export function normalizeSummary(raw: unknown): TrackingSummary | null {
@@ -412,17 +414,10 @@ export function normalizeSummary(raw: unknown): TrackingSummary | null {
     }
   }
 
-  const dropped: Record<string, number> = {};
-  let droppedTotal: number | null = null;
   const d = asRecord(o.dropped);
-  if (d) {
-    for (const [stage, v] of Object.entries(d)) {
-      const c = droppedCount(v);
-      if (c === null) continue;
-      dropped[stage] = c;
-      droppedTotal = (droppedTotal ?? 0) + c;
-    }
-  }
+  const dropped = numberMap(d);
+  const droppedZones = numberMap(d?.zones);
+  const droppedTotal = d ? POINT_DROP_KEYS.reduce((sum, k) => sum + (dropped[k] ?? 0), 0) : null;
 
   let offsets: TrackingOffsets | null = null;
   const off = asRecord(o.offsets);
@@ -432,6 +427,9 @@ export function normalizeSummary(raw: unknown): TrackingSummary | null {
       needed: off.needed === true,
       gain_m: num(off.gain_m),
       learned_at_ms: num(off.learned_at_ms),
+      enabled: off.enabled === true,
+      learned: off.learned === true,
+      error: typeof off.error === "string" && off.error ? off.error : null,
     };
   }
 
@@ -441,6 +439,7 @@ export function normalizeSummary(raw: unknown): TrackingSummary | null {
     occupied_s: num(o.occupied_s),
     persons,
     dropped,
+    droppedZones,
     droppedTotal,
     offsets,
     preset: typeof o.preset === "string" && o.preset ? o.preset : null,

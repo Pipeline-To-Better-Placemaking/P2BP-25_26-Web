@@ -596,6 +596,15 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     () => new Map((summary?.persons ?? []).map((ps) => [ps.id, ps])),
     [summary],
   );
+  const zoneTitle = useMemo(() => {
+    const zones = Object.entries(summary?.droppedZones ?? {}).filter(([, n]) => n > 0);
+    return zones.length ? `Dropped by zone: ${zones.map(([name, n]) => `${name} ${n}`).join(", ")}` : undefined;
+  }, [summary]);
+  const cleaningWarnings = useMemo(() => {
+    const w = [...(summary?.config_warnings ?? [])];
+    if (summary?.offsets?.error) w.push(`camera offset: ${summary.offsets.error}`);
+    return w;
+  }, [summary]);
   const peopleCount = summary?.people ?? data?.people.length ?? 0;
   const peakCount = useMemo(() => summary?.max_at_once ?? (data ? maxAtOnce(data.people) : 0), [summary, data]);
 
@@ -992,15 +1001,15 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
             <p className="mb-2 text-xs text-neutral-500">{data.mode === "fused" ? "Fused across cameras" : "Raw tracker IDs"}</p>
             {summary && (
               <div className="mb-2 flex flex-col gap-1 text-xs">
-                <p className="text-neutral-500">
+                <p className="text-neutral-500" title={zoneTitle}>
                   Cleaned: {summary.droppedTotal ?? 0} {summary.droppedTotal === 1 ? "point" : "points"} dropped
                   {summary.offsets &&
-                    ` · camera offset correction ${summary.offsets.applied ? "on" : "off"} (${
+                    ` · camera offset correction ${summary.offsets.applied ? "applied" : "not applied"} (${
                       summary.offsets.needed ? "needed" : "not needed"
                     })`}
                 </p>
-                {summary.config_warnings.length > 0 && (
-                  <p className="text-neutral-500">Cleaning config warnings: {summary.config_warnings.join(", ")}</p>
+                {cleaningWarnings.length > 0 && (
+                  <p className="text-neutral-500">Cleaning config warnings: {cleaningWarnings.join(", ")}</p>
                 )}
                 {summary.config_error && (
                   <p role="alert" className="text-amber-700">
