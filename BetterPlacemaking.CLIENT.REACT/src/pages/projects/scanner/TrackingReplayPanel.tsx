@@ -23,6 +23,8 @@ const HEARTBEAT_MS = 15_000;
 const MAX_RANGE_MS = 6 * 60 * 60 * 1000;
 const MAX_EXPORT_MS = 24 * 60 * 60 * 1000;
 const TRAIL_GAP_MS = 2_000;
+/** Consecutive samples farther apart than this (world metres) break the trail. */
+const TRAIL_JUMP_M = 1.0;
 const DOT_LINGER_MS = 1_000;
 const PRESETS = [5, 20, 60] as const;
 const SPEEDS = [1, 4, 16] as const;
@@ -77,10 +79,19 @@ function lastIndexAtOrBefore(t: number[], time: number): number {
   return ans;
 }
 
-/** Position at `time`, linearly interpolated between samples closer than TRAIL_GAP_MS. */
+/**
+ * True when sample i starts a new trail segment: the first sample, a time gap over TRAIL_GAP_MS,
+ * or a jump over TRAIL_JUMP_M (measured in world metres, before projection).
+ */
+function isBreakAt(p: TrackingPerson, i: number): boolean {
+  if (i <= 0) return true;
+  return p.t[i] - p.t[i - 1] > TRAIL_GAP_MS || Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) > TRAIL_JUMP_M;
+}
+
+/** Position at `time`, linearly interpolated between samples of the same trail segment. */
 function positionAt(p: TrackingPerson, i: number, time: number): [number, number] {
   const j = i + 1;
-  if (j < p.t.length && p.t[j] - p.t[i] <= TRAIL_GAP_MS && p.t[j] > p.t[i]) {
+  if (j < p.t.length && !isBreakAt(p, j) && p.t[j] > p.t[i]) {
     const a = (time - p.t[i]) / (p.t[j] - p.t[i]);
     return [p.x[i] + a * (p.x[j] - p.x[i]), p.y[i] + a * (p.y[j] - p.y[i])];
   }
@@ -112,7 +123,7 @@ function decimateTrail(p: TrackingPerson, toCanvas: (x: number, y: number) => [n
   let ly = 0;
   for (let i = 0; i < p.t.length; i++) {
     const [cx, cy] = toCanvas(p.x[i], p.y[i]);
-    const isBreak = i === 0 || p.t[i] - p.t[i - 1] > TRAIL_GAP_MS;
+    const isBreak = isBreakAt(p, i);
     const isLast = i === p.t.length - 1;
     if (!isBreak && !isLast && Math.hypot(cx - lx, cy - ly) < TRAIL_MIN_STEP_PX) continue;
     t.push(p.t[i]);
@@ -173,6 +184,58 @@ function fmtDuration(ms: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/** Seconds -> "mm:ss" (minutes keep counting past an hour). */
+function fmtMmSs(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+}
+
+/** "cam1 30% · cam2 70%", cameras in name order; null when there is nothing to show. */
+function fmtCameraShare(share: Record<string, number> | undefined): string | null {
+  if (!share) return null;
+  const parts = Object.entries(share)
+    .filter(([, f]) => f > 0)
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([cam, f]) => `${cam} ${Math.round(f * 100)}%`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** Time covered by a person's trail segments, in seconds. */
+function trackedSeconds(p: TrackingPerson): number {
+  let total = 0;
+  let start = p.t[0];
+  for (let i = 1; i <= p.t.length; i++) {
+    if (i === p.t.length || p.t[i] - p.t[i - 1] > TRAIL_GAP_MS) {
+      total += p.t[i - 1] - start;
+      if (i < p.t.length) start = p.t[i];
+    }
+  }
+  return total / 1000;
+}
+
+/** Most people present at the same time; presence is each run of samples without a time gap. */
+function maxAtOnce(people: TrackingPerson[]): number {
+  const events: [number, number][] = [];
+  for (const p of people) {
+    let start = p.t[0];
+    for (let i = 1; i <= p.t.length; i++) {
+      if (i === p.t.length || p.t[i] - p.t[i - 1] > TRAIL_GAP_MS) {
+        events.push([start, 1], [p.t[i - 1], -1]);
+        if (i < p.t.length) start = p.t[i];
+      }
+    }
+  }
+  // Starts before ends at the same instant, so touching runs count as overlapping.
+  events.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  let cur = 0;
+  let max = 0;
+  for (const [, d] of events) {
+    cur += d;
+    max = Math.max(max, cur);
+  }
+  return max;
 }
 
 function errorMessage(err: unknown): string {
@@ -388,7 +451,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   const [preset, setPreset] = useState<Preset>(20);
   const [fromInput, setFromInput] = useState(() => toLocalInput(lastMinutes(20).from));
   const [toInput, setToInput] = useState(() => toLocalInput(lastMinutes(20).to));
-  const [mode, setMode] = useState<TrackingMode>("stitched");
+  const [mode, setMode] = useState<TrackingMode>("fused");
   const [exportFormat, setExportFormat] = useState<TrackingExportFormat>("csv");
   const [busy, setBusy] = useState<"load" | "export" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -505,11 +568,36 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     setPlaying((p) => !p);
   };
 
-  const colorOf = useMemo(() => {
-    const map = new Map<string, string>();
-    data?.people.forEach((p, i) => map.set(p.id, COLORS[i % COLORS.length]));
-    return (id: string) => map.get(id) ?? COLORS[0];
-  }, [data]);
+  /** People in order of first appearance; each is labelled 1..N in that order. */
+  const ordered = useMemo(
+    () =>
+      (data?.people ?? [])
+        .map((p, index) => ({ p, index }))
+        .sort((a, b) => a.p.t[0] - b.p.t[0] || a.index - b.index)
+        .map(({ p }, i) => ({ person: p, label: String(i + 1) })),
+    [data],
+  );
+
+  const { colorOf, labelOf } = useMemo(() => {
+    const colors = new Map<string, string>();
+    const labels = new Map<string, string>();
+    ordered.forEach(({ person, label }, i) => {
+      colors.set(person.id, COLORS[i % COLORS.length]);
+      labels.set(person.id, label);
+    });
+    return {
+      colorOf: (id: string) => colors.get(id) ?? COLORS[0],
+      labelOf: (id: string) => labels.get(id) ?? id,
+    };
+  }, [ordered]);
+
+  const summary = data?.summary ?? null;
+  const personSummaries = useMemo(
+    () => new Map((summary?.persons ?? []).map((ps) => [ps.id, ps])),
+    [summary],
+  );
+  const peopleCount = summary?.people ?? data?.people.length ?? 0;
+  const peakCount = useMemo(() => summary?.max_at_once ?? (data ? maxAtOnce(data.people) : 0), [summary, data]);
 
   // Canvas ------------------------------------------------------------------------------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -692,7 +780,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       const [hcx, hcy] = project.toCanvas(hx, hy);
       const tr = trails[i];
       const ti = layer.drawn[i];
-      if (ti >= 0 && idx + 1 < p.t.length && p.t[idx + 1] - p.t[idx] <= TRAIL_GAP_MS) {
+      if (ti >= 0 && idx + 1 < p.t.length && !isBreakAt(p, idx + 1)) {
         ctx.strokeStyle = color;
         ctx.globalAlpha = 0.7;
         ctx.lineWidth = 2;
@@ -712,10 +800,10 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = "#171717";
-        ctx.fillText(p.id, hcx + 9, hcy - 8);
+        ctx.fillText(labelOf(p.id), hcx + 9, hcy - 8);
       }
     });
-  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, colorOf]);
+  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, colorOf, labelOf]);
 
   // Render ------------------------------------------------------------------------------------
   const held = lease.status === "held";
@@ -796,8 +884,8 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500">IDs</span>
           <div className="flex gap-1">
-            <button type="button" aria-pressed={mode === "stitched"} className={toggleBtn(mode === "stitched")} onClick={() => setMode("stitched")}>
-              Stitched
+            <button type="button" aria-pressed={mode === "fused"} className={toggleBtn(mode === "fused")} onClick={() => setMode("fused")}>
+              Fused
             </button>
             <button type="button" aria-pressed={mode === "raw"} className={toggleBtn(mode === "raw")} onClick={() => setMode("raw")}>
               Raw
@@ -808,6 +896,17 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
           {busy === "load" ? "Loading..." : "Load"}
         </button>
         <div className="ml-auto flex items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
+            Export IDs
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as TrackingMode)}
+              className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-800"
+            >
+              <option value="fused">Fused</option>
+              <option value="raw">Raw</option>
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
             Format
             <select
@@ -844,7 +943,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               ref={canvasRef}
               role="img"
               aria-label={
-                data && !empty ? `Floor plan replay of ${data.people.length} people` : "Floor plan replay"
+                data && !empty ? `Floor plan replay of ${peopleCount} people, at most ${peakCount} at once` : "Floor plan replay"
               }
               style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
             {(empty || !data) && (
@@ -887,19 +986,47 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
 
         {data && !empty && (
           <aside className="w-full shrink-0 rounded-lg border border-neutral-200 bg-white p-3 lg:w-56">
-            <h3 className="mb-2 text-sm font-semibold text-neutral-800">
-              People ({data.people.length}, {data.mode})
+            <h3 className="text-sm font-semibold text-neutral-800">
+              {peopleCount} {peopleCount === 1 ? "person" : "people"} · max {peakCount} at once
             </h3>
-            <ul className="max-h-[480px] space-y-1 overflow-y-auto text-sm">
-              {data.people.map((p) => (
-                <li key={p.id} className="flex items-center gap-2">
-                  <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(p.id) }} />
-                  <span className="truncate text-neutral-800">{p.id}</span>
-                  <span className="ml-auto text-xs text-neutral-500">
-                    {p.trackIds.length} {p.trackIds.length === 1 ? "track" : "tracks"}
-                  </span>
-                </li>
-              ))}
+            <p className="mb-2 text-xs text-neutral-500">{data.mode === "fused" ? "Fused across cameras" : "Raw tracker IDs"}</p>
+            {summary && (
+              <div className="mb-2 flex flex-col gap-1 text-xs">
+                <p className="text-neutral-500">
+                  Cleaned: {summary.droppedTotal ?? 0} {summary.droppedTotal === 1 ? "point" : "points"} dropped
+                  {summary.offsets &&
+                    ` · camera offset correction ${summary.offsets.applied ? "on" : "off"} (${
+                      summary.offsets.needed ? "needed" : "not needed"
+                    })`}
+                </p>
+                {summary.config_warnings.length > 0 && (
+                  <p className="text-neutral-500">Cleaning config warnings: {summary.config_warnings.join(", ")}</p>
+                )}
+                {summary.config_error && (
+                  <p role="alert" className="text-amber-700">
+                    Cleaning config error: {summary.config_error} (using last valid settings)
+                  </p>
+                )}
+              </div>
+            )}
+            <ul className="max-h-[480px] space-y-1.5 overflow-y-auto text-sm">
+              {ordered.map(({ person: p, label }) => {
+                const ps = personSummaries.get(p.id);
+                const seconds = ps?.duration_s ?? trackedSeconds(p);
+                const share = fmtCameraShare(ps?.camera_share);
+                return (
+                  <li key={p.id} className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(p.id) }} />
+                      <span className="truncate text-neutral-800">
+                        {data.mode === "fused" ? `Person ${label}` : `${label} (ID ${p.id})`}
+                      </span>
+                      <span className="ml-auto font-mono text-xs text-neutral-500">{fmtMmSs(seconds)}</span>
+                    </div>
+                    {share && <span className="pl-5 text-xs text-neutral-500">{share}</span>}
+                  </li>
+                );
+              })}
             </ul>
           </aside>
         )}

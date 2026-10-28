@@ -9,11 +9,14 @@ import type {
   TrackingHeartbeatDto,
   TrackingMeta,
   TrackingMode,
+  TrackingOffsets,
   TrackingPerson,
+  TrackingPersonSummary,
   TrackingRange,
   TrackingRangeQuery,
   TrackingSessionDto,
   TrackingSessionKind,
+  TrackingSummary,
   TrackingTicketDto,
 } from "../lib/trackingTypes";
 
@@ -356,6 +359,98 @@ export function normalizeMeta(raw: unknown): TrackingMeta {
   };
 }
 
+/** Server mode -> client mode; the deprecated `stitched` alias maps to `fused`. */
+function toMode(v: unknown): TrackingMode | null {
+  if (v === "raw") return "raw";
+  if (v === "fused" || v === "stitched") return "fused";
+  return null;
+}
+
+const asRecord = (v: unknown): Record<string, unknown> | null =>
+  typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+
+/** A dropped-points entry is a count, or an object holding one (`count`/`n`/`total`, else its numeric values summed). */
+function droppedCount(v: unknown): number | null {
+  const n = num(v);
+  if (n !== null) return n;
+  const r = asRecord(v);
+  if (!r) return null;
+  for (const k of ["count", "n", "total", "dropped"]) {
+    const c = num(r[k]);
+    if (c !== null) return c;
+  }
+  let sum = 0;
+  let any = false;
+  for (const x of Object.values(r)) {
+    const c = num(x);
+    if (c !== null) {
+      sum += c;
+      any = true;
+    }
+  }
+  return any ? sum : null;
+}
+
+export function normalizeSummary(raw: unknown): TrackingSummary | null {
+  const o = asRecord(raw);
+  if (!o) return null;
+
+  const persons: TrackingPersonSummary[] = [];
+  if (Array.isArray(o.persons)) {
+    for (const p of o.persons) {
+      const r = asRecord(p);
+      if (!r || r.id === undefined || r.id === null) continue;
+      const camera_share: Record<string, number> = {};
+      const share = asRecord(r.camera_share);
+      if (share) {
+        for (const [cam, f] of Object.entries(share)) {
+          const v = num(f);
+          if (v !== null) camera_share[cam] = v;
+        }
+      }
+      persons.push({ id: String(r.id), duration_s: num(r.duration_s), camera_share });
+    }
+  }
+
+  const dropped: Record<string, number> = {};
+  let droppedTotal: number | null = null;
+  const d = asRecord(o.dropped);
+  if (d) {
+    for (const [stage, v] of Object.entries(d)) {
+      const c = droppedCount(v);
+      if (c === null) continue;
+      dropped[stage] = c;
+      droppedTotal = (droppedTotal ?? 0) + c;
+    }
+  }
+
+  let offsets: TrackingOffsets | null = null;
+  const off = asRecord(o.offsets);
+  if (off) {
+    offsets = {
+      applied: off.applied === true,
+      needed: off.needed === true,
+      gain_m: num(off.gain_m),
+      learned_at_ms: num(off.learned_at_ms),
+    };
+  }
+
+  return {
+    people: num(o.people),
+    max_at_once: num(o.max_at_once),
+    occupied_s: num(o.occupied_s),
+    persons,
+    dropped,
+    droppedTotal,
+    offsets,
+    preset: typeof o.preset === "string" && o.preset ? o.preset : null,
+    config_error: typeof o.config_error === "string" && o.config_error ? o.config_error : null,
+    config_warnings: Array.isArray(o.config_warnings)
+      ? o.config_warnings.filter((w): w is string => typeof w === "string" && w.length > 0)
+      : [],
+  };
+}
+
 export function normalizeRange(raw: unknown, query: TrackingRangeQuery): TrackingRange {
   const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   const people: TrackingPerson[] = [];
@@ -366,10 +461,12 @@ export function normalizeRange(raw: unknown, query: TrackingRangeQuery): Trackin
       const t = Array.isArray(r.t) ? r.t : [];
       const x = Array.isArray(r.x) ? r.x : [];
       const y = Array.isArray(r.y) ? r.y : [];
+      const nc = Array.isArray(r.n_cams) ? r.n_cams : null;
       const n = Math.min(t.length, x.length, y.length);
       const pt: number[] = [];
       const px: number[] = [];
       const py: number[] = [];
+      const pn: number[] = [];
       for (let i = 0; i < n; i++) {
         const ti = num(t[i]);
         const xi = num(x[i]);
@@ -378,18 +475,29 @@ export function normalizeRange(raw: unknown, query: TrackingRangeQuery): Trackin
         pt.push(ti);
         px.push(xi);
         py.push(yi);
+        if (nc) pn.push(num(nc[i]) ?? 0);
       }
       if (pt.length === 0) continue;
       const trackIds = Array.isArray(r.trackIds) ? r.trackIds.filter((v): v is number => num(v) !== null) : [];
-      people.push({ id: r.id === undefined || r.id === null ? String(people.length + 1) : String(r.id), trackIds, t: pt, x: px, y: py });
+      const person: TrackingPerson = {
+        id: r.id === undefined || r.id === null ? String(people.length + 1) : String(r.id),
+        trackIds,
+        t: pt,
+        x: px,
+        y: py,
+      };
+      if (Array.isArray(r.cameras)) person.cameras = r.cameras.filter((c): c is string => typeof c === "string");
+      if (nc) person.n_cams = pn;
+      people.push(person);
     }
   }
   return {
     from: num(o.from) ?? query.from,
     to: num(o.to) ?? query.to,
     hz: num(o.hz) ?? query.hz ?? 5,
-    mode: o.mode === "raw" || o.mode === "stitched" ? o.mode : query.mode,
+    mode: toMode(o.mode) ?? query.mode,
     people,
+    summary: normalizeSummary(o.summary),
   };
 }
 
