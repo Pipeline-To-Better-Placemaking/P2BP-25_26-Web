@@ -568,13 +568,24 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     setPlaying((p) => !p);
   };
 
-  /** People in order of first appearance; each is labelled 1..N in that order. */
+  /**
+   * People in order of first appearance, labelled 1..N in that order, with their duration and
+   * camera share. Derived once per loaded range.
+   */
   const ordered = useMemo(
     () =>
       (data?.people ?? [])
         .map((p, index) => ({ p, index }))
         .sort((a, b) => a.p.t[0] - b.p.t[0] || a.index - b.index)
-        .map(({ p }, i) => ({ person: p, label: String(i + 1) })),
+        .map(({ p }, i) => {
+          const ps = data?.summary?.persons.find((s) => s.id === p.id);
+          return {
+            person: p,
+            label: String(i + 1),
+            seconds: ps?.duration_s ?? trackedSeconds(p),
+            share: fmtCameraShare(ps?.camera_share),
+          };
+        }),
     [data],
   );
 
@@ -592,21 +603,35 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   }, [ordered]);
 
   const summary = data?.summary ?? null;
-  const personSummaries = useMemo(
-    () => new Map((summary?.persons ?? []).map((ps) => [ps.id, ps])),
-    [summary],
-  );
-  const zoneTitle = useMemo(() => {
-    const zones = Object.entries(summary?.droppedZones ?? {}).filter(([, n]) => n > 0);
-    return zones.length ? `Dropped by zone: ${zones.map(([name, n]) => `${name} ${n}`).join(", ")}` : undefined;
-  }, [summary]);
-  const cleaningWarnings = useMemo(() => {
-    const w = [...(summary?.config_warnings ?? [])];
-    if (summary?.offsets?.error) w.push(`camera offset: ${summary.offsets.error}`);
-    return w;
+  /** Cleaning note and warnings for the loaded range, or null when the workstation sent no summary. */
+  const cleaning = useMemo(() => {
+    if (!summary) return null;
+    const parts: string[] = [];
+    if (summary.droppedTotal !== null) {
+      const zones = Object.entries(summary.droppedZones)
+        .filter(([, n]) => n > 0)
+        .map(([name, n]) => `${name} ${n.toLocaleString()}`);
+      parts.push(
+        `${summary.droppedTotal.toLocaleString()} ${summary.droppedTotal === 1 ? "point" : "points"} dropped${
+          zones.length ? ` (${zones.join(", ")})` : ""
+        }`,
+      );
+    }
+    if (summary.offsets) {
+      parts.push(
+        `camera offset correction ${summary.offsets.applied ? "applied" : "not applied"} (${
+          summary.offsets.needed ? "needed" : "not needed"
+        })`,
+      );
+    }
+    const warnings = [...summary.config_warnings];
+    if (summary.offsets?.error) warnings.push(`camera offset: ${summary.offsets.error}`);
+    return { note: parts.length ? `Cleaned: ${parts.join(" · ")}` : null, warnings, configError: summary.config_error };
   }, [summary]);
   const peopleCount = summary?.people ?? data?.people.length ?? 0;
   const peakCount = useMemo(() => summary?.max_at_once ?? (data ? maxAtOnce(data.people) : 0), [summary, data]);
+  /** "people" for fused data, "tracker IDs" for raw. */
+  const countNoun = data?.mode === "raw" ? (peopleCount === 1 ? "tracker ID" : "tracker IDs") : peopleCount === 1 ? "person" : "people";
 
   // Canvas ------------------------------------------------------------------------------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -906,17 +931,6 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         </button>
         <div className="ml-auto flex items-end gap-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
-            Export IDs
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as TrackingMode)}
-              className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-800"
-            >
-              <option value="fused">Fused</option>
-              <option value="raw">Raw</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
             Format
             <select
               value={exportFormat}
@@ -928,7 +942,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
             </select>
           </label>
           <button type="button" className={secondaryBtn} disabled={controlsDisabled} onClick={doExport}>
-            {busy === "export" ? "Exporting..." : "Export"}
+            {busy === "export" ? "Exporting..." : `Export ${mode === "fused" ? "Fused" : "Raw"}`}
           </button>
         </div>
       </div>
@@ -945,6 +959,20 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         {exportNote && <p className="text-xs text-green-700">{exportNote}</p>}
       </div>
 
+      {cleaning && (cleaning.note || cleaning.warnings.length > 0 || cleaning.configError) && (
+        <div className="flex flex-col gap-1 text-xs">
+          {cleaning.note && <p className="text-neutral-500">{cleaning.note}</p>}
+          {cleaning.warnings.length > 0 && (
+            <p className="text-neutral-500">Cleaning config warnings: {cleaning.warnings.join(", ")}</p>
+          )}
+          {cleaning.configError && (
+            <p role="alert" className="text-amber-700">
+              Cleaning config error: {cleaning.configError} (using last valid settings)
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 lg:flex-row">
         <div className="min-w-0 flex-1">
           <div ref={containerRef} className="relative w-full overflow-hidden rounded-lg border border-neutral-200">
@@ -952,7 +980,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               ref={canvasRef}
               role="img"
               aria-label={
-                data && !empty ? `Floor plan replay of ${peopleCount} people, at most ${peakCount} at once` : "Floor plan replay"
+                data && !empty ? `Floor plan replay of ${peopleCount} ${countNoun}, at most ${peakCount} at once` : "Floor plan replay"
               }
               style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
             {(empty || !data) && (
@@ -996,33 +1024,11 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         {data && !empty && (
           <aside className="w-full shrink-0 rounded-lg border border-neutral-200 bg-white p-3 lg:w-56">
             <h3 className="text-sm font-semibold text-neutral-800">
-              {peopleCount} {peopleCount === 1 ? "person" : "people"} · max {peakCount} at once
+              {peopleCount} {countNoun} · max {peakCount} at once
             </h3>
             <p className="mb-2 text-xs text-neutral-500">{data.mode === "fused" ? "Fused across cameras" : "Raw tracker IDs"}</p>
-            {summary && (
-              <div className="mb-2 flex flex-col gap-1 text-xs">
-                <p className="text-neutral-500" title={zoneTitle}>
-                  Cleaned: {summary.droppedTotal ?? 0} {summary.droppedTotal === 1 ? "point" : "points"} dropped
-                  {summary.offsets &&
-                    ` · camera offset correction ${summary.offsets.applied ? "applied" : "not applied"} (${
-                      summary.offsets.needed ? "needed" : "not needed"
-                    })`}
-                </p>
-                {cleaningWarnings.length > 0 && (
-                  <p className="text-neutral-500">Cleaning config warnings: {cleaningWarnings.join(", ")}</p>
-                )}
-                {summary.config_error && (
-                  <p role="alert" className="text-amber-700">
-                    Cleaning config error: {summary.config_error} (using last valid settings)
-                  </p>
-                )}
-              </div>
-            )}
             <ul className="max-h-[480px] space-y-1.5 overflow-y-auto text-sm">
-              {ordered.map(({ person: p, label }) => {
-                const ps = personSummaries.get(p.id);
-                const seconds = ps?.duration_s ?? trackedSeconds(p);
-                const share = fmtCameraShare(ps?.camera_share);
+              {ordered.map(({ person: p, label, seconds, share }) => {
                 return (
                   <li key={p.id} className="flex flex-col">
                     <div className="flex items-center gap-2">
