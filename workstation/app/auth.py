@@ -60,6 +60,7 @@ def safe_path(*parts: str, root: str | Path | None = None) -> Path:
         raise UnsafePathError("Path escapes DATA_ROOT")
     return candidate
 
+TICKET_AUDIENCE = "p2bp-workstation"
 TICKET_SCOPE = "amc"
 
 
