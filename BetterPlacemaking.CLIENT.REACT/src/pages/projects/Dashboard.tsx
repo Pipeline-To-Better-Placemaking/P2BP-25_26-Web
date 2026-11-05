@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 // import { ApiError } from "../../auth/apiClient";
 import { HasPermission } from "../../auth/HasPermission";
 import { Modal } from "../../components/Modal";
+import { PageHeader } from "../../components/PageHeader";
 import { Permissions } from "../../lib/permissions";
 import * as deviceApi from "../../services/deviceApi";
 // import * as scanApi from "../../services/scanApi";
@@ -354,11 +355,7 @@ export function Dashboard() {
   return (
     <div>
 
-      <div className="-mx-4 -mt-4 mb-6 bg-surface-0 dark:bg-surface-900 px-4 py-4 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700  md:-mx-0 md:-mt-3 md:px-6">
-        <h1 className="text-2xl  font-semibold text-gray-800 dark:text-white/90">
-          {projectVM.title}
-        </h1>
-      </div>
+      <PageHeader title="Dashboard" subtitle={projectVM.title} />
 
 
 

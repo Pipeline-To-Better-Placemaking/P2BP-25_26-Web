@@ -32,7 +32,7 @@ function Tag({ label, severity }: { label: string; severity: Severity }) {
     info: "bg-blue-100 text-blue-800",
     danger: "bg-red-100 text-red-800",
     warn: "bg-amber-100 text-amber-800",
-    secondary: "bg-neutral-100 text-neutral-700",
+    secondary: "bg-slate-100 text-ink",
   };
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${classes[severity]}`}>{label}</span>;
 }
@@ -298,11 +298,11 @@ export function CameraModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-lg font-semibold text-neutral-900">{nickname || `Camera ${mac.slice(-5)}`}</span>
+              <span className="text-lg font-semibold text-ink">{nickname || `Camera ${mac.slice(-5)}`}</span>
               <Tag label={camInfo?.Enabled ? "Enabled" : "Disabled"} severity={camInfo?.Enabled ? "success" : "secondary"} />
             </div>
-            <div className="mb-1 font-mono text-xs text-neutral-500">{mac}</div>
-            <div className="text-xs text-neutral-500">
+            <div className="mb-1 font-mono text-xs text-ink-muted">{mac}</div>
+            <div className="text-xs text-ink-muted">
               {camInfo?.Ip} &nbsp;·&nbsp; {resolution}
             </div>
           </div>
@@ -313,7 +313,7 @@ export function CameraModal({
                   type="button"
                   onClick={startEditNickname}
                   title="Edit nickname"
-                  className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+                  className="rounded-md p-1.5 text-ink-muted hover:bg-slate-100"
                 >
                   ✎
                 </button>
@@ -333,7 +333,7 @@ export function CameraModal({
                 if (e.key === "Escape") setEditingNickname(false);
               }}
               placeholder="Enter nickname..."
-              className="flex-1 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900"
+              className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink"
             />
             <button type="button" onClick={saveNickname} title="Save" className="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50">
               ✓
@@ -342,7 +342,7 @@ export function CameraModal({
               type="button"
               onClick={() => setEditingNickname(false)}
               title="Cancel"
-              className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+              className="rounded-md p-1.5 text-ink-muted hover:bg-slate-100"
             >
               ✕
             </button>
@@ -351,32 +351,32 @@ export function CameraModal({
 
         {/* Calibration stat grid */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-lg bg-neutral-100 p-3">
-            <div className="mb-1 text-xs text-neutral-500">Intrinsics</div>
+          <div className="rounded-lg bg-slate-100 p-3">
+            <div className="mb-1 text-xs text-ink-muted">Intrinsics</div>
             <Tag label={intrinsicsStatus === "none" ? "Not started" : intrinsicsStatus} severity={intrinsicsSeverity} />
-            <div className="mt-1 text-xs text-neutral-500">{intrinsics?.SightingsCollected ?? 0} sightings</div>
-            <div className="text-xs text-neutral-500">RMSE: {intrinsics?.CurrentRmse != null ? intrinsics.CurrentRmse.toFixed(3) : "—"}</div>
+            <div className="mt-1 text-xs text-ink-muted">{intrinsics?.SightingsCollected ?? 0} sightings</div>
+            <div className="text-xs text-ink-muted">RMSE: {intrinsics?.CurrentRmse != null ? intrinsics.CurrentRmse.toFixed(3) : "—"}</div>
           </div>
-          <div className="rounded-lg bg-neutral-100 p-3">
-            <div className="mb-1 text-xs text-neutral-500">Homography</div>
+          <div className="rounded-lg bg-slate-100 p-3">
+            <div className="mb-1 text-xs text-ink-muted">Homography</div>
             <Tag label={homographyStatusLabel} severity={homographySeverity} />
-            <div className="mt-1 text-xs text-neutral-500">{homographyStatusDetail}</div>
+            <div className="mt-1 text-xs text-ink-muted">{homographyStatusDetail}</div>
           </div>
-          <div className="rounded-lg bg-neutral-100 p-3">
-            <div className="mb-1 text-xs text-neutral-500">ArUco Lock</div>
+          <div className="rounded-lg bg-slate-100 p-3">
+            <div className="mb-1 text-xs text-ink-muted">ArUco Lock</div>
             <Tag label={arucoStatusLabel} severity={arucoSeverity} />
-            <div className="mt-1 text-xs text-neutral-500">{arucoStatusDetail}</div>
+            <div className="mt-1 text-xs text-ink-muted">{arucoStatusDetail}</div>
           </div>
         </div>
 
         {/* Homography Snapshot */}
         {!snapshotLoading && snapshotUrl && (
           <div>
-            <div className="mb-2 text-sm font-semibold text-neutral-900">Homography Snapshot</div>
+            <div className="mb-2 text-sm font-semibold text-ink">Homography Snapshot</div>
             <img
               src={snapshotUrl}
               alt="Camera snapshot"
-              className="max-h-48 w-full rounded-lg border border-neutral-200 object-contain"
+              className="max-h-48 w-full rounded-lg border border-slate-200 object-contain"
               onError={() => setSnapshotUrl(null)}
             />
           </div>
@@ -386,30 +386,30 @@ export function CameraModal({
         {coverageGrid.length > 0 ? (
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-semibold text-neutral-900">
+              <div className="text-sm font-semibold text-ink">
                 Intrinsics Coverage
-                <span className="ml-1 text-xs font-normal text-neutral-500">
+                <span className="ml-1 text-xs font-normal text-ink-muted">
                   {coverageFilled} / {coverageGrid.length} cells filled
                 </span>
               </div>
-              {lastUpdatedLabel && <div className="text-xs text-neutral-500">Updated {lastUpdatedLabel}</div>}
+              {lastUpdatedLabel && <div className="text-xs text-ink-muted">Updated {lastUpdatedLabel}</div>}
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-shrink-0 text-center text-xs leading-tight text-neutral-500" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
+              <div className="flex-shrink-0 text-center text-xs leading-tight text-ink-muted" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
                 Camera left
               </div>
               <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `repeat(${coverageGridCols}, 1.25rem)` }}>
                 {coverageGrid.map((cell, i) => (
-                  <div key={i} className={`h-5 w-5 rounded-sm ${cell ? "bg-emerald-500" : "bg-neutral-300"}`} />
+                  <div key={i} className={`h-5 w-5 rounded-sm ${cell ? "bg-emerald-500" : "bg-slate-300"}`} />
                 ))}
               </div>
-              <div className="flex-shrink-0 text-center text-xs leading-tight text-neutral-500" style={{ writingMode: "vertical-rl" }}>
+              <div className="flex-shrink-0 text-center text-xs leading-tight text-ink-muted" style={{ writingMode: "vertical-rl" }}>
                 Camera right
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-xs text-neutral-500">
+          <div className="text-xs text-ink-muted">
             No coverage data yet. Run intrinsics calibration to populate.
             {lastUpdatedLabel && <span className="ml-1 opacity-60">(Updated {lastUpdatedLabel})</span>}
           </div>
@@ -418,13 +418,13 @@ export function CameraModal({
         {hasSuggestion && <p className="rounded-md bg-blue-50 p-3 text-sm text-blue-700">{suggestionText}</p>}
 
         {/* Calibration board selector */}
-        <div className="border-t border-neutral-200 pt-4">
-          <label className="mb-1 block text-sm font-semibold text-neutral-900">
+        <div className="border-t border-slate-200 pt-4">
+          <label className="mb-1 block text-sm font-semibold text-ink">
             Calibration Board
             <select
               value={selectedBoardId}
               onChange={(e) => setSelectedBoardId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900"
+              className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink"
             >
               <option value="">Select a ChArUco board...</option>
               {charucoBoards.map((b) => (
@@ -434,17 +434,17 @@ export function CameraModal({
               ))}
             </select>
           </label>
-          <div className="text-xs text-neutral-500">Board parameters are shared by intrinsics and homography calibration.</div>
+          <div className="text-xs text-ink-muted">Board parameters are shared by intrinsics and homography calibration.</div>
         </div>
 
         {/* Actions */}
-        <div className="border-t border-neutral-200 pt-4">
-          <div className="mb-3 text-sm font-semibold text-neutral-900">Actions</div>
+        <div className="border-t border-slate-200 pt-4">
+          <div className="mb-3 text-sm font-semibold text-ink">Actions</div>
 
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-neutral-900">Intrinsics Calibration</div>
-              <div className="text-xs text-neutral-500">Requires ChArUco board in camera view</div>
+              <div className="text-sm font-medium text-ink">Intrinsics Calibration</div>
+              <div className="text-xs text-ink-muted">Requires ChArUco board in camera view</div>
             </div>
             <HasPermission permission={Permissions.Project.DevicesManage} projectId={device.ProjectId}>
               <button
@@ -453,7 +453,7 @@ export function CameraModal({
                 onClick={() => void toggleIntrinsics()}
                 title="Toggles BeginCalibration. Select a board above to also update CharucoBoard config when enabling."
                 className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60 ${
-                  isIntrinsicsEnabled ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
+                  isIntrinsicsEnabled ? "bg-red-600 hover:bg-red-500" : "bg-brand-600 hover:bg-brand-600/85"
                 }`}
               >
                 {triggerLoading ? "…" : intrinsicsButtonLabel}
@@ -470,8 +470,8 @@ export function CameraModal({
 
           <div className={`mb-3 flex items-center justify-between ${!canRunHomography && !homographyTriggered ? "opacity-50" : ""}`}>
             <div>
-              <div className="text-sm font-medium text-neutral-900">Homography</div>
-              <div className="text-xs text-neutral-500">Triggers scan on all project devices simultaneously</div>
+              <div className="text-sm font-medium text-ink">Homography</div>
+              <div className="text-xs text-ink-muted">Triggers scan on all project devices simultaneously</div>
             </div>
             <HasPermission permission={Permissions.Project.DevicesManage} projectId={device.ProjectId}>
               <button
@@ -479,7 +479,7 @@ export function CameraModal({
                 disabled={!canRunHomography || homographyTriggered}
                 onClick={() => void triggerHomography()}
                 title={intrinsicsStatus !== "done" ? "Requires intrinsics to be complete first" : !selectedBoard ? "Select a board above" : "Sets CharucoBoard.BeginScanning on all project devices"}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-60"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100 disabled:opacity-60"
               >
                 {homographyLoading ? "…" : "Run"}
               </button>
@@ -495,10 +495,10 @@ export function CameraModal({
 
           <div className="flex items-center justify-between opacity-50">
             <div>
-              <div className="text-sm font-medium text-neutral-900">ArUco Lock</div>
-              <div className="text-xs text-neutral-500">Device-level — run from device card</div>
+              <div className="text-sm font-medium text-ink">ArUco Lock</div>
+              <div className="text-xs text-ink-muted">Device-level — run from device card</div>
             </div>
-            <button type="button" disabled title="Run from the device card" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-400">
+            <button type="button" disabled title="Run from the device card" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-400">
               Lock
             </button>
           </div>

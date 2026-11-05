@@ -16,7 +16,7 @@ export function UploadDataPanel() {
     };
 
     return (
-        <div className = "flex-1 rounded-lg border border-neutral-200 bg-[#334155] p-6 relative">
+        <div className = "flex-1 rounded-lg border border-slate-200 bg-slate-700 p-6 relative">
             <h2 className = "text-2xl font-semibold text-white">
                 Upload Floor Plan & Tracking Data
             </h2>
@@ -27,7 +27,7 @@ export function UploadDataPanel() {
 
             <div className = "mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* floor plan input */}
-                <div className = "rounded-lg border border-neutral-200 p-5">
+                <div className = "rounded-lg border border-slate-200 p-5">
                     <div className = "flex items-start gap-3">
                         <span className = "text-2xl text-white" aria-hidden="true">
                             
@@ -67,14 +67,14 @@ export function UploadDataPanel() {
                         <button
                             type = "button"
                             onClick = {() => floorPlanInputRef.current?.click()}
-                            className = "mt-4 rounded-md bg-[#5039f6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5039f6]/50"
+                            className = "mt-4 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600/85"
                         >
                             Choose File
                         </button>
                     </div>
                 </div>
 
-                <div className = "rounded-lg border border-neutral-200 p-5">
+                <div className = "rounded-lg border border-slate-200 p-5">
                     <div className = "flex items-start gap-3 relative">
                         <span className = "text-2xl text-white" aria-hidden="true">
                             
@@ -124,7 +124,7 @@ export function UploadDataPanel() {
                         <button
                             type="button"
                             onClick = {()=>trackingDataInputRef.current?.click()}
-                            className="mt-4 rounded-md bg-[#5039f6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5039f6]/50"
+                            className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600/85"
                         >
                             Choose File
                         </button>       
@@ -133,7 +133,7 @@ export function UploadDataPanel() {
             </div>
             <button
                 type="button"
-                className="mt-4 rounded-md bg-[#5039f6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5039f6]/50 absolute bottom-5 right-5"
+                className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600/85 absolute bottom-5 right-5"
             >
                 <div className="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-upload preview-icon">

@@ -4,11 +4,11 @@ import type { ScanScheduleDto } from "../../../lib/scanTypes";
 import { FREQUENCY_OPTIONS, type FrequencyOption, formatLastRunAt, formatScheduleDateTime, getScheduleFrequencyName } from "./scannerHelpers";
 
 const inputClass =
-  "w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
-const labelClass = "text-xs font-medium text-neutral-600";
+  "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
+const labelClass = "text-xs font-medium text-ink-muted";
 const btnPrimary =
-  "rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50";
-const btnIcon = "rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 disabled:opacity-50";
+  "rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50";
+const btnIcon = "rounded-md p-1.5 text-ink-muted hover:bg-slate-100 disabled:opacity-50";
 
 interface ScanSchedulePanelProps {
   projectId: string | undefined;
@@ -112,7 +112,7 @@ export function ScanSchedulePanel({
       {schedules.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-100 text-left text-neutral-700">
+            <thead className="bg-mauve text-left text-white">
               <tr>
                 <th className="px-3 py-2 font-medium">Start Date & Time</th>
                 <th className="px-3 py-2 font-medium">Frequency</th>
@@ -123,10 +123,10 @@ export function ScanSchedulePanel({
             </thead>
             <tbody>
               {schedules.map((s) => (
-                <tr key={s.Id} className="border-t border-neutral-100 hover:bg-neutral-50">
+                <tr key={s.Id} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2">{formatScheduleDateTime(s.StartDate, s.StartTime)}</td>
                   <td className="px-3 py-2">
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-ink-muted">
                       {getScheduleFrequencyName(s.Frequency)}
                     </span>
                   </td>

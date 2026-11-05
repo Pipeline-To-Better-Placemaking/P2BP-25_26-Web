@@ -6,6 +6,9 @@ import { useConfirm, useDialogService } from "../../components/prime";
 import { ProjectForm } from "./ProjectForm";
 import { HasPermission } from "../../auth/HasPermission";
 import { Permissions } from "../../lib/permissions";
+import { PageHeader } from "../../components/PageHeader";
+import { ProjectCard } from "../../components/ProjectCard";
+import { DANGER_BUTTON, PRIMARY_BUTTON, SECONDARY_BUTTON } from "../../components/buttonStyles";
 
 /**
  * Landing page for any authenticated user - unpermissioned route, server-side
@@ -99,145 +102,60 @@ export function SelectProject() {
   }
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <span className="font-semibold text-[#35404F] text-xl">Projects</span>
-        {!managing ? (
-          <HasPermission permission={Permissions.Global.ProjectsReadAll}>
-            <button
-              type="button"
-              className="p-button p-component p-button-sm font-semibold bg-white"
-              onClick={() => setManaging(true)}
-            >
-              Manage Projects
-            </button>
-          </HasPermission>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="p-button p-component p-button-sm font-semibold"
-              onClick={addProject}
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              className="p-button p-component p-button-sm p-button-outlined p-button-secondary"
-              onClick={() => setManaging(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="w-full">
+      <PageHeader
+        title="Projects"
+        subtitle="Select a project to view its dashboard, devices, and calibration."
+        actions={
+          !managing ? (
+            <HasPermission permission={Permissions.Global.ProjectsReadAll}>
+              <button type="button" className={PRIMARY_BUTTON} onClick={() => setManaging(true)}>
+                Manage Projects
+              </button>
+            </HasPermission>
+          ) : (
+            <>
+              <button type="button" className={PRIMARY_BUTTON} onClick={addProject}>
+                Add Project
+              </button>
+              <button type="button" className={SECONDARY_BUTTON} onClick={() => setManaging(false)}>
+                Done
+              </button>
+            </>
+          )
+        }
+      />
 
-      {/* Cards */}
       {projects.length === 0 ? (
-        <p>No projects assigned.</p>
+        <p className="text-sm text-ink-muted">No projects assigned.</p>
       ) : (
-        <div className="flex flex-wrap gap-5">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {projects.map((project, i) => (
             <ProjectCard
               key={project.Id}
               project={project}
-              managing={managing}
               // Placeholder status for the visual only: first card online, rest offline
               online={i === 0}
-              onEdit={() => editProject(project)}
-              onDelete={() => deleteProject(project)}
+              actions={
+                !managing ? (
+                  <Link to={`/${project.Id}`} className={PRIMARY_BUTTON}>
+                    Open Project
+                  </Link>
+                ) : (
+                  <HasPermission permission={Permissions.Project.Update} projectId={project.Id}>
+                    <button type="button" className={SECONDARY_BUTTON} onClick={() => editProject(project)}>
+                      Edit
+                    </button>
+                    <button type="button" className={DANGER_BUTTON} onClick={() => deleteProject(project)}>
+                      Delete
+                    </button>
+                  </HasPermission>
+                )
+              }
             />
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-xs opacity-70 border-b border-gray-400 pb-0.5">
-        {label}
-      </span>
-      <span className="text-sm py-1 min-h-[2.5rem]">{children}</span>
-    </div>
-  );
-}
-
-function ProjectCard({
-  project,
-  managing,
-  online,
-  onEdit,
-  onDelete,
-}: {
-  project: ProjectDto;
-  managing: boolean;
-  online: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="bg-white dark:bg-[#18181B] text-[#475569] rounded-lg shadow-sm p-4 w-[240px] flex flex-col gap-3">
-      <h3 className="font-semibold text-lg text-[#35404F]">{project.Title}</h3>
-
-      <Field label="Description">{project.Description}</Field>
-      <Field label="Location">{project.Location}</Field>
-
-      <div className="flex flex-col">
-        <span className="text-xs opacity-70 border-b border-gray-400 pb-0.5">
-          Device Status:
-        </span>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-sm">{online ? "Online" : "Offline"}</span>
-          <span
-            className={`inline-block w-3 h-3 rounded-full ${online ? "bg-green-500" : "bg-red-500"}`}
-            aria-label={online ? "Online" : "Offline"}
-          />
-        </div>
-      </div>
-
-      {/* Buttons */}
-      <div className="flex justify-end gap-2 mt-auto">
-        {!managing ? (
-          <Link
-            to={`/${project.Id}`}
-            className="p-button p-component p-button-sm p-button-outlined"
-          >
-            Open
-          </Link>
-        ) : (
-          <>
-            <HasPermission
-              permission={Permissions.Project.Update}
-              projectId={project.Id}
-            >
-              <button
-                type="button"
-                className="p-button p-component p-button-sm p-button-outlined font-semibold"
-                onClick={onEdit}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className="p-button p-component p-button-sm font-semibold p-button-danger"
-                onClick={onDelete}
-              >
-                Delete
-              </button>
-            </HasPermission>
-          </>
-        )}
-      </div>
     </div>
   );
 }

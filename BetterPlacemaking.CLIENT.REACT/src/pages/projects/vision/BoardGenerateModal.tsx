@@ -177,7 +177,7 @@ function cleanNickname(raw: string): string | null {
 }
 
 const inputClass =
-  "w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
+  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
 
 interface BoardGenerateModalProps {
   existingBoard?: BoardLibraryItem;
@@ -348,7 +348,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
   return (
     <Modal title={isEditing ? "Edit Board" : "Generate New Board"} onClose={onClose} widthClassName="max-w-3xl">
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-neutral-600">{modalDescriptorText}</p>
+        <p className="text-sm text-ink-muted">{modalDescriptorText}</p>
 
         {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {successMessage && <p className="rounded-md bg-green-50 p-3 text-sm text-green-700">{successMessage}</p>}
@@ -357,13 +357,13 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
           {/* Left: form fields */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div>
-              <div className="mb-2 text-sm font-semibold text-neutral-900">Board Type</div>
+              <div className="mb-2 text-sm font-semibold text-ink">Board Type</div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setType("charuco")}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                    boardType === "charuco" ? "bg-indigo-600 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                    boardType === "charuco" ? "bg-brand-600 text-white" : "bg-slate-100 text-ink hover:bg-slate-200"
                   }`}
                 >
                   ChArUco
@@ -372,7 +372,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
                   type="button"
                   onClick={() => setType("aruco")}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                    boardType === "aruco" ? "bg-indigo-600 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                    boardType === "aruco" ? "bg-brand-600 text-white" : "bg-slate-100 text-ink hover:bg-slate-200"
                   }`}
                 >
                   ArUco
@@ -380,7 +380,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
               </div>
             </div>
 
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Dictionary
               <select
                 value={dictionary}
@@ -397,7 +397,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
 
             {isCharuco && (
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-neutral-700">
+                <label className="block text-sm font-medium text-ink">
                   Columns
                   <input
                     type="number"
@@ -408,7 +408,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
                     className={`mt-1 ${inputClass}`}
                   />
                 </label>
-                <label className="block text-sm font-medium text-neutral-700">
+                <label className="block text-sm font-medium text-ink">
                   Rows
                   <input
                     type="number"
@@ -423,7 +423,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
             )}
 
             {isAruco && (
-              <label className="block text-sm font-medium text-neutral-700">
+              <label className="block text-sm font-medium text-ink">
                 Marker ID
                 <input
                   type="number"
@@ -433,11 +433,11 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
                   onChange={(e) => setMarkerId(Number(e.target.value))}
                   className={`mt-1 ${inputClass}`}
                 />
-                <small className="mt-1 block text-xs text-neutral-500">Valid range: 0 to {markerIdMax}</small>
+                <small className="mt-1 block text-xs text-ink-muted">Valid range: 0 to {markerIdMax}</small>
               </label>
             )}
 
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Units <span className="text-red-500">*</span>
               <select
                 value={units ?? ""}
@@ -455,7 +455,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
 
             <div className="grid grid-cols-2 gap-3">
               {isCharuco && (
-                <label className="block text-sm font-medium text-neutral-700">
+                <label className="block text-sm font-medium text-ink">
                   Square size
                   <input
                     type="number"
@@ -468,7 +468,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
                   />
                 </label>
               )}
-              <label className={`block text-sm font-medium text-neutral-700 ${isAruco ? "col-span-2" : ""}`}>
+              <label className={`block text-sm font-medium text-ink ${isAruco ? "col-span-2" : ""}`}>
                 Marker size
                 <input
                   type="number"
@@ -482,7 +482,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
               </label>
             </div>
 
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Nickname
               <input
                 value={nickname}
@@ -495,15 +495,15 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
 
           {/* Right: live preview */}
           <div className="flex w-full flex-shrink-0 flex-col gap-2 sm:w-56">
-            <div className="text-sm font-semibold text-neutral-900">Preview</div>
+            <div className="text-sm font-semibold text-ink">Preview</div>
             {isCharuco && (
-              <div className="text-xs text-neutral-500">
+              <div className="text-xs text-ink-muted">
                 {cols} × {rows} — ChArUco
               </div>
             )}
-            {isAruco && <div className="text-xs text-neutral-500">Marker #{markerId ?? 0} — ArUco</div>}
+            {isAruco && <div className="text-xs text-ink-muted">Marker #{markerId ?? 0} — ArUco</div>}
             <div
-              className="flex items-center justify-center overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-3"
+              className="flex items-center justify-center overflow-auto rounded-lg border border-slate-200 bg-slate-100 p-3"
               style={{ minHeight: 160, maxHeight: 320 }}
             >
               <img src={svgPreviewDataUrl} alt="Board preview" className="h-auto max-w-full object-contain" />
@@ -512,14 +512,14 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-2 border-t border-neutral-200 pt-4">
+        <div className="flex gap-2 border-t border-slate-200 pt-4">
           <HasPermission permission={Permissions.Project.Update} projectId={projectId ?? undefined}>
             <button
               type="button"
               disabled={!canSaveToLibrary}
               onClick={() => void saveToLibrary()}
               title="Requires valid real-world size values"
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
             >
               {savingLibrary ? "Saving…" : isEditing ? "Save Changes" : "Save to Library"}
             </button>
@@ -529,7 +529,7 @@ export function BoardGenerateModal({ existingBoard, projectId, onClose, onSaved 
             disabled={!canGeneratePdf}
             onClick={() => void generateAndDownloadPdf()}
             title="Creates a print-ready PDF; size fields are optional for generation"
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-60"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100 disabled:opacity-60"
           >
             {generatingPdf ? "Generating…" : "Generate & Download PDF"}
           </button>

@@ -15,12 +15,12 @@ export function Modal({ title, onClose, children, widthClassName = "max-w-lg" }:
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-neutral-900">{title}</h2>
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+            className="rounded-md p-1 text-ink-muted hover:bg-slate-100 hover:text-ink"
           >
             ✕
           </button>

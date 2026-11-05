@@ -15,7 +15,7 @@ interface StatsWidgetProps {
 const AppStatsWidget = "app-stats-widget" as unknown as "div";
 
 const CARD =
-  "col-span-12 lg:col-span-6 xl:col-span-4 bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black cursor-pointer hover:opacity-95 transition";
+  "col-span-12 lg:col-span-6 xl:col-span-4 bp-card p-6 cursor-pointer hover:opacity-95 transition";
 
 function titlecase(s: string): string {
   return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -43,7 +43,7 @@ export function StatsWidget({
           <div className="flex justify-between mb-4">
             <div>
               <span className="block text-muted-color font-medium mb-4">Project Progress</span>
-              <div className="text-surface-900 dark:text-surface-0 font-medium text-xl">{project.progress}%</div>
+              <div className="text-ink dark:text-surface-0 font-medium text-xl">{project.progress}%</div>
             </div>
             <div className="flex items-center gap-2">
               <Button icon="pi pi-refresh" text rounded onClick={onRefreshClick} />
@@ -59,7 +59,7 @@ export function StatsWidget({
           <div className="flex justify-between mb-4">
             <div>
               <span className="block text-muted-color font-medium mb-4">Devices</span>
-              <div className="text-surface-900 dark:text-surface-0 font-medium text-xl">{deviceCounts.total}</div>
+              <div className="text-ink dark:text-surface-0 font-medium text-xl">{deviceCounts.total}</div>
             </div>
           </div>
           <span className="text-primary font-medium">{deviceCounts.online}</span>
@@ -72,7 +72,7 @@ export function StatsWidget({
           <div className="flex justify-between mb-4">
             <div>
               <span className="block text-muted-color font-medium mb-4">Alerts</span>
-              <div className="text-surface-900 dark:text-surface-0 font-medium text-xl">{alertCounts.unresolved}</div>
+              <div className="text-ink dark:text-surface-0 font-medium text-xl">{alertCounts.unresolved}</div>
             </div>
             <div className="flex items-center gap-2">
               <Button icon="pi pi-refresh" text rounded onClick={onRefreshClick} />

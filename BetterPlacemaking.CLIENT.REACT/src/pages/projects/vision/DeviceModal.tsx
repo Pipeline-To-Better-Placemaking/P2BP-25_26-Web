@@ -20,7 +20,7 @@ function Tag({ label, severity }: { label: string; severity: Severity }) {
     success: "bg-emerald-100 text-emerald-800",
     warn: "bg-amber-100 text-amber-800",
     danger: "bg-red-100 text-red-800",
-    secondary: "bg-neutral-100 text-neutral-700",
+    secondary: "bg-slate-100 text-ink",
   };
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${classes[severity]}`}>{label}</span>;
 }
@@ -34,7 +34,7 @@ function serviceSeverity(active: string): Severity {
 }
 
 const inputClass =
-  "w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
+  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
 
 interface DeviceModalProps {
   device: DeviceDto;
@@ -147,10 +147,10 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
       <div className="flex flex-col gap-4">
         {/* System Health */}
         <div>
-          <div className="mb-3 text-sm font-semibold text-neutral-900">System Health</div>
+          <div className="mb-3 text-sm font-semibold text-ink">System Health</div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg bg-neutral-100 p-3 text-center">
-              <div className="mb-1 text-xs text-neutral-500">GPU</div>
+            <div className="rounded-lg bg-slate-100 p-3 text-center">
+              <div className="mb-1 text-xs text-ink-muted">GPU</div>
               <div
                 className={`text-xl font-bold ${
                   gpuPct != null && gpuPct < 70
@@ -159,30 +159,30 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
                       ? "text-amber-600"
                       : gpuPct != null
                         ? "text-red-600"
-                        : "text-neutral-900"
+                        : "text-ink"
                 }`}
               >
                 {gpuPct != null ? `${gpuPct}%` : "—"}
               </div>
-              <div className="text-xs text-neutral-500">utilization</div>
-              <div className="mt-1 text-xs text-neutral-500">{gpuTempC != null ? `${gpuTempC}°C` : "—"}</div>
+              <div className="text-xs text-ink-muted">utilization</div>
+              <div className="mt-1 text-xs text-ink-muted">{gpuTempC != null ? `${gpuTempC}°C` : "—"}</div>
             </div>
-            <div className="rounded-lg bg-neutral-100 p-3 text-center">
-              <div className="mb-1 text-xs text-neutral-500">RAM</div>
-              <div className="text-xl font-bold text-neutral-900">{memUsedMb ?? "—"}</div>
-              <div className="text-xs text-neutral-500">/ {memTotalMb ?? "—"} MB</div>
-              <div className="mt-1 text-xs text-neutral-500">CPU {cpuTempC != null ? `${cpuTempC}°C` : "—"}</div>
+            <div className="rounded-lg bg-slate-100 p-3 text-center">
+              <div className="mb-1 text-xs text-ink-muted">RAM</div>
+              <div className="text-xl font-bold text-ink">{memUsedMb ?? "—"}</div>
+              <div className="text-xs text-ink-muted">/ {memTotalMb ?? "—"} MB</div>
+              <div className="mt-1 text-xs text-ink-muted">CPU {cpuTempC != null ? `${cpuTempC}°C` : "—"}</div>
             </div>
-            <div className="rounded-lg bg-neutral-100 p-3 text-center">
-              <div className="mb-1 text-xs text-neutral-500">Cameras</div>
-              <div className="text-xl font-bold text-neutral-900">{enabledCameraCount}</div>
-              <div className="text-xs text-neutral-500">/ {cameraCount} enabled</div>
+            <div className="rounded-lg bg-slate-100 p-3 text-center">
+              <div className="mb-1 text-xs text-ink-muted">Cameras</div>
+              <div className="text-xl font-bold text-ink">{enabledCameraCount}</div>
+              <div className="text-xs text-ink-muted">/ {cameraCount} enabled</div>
             </div>
           </div>
 
           <div className="mt-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-600">ArUco Lock:</span>
+              <span className="text-sm text-ink-muted">ArUco Lock:</span>
               <Tag label={arucoStatus} severity={arucoSeverity} />
             </div>
             <select
@@ -204,7 +204,7 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
                   disabled={!canScanAruco || arucoScanTriggered}
                   onClick={() => void triggerArucoScan()}
                   title="Triggers ArucoLock.BeginScanning on all project devices"
-                  className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-60"
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100 disabled:opacity-60"
                 >
                   {arucoScanLoading ? "Scanning…" : "Scan"}
                 </button>
@@ -220,27 +220,27 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
                 </p>
               )}
             </div>
-            <div className="text-xs text-neutral-500">Place the ArUco marker in view of all cameras before scanning.</div>
+            <div className="text-xs text-ink-muted">Place the ArUco marker in view of all cameras before scanning.</div>
           </div>
         </div>
 
         {/* Quick Settings */}
         <HasPermission permission={Permissions.Project.DevicesRead} projectId={device.ProjectId}>
-          <div className="rounded-lg border border-neutral-200 p-4">
-            <div className="mb-3 text-sm font-semibold text-neutral-900">Quick Settings</div>
+          <div className="rounded-lg border border-slate-200 p-4">
+            <div className="mb-3 text-sm font-semibold text-ink">Quick Settings</div>
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-neutral-900">Tracking</div>
-                  <div className="text-xs text-neutral-500">Enable or disable person detection</div>
-                  <div className="mt-1 text-xs text-neutral-500">Current: {trackingEnabled ? "Enabled" : "Disabled"}</div>
+                  <div className="text-sm font-medium text-ink">Tracking</div>
+                  <div className="text-xs text-ink-muted">Enable or disable person detection</div>
+                  <div className="mt-1 text-xs text-ink-muted">Current: {trackingEnabled ? "Enabled" : "Disabled"}</div>
                 </div>
                 <HasPermission permission={Permissions.Project.DevicesManage} projectId={device.ProjectId}>
                   <button
                     type="button"
                     onClick={() => setTrackingEnabled((v) => !v)}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                      trackingEnabled ? "bg-emerald-600 text-white" : "bg-neutral-200 text-neutral-700"
+                      trackingEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 text-ink"
                     }`}
                   >
                     {trackingEnabled ? "Enabled" : "Disabled"}
@@ -250,9 +250,9 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
 
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-neutral-900">Heartbeat Interval</div>
-                  <div className="text-xs text-neutral-500">How often the device reports health (seconds)</div>
-                  <div className="mt-1 text-xs text-neutral-500">Current: {heartbeatInterval} seconds</div>
+                  <div className="text-sm font-medium text-ink">Heartbeat Interval</div>
+                  <div className="text-xs text-ink-muted">How often the device reports health (seconds)</div>
+                  <div className="mt-1 text-xs text-ink-muted">Current: {heartbeatInterval} seconds</div>
                 </div>
                 <HasPermission permission={Permissions.Project.DevicesManage} projectId={device.ProjectId}>
                   <input
@@ -262,7 +262,7 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
                     step={5}
                     value={heartbeatInterval}
                     onChange={(e) => setHeartbeatInterval(Number(e.target.value))}
-                    className="w-24 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900"
+                    className="w-24 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink"
                   />
                 </HasPermission>
               </div>
@@ -273,7 +273,7 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
                     type="button"
                     disabled={settingsLoading}
                     onClick={() => void saveSettings()}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
                   >
                     {settingsLoading ? "Saving…" : "Save Changes"}
                   </button>
@@ -286,21 +286,21 @@ export function DeviceModal({ device: initialDevice, allDevices, onClose }: Devi
         </HasPermission>
 
         {/* Services */}
-        <div className="rounded-lg border border-neutral-200 p-4">
+        <div className="rounded-lg border border-slate-200 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-sm font-semibold text-neutral-900">Services</span>
+            <span className="text-sm font-semibold text-ink">Services</span>
             {degradedServiceCount > 0 && <Tag label={`${degradedServiceCount} degraded`} severity="warn" />}
           </div>
 
           {serviceRows.length === 0 ? (
-            <p className="text-sm text-neutral-500">No services reported.</p>
+            <p className="text-sm text-ink-muted">No services reported.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {serviceRows.map((svc) => (
-                <div key={svc.name} className="flex items-center justify-between border-b border-neutral-100 py-1.5 last:border-b-0">
-                  <span className="font-mono text-sm text-neutral-900">{svc.name}</span>
+                <div key={svc.name} className="flex items-center justify-between border-b border-slate-100 py-1.5 last:border-b-0">
+                  <span className="font-mono text-sm text-ink">{svc.name}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-neutral-500">{svc.sub}</span>
+                    <span className="text-xs text-ink-muted">{svc.sub}</span>
                     <Tag label={svc.active} severity={serviceSeverity(svc.active)} />
                   </div>
                 </div>

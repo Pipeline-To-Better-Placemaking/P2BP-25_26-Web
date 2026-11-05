@@ -1,3 +1,5 @@
+import { PageHeader } from "../../../components/PageHeader";
+import { SECONDARY_BUTTON } from "../../../components/buttonStyles";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { HasPermission } from "../../../auth/HasPermission";
@@ -127,7 +129,7 @@ function StatusTag({ label, severity, title }: { label: string; severity: Severi
     info: "bg-blue-100 text-blue-800",
     danger: "bg-red-100 text-red-800",
     warn: "bg-amber-100 text-amber-800",
-    secondary: "bg-neutral-200 text-neutral-600",
+    secondary: "bg-slate-200 text-ink-muted",
   };
   return (
     <span title={title} className={`flex-1 cursor-default justify-center rounded px-1.5 py-0.5 text-center text-xs font-semibold ${classes[severity]}`}>
@@ -152,13 +154,13 @@ function StatCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="h-full rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="text-sm text-neutral-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold">
+    <div className="h-full bp-card p-6">
+      <div className="text-sm text-ink-muted">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-ink">
         <span className={valueClassName}>{value}</span>
-        {suffix && <span className="text-sm font-normal text-neutral-500"> {suffix}</span>}
+        {suffix && <span className="text-sm font-normal text-ink-muted"> {suffix}</span>}
       </div>
-      <div className="mt-1 text-xs text-neutral-500">{helpText}</div>
+      <div className="mt-1 text-xs text-ink-muted">{helpText}</div>
       <div className="mt-4">{children}</div>
     </div>
   );
@@ -166,8 +168,8 @@ function StatCard({
 
 function Panel({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <div id={id} className="rounded-lg border border-neutral-200 bg-white p-4">
-      <h3 className="mb-3 text-sm font-semibold text-neutral-900">{title}</h3>
+    <div id={id} className="bp-card p-6">
+      <h3 className="mb-3 text-xl font-semibold text-ink">{title}</h3>
       {children}
     </div>
   );
@@ -409,18 +411,19 @@ export function Vision() {
 
   return (
     <HasPermission permission={Permissions.Project.VisionRead} projectId={projectId}>
-      <div className="flex w-full flex-col gap-4 rounded-lg">
-        {recommendedAction && <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">{recommendedAction}</p>}
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowTutorial(true)}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100"
-          >
-            ? Take Tour
-          </button>
-        </div>
+      <div className="w-full">
+        <PageHeader
+          title="Vision Calibration"
+          subtitle="Calibrate cameras, compute homographies, and assemble the top-down map."
+          actions={
+            <button type="button" onClick={() => setShowTutorial(true)} className={SECONDARY_BUTTON}>
+              <i className="pi pi-question-circle text-xs" />
+              Take Tour
+            </button>
+          }
+        />
+      <div className="flex w-full flex-col gap-6">
+        {recommendedAction && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{recommendedAction}</p>}
 
         {/* Stat bar */}
         <div id="tutorial-stat-bar" className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -443,7 +446,7 @@ export function Vision() {
                 disabled={!firstCamera}
                 onClick={() => (firstCameraNeedingIntrinsics ?? firstCamera) && setCameraModalTarget(firstCameraNeedingIntrinsics ?? firstCamera)}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
-                  camsNeedingAttention > 0 ? "bg-red-600 hover:bg-red-500" : "bg-neutral-600 hover:bg-neutral-500"
+                  camsNeedingAttention > 0 ? "bg-red-600 hover:bg-red-500" : "bg-brand-600 hover:bg-brand-600/85"
                 }`}
               >
                 {camsNeedingAttention > 0 ? `Calibrate (${camsNeedingAttention})` : "Review Cameras"}
@@ -469,7 +472,7 @@ export function Vision() {
                 type="button"
                 disabled={!firstCameraNeedingIntrinsics}
                 onClick={() => firstCameraNeedingIntrinsics && setCameraModalTarget(firstCameraNeedingIntrinsics)}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50"
               >
                 Run Intrinsics
               </button>
@@ -495,7 +498,7 @@ export function Vision() {
                 disabled={!firstCameraReadyForHomography}
                 onClick={() => firstCameraReadyForHomography && setCameraModalTarget(firstCameraReadyForHomography)}
                 title={homographyHelpText}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-50"
               >
                 {homographyActionLabel}
               </button>
@@ -514,7 +517,7 @@ export function Vision() {
                 disabled={!firstDevice || !hasLocalHomographies}
                 onClick={() => firstDevice && setDeviceModalTarget(firstDevice)}
                 title={!hasLocalHomographies ? "Run a ChArUco homography scan on all cameras first" : ""}
-                className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50"
               >
                 Open ArUco Lock
               </button>
@@ -522,27 +525,27 @@ export function Vision() {
           </StatCard>
         </div>
 
-        <div className="mt-4 flex flex-col gap-4 xl:grid xl:grid-cols-2 xl:items-start">
-          <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex flex-col gap-6 xl:grid xl:grid-cols-2 xl:items-start">
+          <div className="flex min-w-0 flex-col gap-6">
             {/* Cameras panel */}
             <Panel id="tutorial-cameras-panel" title={camsNeedingAttention > 0 ? `Cameras (${camsNeedingAttention} need attention)` : "Cameras"}>
               <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-sm text-neutral-500">Discover cameras and jump straight into per-camera calibration.</div>
+                <div className="text-sm text-ink-muted">Discover cameras and jump straight into per-camera calibration.</div>
                 <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
                   <button
                     type="button"
                     disabled={!firstCamera}
                     onClick={() => (firstCameraNeedingIntrinsics ?? firstCamera) && setCameraModalTarget(firstCameraNeedingIntrinsics ?? firstCamera)}
-                    className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-50"
                   >
                     Open Camera
                   </button>
                 </HasPermission>
               </div>
 
-              {loading && <div className="py-4 text-center text-sm text-neutral-500">Loading cameras...</div>}
+              {loading && <div className="py-4 text-center text-sm text-ink-muted">Loading cameras...</div>}
               {!loading && allCameras.length === 0 && (
-                <div className="py-4 text-center text-sm text-neutral-500">No cameras reported. Ensure devices are online.</div>
+                <div className="py-4 text-center text-sm text-ink-muted">No cameras reported. Ensure devices are online.</div>
               )}
               {!loading && allCameras.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
@@ -550,16 +553,16 @@ export function Vision() {
                     <div
                       key={cam.mac}
                       onClick={() => setCameraModalTarget(cam)}
-                      className={`cursor-pointer rounded-lg border-l-4 bg-neutral-50 p-3 transition-opacity hover:opacity-90 ${cameraStatusBorderClass(cam)}`}
+                      className={`cursor-pointer rounded-lg border-l-4 bg-slate-50 p-3 transition-opacity hover:opacity-90 ${cameraStatusBorderClass(cam)}`}
                     >
                       <div className="mb-2 flex items-start justify-between">
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-neutral-900">{cam.nickname || `Camera ${cam.index}`}</div>
-                          <div className="truncate font-mono text-xs text-neutral-500">{cam.mac}</div>
+                          <div className="truncate text-sm font-semibold text-ink">{cam.nickname || `Camera ${cam.index}`}</div>
+                          <div className="truncate font-mono text-xs text-ink-muted">{cam.mac}</div>
                         </div>
                         <span className={`ml-1 mt-1 h-2 w-2 flex-shrink-0 rounded-full ${cam.info.Enabled ? "bg-emerald-500" : "bg-red-500"}`} />
                       </div>
-                      <div className="mb-2 text-xs text-neutral-500">{cam.info.Ip}</div>
+                      <div className="mb-2 text-xs text-ink-muted">{cam.info.Ip}</div>
                       <div className="flex gap-1">
                         <StatusTag label="I" severity={intrinsicsSeverity(cam)} title="Intrinsics" />
                         <StatusTag label="H" severity={homographySeverity(cam)} title={hasHomography(cam) ? "Homography ready" : "Homography missing"} />
@@ -575,23 +578,23 @@ export function Vision() {
             <Panel id="tutorial-board-library" title="Board Library">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-neutral-500">Saved boards are user-scoped and reusable across projects.</div>
+                  <div className="text-sm text-ink-muted">Saved boards are user-scoped and reusable across projects.</div>
                   <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
                     <button
                       type="button"
                       onClick={() => setBoardGenerateOpen(true)}
                       title="Generate a ChArUco or ArUco board for printing"
-                      className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50"
                     >
                       + Generate New Board
                     </button>
                   </HasPermission>
                 </div>
 
-                {boardLibraryLoading && <div className="py-3 text-center text-sm text-neutral-500">Loading board library...</div>}
+                {boardLibraryLoading && <div className="py-3 text-center text-sm text-ink-muted">Loading board library...</div>}
                 {boardLibraryError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">Failed to load board library.</p>}
                 {!boardLibraryLoading && !boardLibraryError && boardLibrary.length === 0 && (
-                  <div className="py-4 text-center text-sm text-neutral-500">No saved boards yet. Generate one and click Save to Library.</div>
+                  <div className="py-4 text-center text-sm text-ink-muted">No saved boards yet. Generate one and click Save to Library.</div>
                 )}
                 {!boardLibraryLoading && boardLibrary.length > 0 && (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -599,24 +602,24 @@ export function Vision() {
                       <div
                         key={board.Id}
                         onClick={() => setBoardDetailTarget(board)}
-                        className="cursor-pointer rounded-lg border border-neutral-200 bg-neutral-50 p-3 transition-opacity hover:opacity-90"
+                        className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 p-3 transition-opacity hover:opacity-90"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-semibold text-neutral-900">{board.Nickname || "Untitled Board"}</div>
+                          <div className="truncate text-sm font-semibold text-ink">{board.Nickname || "Untitled Board"}</div>
                           <StatusTag label={board.Type.toUpperCase()} severity={board.Type === "charuco" ? "info" : "secondary"} />
                         </div>
-                        <div className="mb-2 text-xs text-neutral-500">{board.Dictionary}</div>
+                        <div className="mb-2 text-xs text-ink-muted">{board.Dictionary}</div>
                         {board.Type === "charuco" && (
-                          <div className="mb-2 text-xs text-neutral-500">
+                          <div className="mb-2 text-xs text-ink-muted">
                             {board.Cols} x {board.Rows} grid • {board.SquareSize} {board.Units} square
                           </div>
                         )}
                         {board.Type === "aruco" && (
-                          <div className="mb-2 text-xs text-neutral-500">
+                          <div className="mb-2 text-xs text-ink-muted">
                             Marker #{board.MarkerId ?? 0} • {board.MarkerSize} {board.Units}
                           </div>
                         )}
-                        <div className="flex h-28 items-center justify-center overflow-hidden rounded border border-neutral-200 bg-white p-2">
+                        <div className="flex h-28 items-center justify-center overflow-hidden rounded border border-slate-200 bg-white p-2">
                           <img src={boardPreviewUrl(board.PreviewSvg)} alt="Board preview" className="h-auto max-h-full w-auto max-w-full object-contain" />
                         </div>
                       </div>
@@ -630,10 +633,10 @@ export function Vision() {
             <Panel id="tutorial-floorplan-library" title="Floorplan Library">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-neutral-500">Click a floorplan to select it for the puzzle workspace.</div>
+                  <div className="text-sm text-ink-muted">Click a floorplan to select it for the puzzle workspace.</div>
                   <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
                     <label className="cursor-pointer">
-                      <span className="inline-block rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100">
+                      <span className="inline-block rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50">
                         {uploadingFloorplan ? "Uploading…" : "Upload Floorplan"}
                       </span>
                       <input ref={floorplanInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void onFloorplanFileSelected(e)} />
@@ -641,9 +644,9 @@ export function Vision() {
                   </HasPermission>
                 </div>
 
-                {floorplansLoading && <div className="py-3 text-center text-sm text-neutral-500">Loading floorplans...</div>}
+                {floorplansLoading && <div className="py-3 text-center text-sm text-ink-muted">Loading floorplans...</div>}
                 {!floorplansLoading && floorplans.length === 0 && (
-                  <div className="py-4 text-center text-sm text-neutral-500">No floorplans uploaded yet.</div>
+                  <div className="py-4 text-center text-sm text-ink-muted">No floorplans uploaded yet.</div>
                 )}
                 {!floorplansLoading && floorplans.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
@@ -654,23 +657,23 @@ export function Vision() {
                           key={fp.Id}
                           onClick={() => setSelectedFloorplanId(fp.Id)}
                           className={`flex cursor-pointer flex-col overflow-hidden rounded-lg transition-all ${
-                            selected ? "bg-indigo-50 ring-2 ring-indigo-500" : "border border-neutral-200 bg-neutral-50"
+                            selected ? "bg-brand-50 ring-2 ring-brand-500" : "border border-slate-200 bg-slate-50"
                           }`}
                         >
-                          <div className="relative flex h-24 items-center justify-center overflow-hidden bg-neutral-200">
+                          <div className="relative flex h-24 items-center justify-center overflow-hidden bg-slate-200">
                             {fp.ImageDownloadUrl ? (
                               <img src={fp.ImageDownloadUrl} alt={fp.Nickname} className="h-full w-full object-cover" />
                             ) : (
                               <span className="text-2xl opacity-30">🖼</span>
                             )}
                             {selected && (
-                              <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-xs text-white">✓</div>
+                              <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-xs text-white">✓</div>
                             )}
                           </div>
                           <div className="flex items-center gap-2 p-2">
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-xs font-semibold text-neutral-900">{fp.Nickname}</div>
-                              <div className="text-xs text-neutral-500">
+                              <div className="truncate text-xs font-semibold text-ink">{fp.Nickname}</div>
+                              <div className="text-xs text-ink-muted">
                                 {fp.ImageWidth} × {fp.ImageHeight}
                               </div>
                             </div>
@@ -697,26 +700,26 @@ export function Vision() {
             </Panel>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-6">
             {/* Devices panel */}
             <Panel id="tutorial-devices-panel" title="Devices">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-sm text-neutral-500">Check Jetson heartbeat, health, and device-level calibration actions.</div>
+                <div className="text-sm text-ink-muted">Check Jetson heartbeat, health, and device-level calibration actions.</div>
                 <HasPermission permission={Permissions.Project.DevicesRead} projectId={projectId}>
                   <button
                     type="button"
                     disabled={!firstDevice}
                     onClick={() => firstDevice && setDeviceModalTarget(firstDevice)}
-                    className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-50"
                   >
                     Open Device
                   </button>
                 </HasPermission>
               </div>
 
-              {loading && <div className="py-4 text-center text-sm text-neutral-500">Loading devices...</div>}
+              {loading && <div className="py-4 text-center text-sm text-ink-muted">Loading devices...</div>}
               {!loading && devices.length === 0 && (
-                <div className="py-4 text-center text-sm text-neutral-500">No devices assigned to this project.</div>
+                <div className="py-4 text-center text-sm text-ink-muted">No devices assigned to this project.</div>
               )}
               {!loading && devices.length > 0 && (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -727,30 +730,30 @@ export function Vision() {
                       <div
                         key={device.Id}
                         onClick={() => setDeviceModalTarget(device)}
-                        className={`cursor-pointer rounded-lg border-l-4 bg-neutral-50 p-3 transition-opacity hover:opacity-90 ${
+                        className={`cursor-pointer rounded-lg border-l-4 bg-slate-50 p-3 transition-opacity hover:opacity-90 ${
                           online ? "border-emerald-500" : "border-red-500"
                         }`}
                       >
                         <div className="mb-2 flex items-start justify-between">
-                          <div className="text-sm font-semibold text-neutral-900">{device.Name || "Unnamed Device"}</div>
+                          <div className="text-sm font-semibold text-ink">{device.Name || "Unnamed Device"}</div>
                           <StatusTag label={online ? "Online" : "Offline"} severity={online ? "success" : "danger"} />
                         </div>
-                        <div className="mb-3 text-xs text-neutral-500">Last seen: {formatRelative(getHealthReportDate(device))}</div>
-                        <div className="flex gap-4 text-xs text-neutral-500">
+                        <div className="mb-3 text-xs text-ink-muted">Last seen: {formatRelative(getHealthReportDate(device))}</div>
+                        <div className="flex gap-4 text-xs text-ink-muted">
                           <span>
-                            <span className="font-semibold text-neutral-900">{device.HealthReport?.System?.Gpu?.UtilizationPct ?? "—"}</span>% GPU
+                            <span className="font-semibold text-ink">{device.HealthReport?.System?.Gpu?.UtilizationPct ?? "—"}</span>% GPU
                           </span>
                           <span>
-                            <span className="font-semibold text-neutral-900">{device.HealthReport?.System?.Memory?.UsedMb ?? "—"}</span> MB RAM
+                            <span className="font-semibold text-ink">{device.HealthReport?.System?.Memory?.UsedMb ?? "—"}</span> MB RAM
                           </span>
                           <span>
-                            <span className="font-semibold text-neutral-900">
+                            <span className="font-semibold text-ink">
                               {(device.HealthReport?.System?.CpuTemperatureC ?? -1) >= 0 ? device.HealthReport?.System?.CpuTemperatureC : "—"}
                             </span>
                             °C CPU
                           </span>
                           <span>
-                            <span className="font-semibold text-neutral-900">{camerasForDevice}</span> cam{camerasForDevice !== 1 ? "s" : ""}
+                            <span className="font-semibold text-ink">{camerasForDevice}</span> cam{camerasForDevice !== 1 ? "s" : ""}
                           </span>
                         </div>
                       </div>
@@ -764,9 +767,9 @@ export function Vision() {
             <Panel id="tutorial-topdown-map" title="Top-Down Map View">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-sm font-semibold text-neutral-900">Puzzle Assembly Workspace</div>
-                  <div className="text-sm text-neutral-500">Align BEV camera layers on the floorplan to produce global homographies.</div>
-                  {selectedFloorplan && <div className="mt-1 text-xs text-neutral-500">📍 {selectedFloorplan.Nickname}</div>}
+                  <div className="text-sm font-semibold text-ink">Puzzle Assembly Workspace</div>
+                  <div className="text-sm text-ink-muted">Align BEV camera layers on the floorplan to produce global homographies.</div>
+                  {selectedFloorplan && <div className="mt-1 text-xs text-ink-muted">📍 {selectedFloorplan.Nickname}</div>}
                   {!selectedFloorplan && floorplans.length === 0 && (
                     <div className="mt-1 text-xs text-orange-600">Upload a floorplan below to enable the puzzle.</div>
                   )}
@@ -777,7 +780,7 @@ export function Vision() {
                     disabled={!puzzleReady || !selectedFloorplan}
                     onClick={openPuzzleWorkspace}
                     title={!puzzleReady ? "All camera BEV images must be ready before opening the puzzle" : !selectedFloorplan ? "Select a floorplan from the Floorplan Library below" : ""}
-                    className="flex-shrink-0 rounded-md bg-neutral-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+                    className="flex-shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50"
                   >
                     Open Puzzle
                   </button>
@@ -785,12 +788,12 @@ export function Vision() {
               </div>
 
               {globalHomographies && (
-                <div className="mt-4 flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <span className="flex-shrink-0 text-lg text-emerald-600">✓</span>
                   <div className="text-sm">
-                    <span className="font-semibold text-neutral-900">Puzzle saved</span>
-                    <span className="ml-2 text-neutral-500">{globalSavedAt}</span>
-                    <span className="ml-2 text-neutral-500">
+                    <span className="font-semibold text-ink">Puzzle saved</span>
+                    <span className="ml-2 text-ink-muted">{globalSavedAt}</span>
+                    <span className="ml-2 text-ink-muted">
                       · {globalHomographies.Placements.length} camera{globalHomographies.Placements.length !== 1 ? "s" : ""} placed
                     </span>
                   </div>
@@ -837,6 +840,7 @@ export function Vision() {
         </div>
 
         {showTutorial && <VisionTutorial onDone={onTutorialDone} />}
+      </div>
       </div>
 
       {cameraModalTarget && (

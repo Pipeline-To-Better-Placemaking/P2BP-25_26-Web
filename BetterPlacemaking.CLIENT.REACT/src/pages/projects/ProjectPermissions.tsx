@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/PageHeader";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -124,29 +125,29 @@ export function ProjectPermissions() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-900">Project Permissions ({members.length})</h1>
-          <p className="mt-1 text-sm text-neutral-600">Manage roles for users assigned to this project.</p>
-        </div>
-        <button
-          onClick={openAddDialog}
-          disabled={roleOptions.length === 0}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
-        >
-          Add User
-        </button>
-      </div>
+      <PageHeader
+        title={`Project Permissions (${members.length})`}
+        subtitle="Manage roles for users assigned to this project."
+        actions={
+          <button
+            onClick={openAddDialog}
+            disabled={roleOptions.length === 0}
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
+          >
+            Add User
+          </button>
+        }
+      />
 
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className="mt-4 text-sm text-neutral-600">Loading…</p>
+        <p className="mt-4 text-sm text-ink-muted">Loading…</p>
       ) : members.length === 0 ? (
-        <p className="mt-4 text-sm text-neutral-600">No users have project access yet.</p>
+        <div className="bp-card p-6 text-sm text-ink-muted">No users have project access yet.</div>
       ) : (
-        <table className="mt-4 w-full overflow-hidden rounded-lg border border-neutral-200 bg-white text-sm">
-          <thead className="bg-neutral-100 text-left text-neutral-700">
+        <table className="mt-4 w-full overflow-hidden bp-card text-sm">
+          <thead className="bg-mauve text-left text-white">
             <tr>
               <th className="px-4 py-2 font-medium">User</th>
               <th className="px-4 py-2 font-medium">Email</th>
@@ -156,16 +157,16 @@ export function ProjectPermissions() {
           </thead>
           <tbody>
             {members.map((member) => (
-              <tr key={member.UserId} className="border-t border-neutral-100">
-                <td className="px-4 py-2 font-medium text-neutral-900">{memberName(member)}</td>
-                <td className="px-4 py-2 text-neutral-600">{member.Email || "—"}</td>
+              <tr key={member.UserId} className="border-t border-slate-100">
+                <td className="px-4 py-2 font-medium text-ink">{memberName(member)}</td>
+                <td className="px-4 py-2 text-ink-muted">{member.Email || "—"}</td>
                 <td className="px-4 py-2">
                   <select
                     value={draftRoleByUserId[member.UserId ?? ""] ?? ""}
                     onChange={(e) =>
                       setDraftRoleByUserId((prev) => ({ ...prev, [member.UserId as string]: e.target.value }))
                     }
-                    className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none"
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none"
                   >
                     {roleOptions.map((role) => (
                       <option key={role} value={role}>
@@ -179,7 +180,7 @@ export function ProjectPermissions() {
                     <button
                       onClick={() => handleSaveRole(member)}
                       disabled={saving}
-                      className="text-indigo-600 hover:underline disabled:opacity-60"
+                      className="text-brand-600 hover:underline disabled:opacity-60"
                     >
                       Save
                     </button>
@@ -197,12 +198,12 @@ export function ProjectPermissions() {
       {adding && (
         <Modal title="Add User To Project" onClose={() => setAdding(false)} widthClassName="max-w-md">
           <div className="space-y-4">
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               User
               <select
                 value={newUserId}
                 onChange={(e) => setNewUserId(e.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
               >
                 <option value="">— Select a user —</option>
                 {availableUsers.map((u) => (
@@ -212,12 +213,12 @@ export function ProjectPermissions() {
                 ))}
               </select>
             </label>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Role
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
               >
                 <option value="">— Select a role —</option>
                 {roleOptions.map((role) => (
@@ -231,7 +232,7 @@ export function ProjectPermissions() {
               <button
                 type="button"
                 onClick={() => setAdding(false)}
-                className="rounded-md px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+                className="rounded-md px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
               >
                 Cancel
               </button>
@@ -239,7 +240,7 @@ export function ProjectPermissions() {
                 type="button"
                 onClick={handleAdd}
                 disabled={!newUserId || !newRole || saving}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
               >
                 Add
               </button>

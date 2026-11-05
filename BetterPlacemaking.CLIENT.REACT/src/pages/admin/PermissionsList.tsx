@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/PageHeader";
 import { useEffect, useMemo, useState } from "react";
 import * as permissionApi from "../../services/permissionApi";
 import type { UserProjectRoleAssignments } from "../../services/permissionApi";
@@ -81,21 +82,20 @@ export function PermissionsList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-neutral-900">Users ({filteredRows.length})</h1>
-      </div>
-
-      <p className="mt-1 text-sm text-neutral-600">View registered users and their assigned project counts.</p>
+      <PageHeader
+        title={`Users (${filteredRows.length})`}
+        subtitle="View registered users and their assigned project counts."
+      />
 
       <div className="mt-4 flex items-center gap-2">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name or email"
-          className="w-64 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none"
+          className="w-64 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none"
         />
         {search && (
-          <button type="button" onClick={() => setSearch("")} className="text-sm text-neutral-600 hover:underline">
+          <button type="button" onClick={() => setSearch("")} className="text-sm text-ink-muted hover:underline">
             Clear
           </button>
         )}
@@ -104,10 +104,10 @@ export function PermissionsList() {
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className="mt-4 text-sm text-neutral-600">Loading…</p>
+        <p className="mt-4 text-sm text-ink-muted">Loading…</p>
       ) : (
-        <table className="mt-4 w-full overflow-hidden rounded-lg border border-neutral-200 bg-white text-sm">
-          <thead className="bg-neutral-100 text-left text-neutral-700">
+        <table className="mt-4 w-full overflow-hidden bp-card text-sm">
+          <thead className="bg-mauve text-left text-white">
             <tr>
               <th
                 className="cursor-pointer select-none px-4 py-2 font-medium"
@@ -126,11 +126,11 @@ export function PermissionsList() {
           </thead>
           <tbody>
             {filteredRows.map((row) => (
-              <tr key={row.id} className="border-t border-neutral-100">
-                <td className="px-4 py-2 font-medium text-neutral-900">{row.name}</td>
-                <td className="px-4 py-2 text-neutral-600">{row.email || "—"}</td>
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-4 py-2 font-medium text-ink">{row.name}</td>
+                <td className="px-4 py-2 text-ink-muted">{row.email || "—"}</td>
                 <td className="px-4 py-2">
-                  <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                  <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
                     {row.assignedCount} project{row.assignedCount === 1 ? "" : "s"}
                   </span>
                 </td>
@@ -138,7 +138,7 @@ export function PermissionsList() {
             ))}
             {filteredRows.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-sm text-neutral-500">
+                <td colSpan={3} className="px-4 py-6 text-center text-sm text-ink-muted">
                   No users match the current filters.
                 </td>
               </tr>

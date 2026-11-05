@@ -48,7 +48,7 @@ export function DeviceApiInfo({ projectId, deviceId, onClose }: DeviceApiInfoPro
 
       {apiKey ? (
         <div>
-          <p className="text-sm text-neutral-700">
+          <p className="text-sm text-ink">
             This is the new API key for this device. Copy it and store it in a safe place now. You won't be able to
             view it again.
           </p>
@@ -56,13 +56,13 @@ export function DeviceApiInfo({ projectId, deviceId, onClose }: DeviceApiInfoPro
             <input
               readOnly
               value={apiKey}
-              className="w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 font-mono text-sm text-neutral-900"
+              className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm text-ink"
             />
             <button
               type="button"
               onClick={copyApiKey}
               aria-label="Copy"
-              className="rounded-md border border-neutral-300 px-2.5 py-2 text-neutral-700 hover:bg-neutral-100"
+              className="rounded-md border border-slate-300 px-2.5 py-2 text-ink hover:bg-slate-100"
             >
               ⧉
             </button>
@@ -72,7 +72,7 @@ export function DeviceApiInfo({ projectId, deviceId, onClose }: DeviceApiInfoPro
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
             >
               Close
             </button>
@@ -80,7 +80,7 @@ export function DeviceApiInfo({ projectId, deviceId, onClose }: DeviceApiInfoPro
         </div>
       ) : (
         <div>
-          <p className="text-sm text-neutral-700">
+          <p className="text-sm text-ink">
             You can only view a device API key once. Clicking "Generate" will create a new key for this device and
             immediately invalidate any previous key.
           </p>
@@ -88,7 +88,7 @@ export function DeviceApiInfo({ projectId, deviceId, onClose }: DeviceApiInfoPro
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
             >
               Cancel
             </button>

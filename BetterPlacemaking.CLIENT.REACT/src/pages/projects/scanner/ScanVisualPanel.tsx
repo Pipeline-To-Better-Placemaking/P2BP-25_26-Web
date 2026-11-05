@@ -9,7 +9,7 @@ export type ScannerVisualMode = "3d" | "solids";
 
 const tabBtn = (active: boolean) =>
   `rounded-md px-3 py-1.5 text-sm font-medium ${
-    active ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+    active ? "bg-brand-600 text-white" : "border border-slate-300 bg-white text-ink hover:bg-slate-50"
   }`;
 
 interface ScanVisualPanelProps {
@@ -61,7 +61,7 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
           <button
             type="button"
             onClick={() => (visualMode === "3d" ? pointCloudRef.current?.resetView() : solidRef.current?.resetView())}
-            className="ml-auto rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="ml-auto rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50"
           >
             Reset View
           </button>
@@ -85,7 +85,7 @@ export function ScanVisualPanel({ visualMode, onVisualModeChange }: ScanVisualPa
             pan, zoom, reset) but shows an empty scene until that data source exists.
           </p>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-neutral-200">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-200">
             {visualMode === "3d" ? (
               <PointCloudViewer ref={pointCloudRef} className="h-full w-full" />
             ) : (

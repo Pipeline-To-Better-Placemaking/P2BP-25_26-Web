@@ -155,63 +155,63 @@ export function BoardDetailModal({ board: initialBoard, projectId, onClose, onUp
     <>
       <Modal title={board.Nickname || "Board"} onClose={onClose} widthClassName="max-w-2xl">
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-neutral-600">Download this board as a PDF, edit it, or remove it from your library.</p>
+          <p className="text-sm text-ink-muted">Download this board as a PDF, edit it, or remove it from your library.</p>
 
           {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-neutral-100 p-3">
-              <div className="text-xs text-neutral-500">Nickname</div>
-              <div className="font-semibold text-neutral-900">{board.Nickname}</div>
+            <div className="rounded-lg bg-slate-100 p-3">
+              <div className="text-xs text-ink-muted">Nickname</div>
+              <div className="font-semibold text-ink">{board.Nickname}</div>
             </div>
-            <div className="rounded-lg bg-neutral-100 p-3">
-              <div className="text-xs text-neutral-500">Type</div>
-              <div className="font-semibold uppercase text-neutral-900">{board.Type}</div>
+            <div className="rounded-lg bg-slate-100 p-3">
+              <div className="text-xs text-ink-muted">Type</div>
+              <div className="font-semibold uppercase text-ink">{board.Type}</div>
             </div>
-            <div className="rounded-lg bg-neutral-100 p-3">
-              <div className="text-xs text-neutral-500">Dictionary</div>
-              <div className="font-semibold text-neutral-900">{board.Dictionary}</div>
+            <div className="rounded-lg bg-slate-100 p-3">
+              <div className="text-xs text-ink-muted">Dictionary</div>
+              <div className="font-semibold text-ink">{board.Dictionary}</div>
             </div>
             {board.Type === "charuco" && (
-              <div className="rounded-lg bg-neutral-100 p-3">
-                <div className="text-xs text-neutral-500">Grid</div>
-                <div className="font-semibold text-neutral-900">
+              <div className="rounded-lg bg-slate-100 p-3">
+                <div className="text-xs text-ink-muted">Grid</div>
+                <div className="font-semibold text-ink">
                   {board.Cols} x {board.Rows}
                 </div>
               </div>
             )}
             {board.Type === "aruco" && (
-              <div className="rounded-lg bg-neutral-100 p-3">
-                <div className="text-xs text-neutral-500">Marker ID</div>
-                <div className="font-semibold text-neutral-900">{board.MarkerId ?? 0}</div>
+              <div className="rounded-lg bg-slate-100 p-3">
+                <div className="text-xs text-ink-muted">Marker ID</div>
+                <div className="font-semibold text-ink">{board.MarkerId ?? 0}</div>
               </div>
             )}
             {board.Type === "charuco" && (
-              <div className="rounded-lg bg-neutral-100 p-3">
-                <div className="text-xs text-neutral-500">Square size</div>
-                <div className="font-semibold text-neutral-900">{board.SquareSizeMm} mm</div>
+              <div className="rounded-lg bg-slate-100 p-3">
+                <div className="text-xs text-ink-muted">Square size</div>
+                <div className="font-semibold text-ink">{board.SquareSizeMm} mm</div>
               </div>
             )}
-            <div className="rounded-lg bg-neutral-100 p-3">
-              <div className="text-xs text-neutral-500">Marker size</div>
-              <div className="font-semibold text-neutral-900">{board.MarkerSizeMm} mm</div>
+            <div className="rounded-lg bg-slate-100 p-3">
+              <div className="text-xs text-ink-muted">Marker size</div>
+              <div className="font-semibold text-ink">{board.MarkerSizeMm} mm</div>
             </div>
-            <div className="rounded-lg bg-neutral-100 p-3">
-              <div className="text-xs text-neutral-500">Created</div>
-              <div className="font-semibold text-neutral-900">{new Date(board.CreatedAtUtc).toLocaleString()}</div>
+            <div className="rounded-lg bg-slate-100 p-3">
+              <div className="text-xs text-ink-muted">Created</div>
+              <div className="font-semibold text-ink">{new Date(board.CreatedAtUtc).toLocaleString()}</div>
             </div>
           </div>
 
-          <div className="flex items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 p-4">
+          <div className="flex items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 p-4">
             <img src={svgPreviewDataUrl} alt="Board preview" className="h-auto max-w-full object-contain" />
           </div>
 
-          <div className="flex gap-2 border-t border-neutral-200 pt-4">
+          <div className="flex gap-2 border-t border-slate-200 pt-4">
             <button
               type="button"
               disabled={deleting || editing}
               onClick={() => void downloadPdf()}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
             >
               {downloading ? "Downloading…" : "Download PDF"}
             </button>
@@ -220,7 +220,7 @@ export function BoardDetailModal({ board: initialBoard, projectId, onClose, onUp
                 type="button"
                 disabled={deleting || downloading}
                 onClick={() => setEditing(true)}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-60"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100 disabled:opacity-60"
               >
                 Edit
               </button>

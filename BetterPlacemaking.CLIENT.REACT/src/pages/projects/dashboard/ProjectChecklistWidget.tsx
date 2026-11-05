@@ -26,9 +26,9 @@ export function ProjectChecklistWidget({
 }: ProjectChecklistWidgetProps) {
   return (
     <AppProjectChecklistWidget>
-      <div className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+      <div className="bp-card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold">Project Checklist</h3>
+          <h3 className="text-xl font-semibold text-ink">Project Checklist</h3>
           <Button icon="pi pi-refresh" text rounded onClick={onRefresh} />
         </div>
 

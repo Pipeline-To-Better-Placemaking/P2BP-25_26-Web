@@ -11,12 +11,12 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({ title, message, confirmLabel = "Delete", onConfirm, onCancel }: ConfirmDialogProps) {
   return (
     <Modal title={title} onClose={onCancel} widthClassName="max-w-sm">
-      <p className="text-sm text-neutral-700">{message}</p>
+      <p className="text-sm text-ink">{message}</p>
       <div className="mt-6 flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
         >
           Cancel
         </button>
