@@ -61,11 +61,11 @@ export function ResetPassword() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center surface-ground p-4">
       <Card
-        className="w-full max-w-md content-background"
+        className="w-full max-w-md bp-auth-card"
         titleTemplate={
           <div className="text-center">
-            <div className="text-xl font-semibold">Reset Password</div>
-            <div className="text-sm text-surface-500">Choose a new password</div>
+            <div className="text-2xl font-semibold text-ink">Reset Password</div>
+            <div className="mt-1 text-sm font-normal text-ink-muted">Choose a new password</div>
           </div>
         }
       >
@@ -88,7 +88,7 @@ export function ResetPassword() {
           {errorMessage && <Message severity="error" text={errorMessage} />}
 
           <div className="text-center text-sm">
-            <Link to="/login" className="underline">Back to sign in</Link>
+            <Link to="/login" className="font-medium text-brand-600 hover:text-brand-600/80">Back to sign in</Link>
           </div>
         </form>
       </Card>

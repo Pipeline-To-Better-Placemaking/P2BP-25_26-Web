@@ -180,14 +180,14 @@ export function AppLayout() {
         <div className="content-background h-16">
           <div className="flex items-center justify-start w-full">
             <Link to="/" className="flex items-center gap-3 p-3 no-underline justify-start">
-              <span className="text-3xl font-semibold tracking-tight text-on-surface-900">Better Placemaking Tracking &amp; Modeling</span>
+              <span className="text-3xl font-semibold tracking-tight text-ink">Better Placemaking Tracking &amp; Modeling</span>
               {currentProjectName && <span className="text-xl text-muted-color">{currentProjectName}</span>}
             </Link>
           </div>
         </div>
 
         <div className="flex grow min-h-0 overflow-hidden">
-          <div className="w-60 min-h-0 content-background flex flex-col">
+          <div className="w-60 shrink-0 min-h-0 content-background flex flex-col">
             <div>
               <nav className="px-3 mb-7 mt-3">
                 <Menu model={navItems} itemTemplate={(item) => <NavLinkItem item={item} />} />

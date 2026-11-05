@@ -8,12 +8,65 @@
    layered utilities on conflicts - keep it as a plain (unlayered) import to match. */
 @import "./theme/aura-cyan.css";
 
+/* Site palette: slate ink text, brand purple accent built around #4732db. */
+@theme inline {
+	--color-ink: var(--bp-ink);
+	--color-ink-muted: var(--bp-ink-muted);
+}
+
+@theme {
+	--color-brand-50: #f1effd;
+	--color-brand-100: #e2defa;
+	--color-brand-200: #c6bdf4;
+	--color-brand-300: #9e8fea;
+	--color-brand-400: #4732db;
+	--color-brand-500: #4732db;
+	--color-brand-600: #4732db;
+	--color-brand-700: #4732db;
+	--color-brand-800: #3524a8;
+	--color-brand-900: #251978;
+	--color-brand-950: #160f48;
+	--color-mauve: #4732db;
+}
+
 :root[class*='app-dark-mode'] {
 	--surface-ground: var(--p-surface-950);
 }
 
 :root {
 	--surface-ground: var(--p-surface-100);
+	--bp-ink: #334155;
+	--bp-ink-muted: #64748b;
+	--bp-card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+
+	--p-primary-50: #f1effd;
+	--p-primary-100: #e2defa;
+	--p-primary-200: #c6bdf4;
+	--p-primary-300: #9e8fea;
+	--p-primary-400: #4732db;
+	--p-primary-500: #4732db;
+	--p-primary-600: #4732db;
+	--p-primary-700: #4732db;
+	--p-primary-800: #3524a8;
+	--p-primary-900: #251978;
+	--p-primary-950: #160f48;
+}
+
+:root:not(.app-dark-mode) {
+	--p-primary-color: var(--p-primary-600);
+	--p-primary-hover-color: var(--p-primary-500);
+	--p-primary-active-color: var(--p-primary-700);
+}
+
+.app-dark-mode {
+	--bp-ink: #e2e8f0;
+	--bp-ink-muted: #94a3b8;
+}
+
+/* Light surfaces keep dark ink in dark mode so their text stays readable. */
+.app-dark-mode :is(.bg-white, .bg-slate-50, .bg-slate-100) {
+	--bp-ink: #334155;
+	--bp-ink-muted: #64748b;
 }
 
 html {
@@ -27,6 +80,40 @@ html * {
 
 body {
 	background-color: var(--p-content-background);
+	color: var(--bp-ink);
+}
+
+@layer components {
+	.bp-card {
+		background-color: var(--p-surface-0);
+		border: 1px solid var(--p-surface-300);
+		border-radius: 0.75rem;
+		box-shadow: var(--bp-card-shadow);
+	}
+
+	.app-dark-mode .bp-card {
+		background-color: var(--p-surface-900);
+		border-color: var(--p-surface-700);
+	}
+}
+
+.p-card {
+	border: 1px solid var(--p-surface-300);
+	border-radius: 0.75rem;
+	box-shadow: var(--bp-card-shadow);
+}
+
+.app-dark-mode .p-card {
+	border-color: var(--p-surface-700);
+}
+
+.p-card.bp-auth-card {
+	background-color: var(--p-surface-0);
+	padding: 1rem 0.75rem;
+}
+
+.app-dark-mode .p-card.bp-auth-card {
+	background-color: var(--p-surface-900);
 }
 
 .content-background {

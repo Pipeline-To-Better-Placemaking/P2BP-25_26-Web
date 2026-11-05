@@ -1,3 +1,5 @@
+import { PageHeader } from "../../../components/PageHeader";
+import { DANGER_BUTTON, PRIMARY_BUTTON, SECONDARY_BUTTON } from "../../../components/buttonStyles";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowRotateRight, faPlay, faStop, faTriangleExclamation, faUpload } from "@fortawesome/free-solid-svg-icons";
@@ -42,29 +44,29 @@ function SessionConfirmDialog({
       <div
         role="alertdialog"
         aria-labelledby="session-confirm-title"
-        className="flex w-full max-w-md gap-3 rounded-md border border-neutral-700 bg-white p-4 shadow-lg"
+        className="flex w-full max-w-md gap-3 rounded-xl border border-slate-200 bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm text-red-600">
           <FontAwesomeIcon icon={faTriangleExclamation} />
         </div>
         <div className="grow">
-          <h2 id="session-confirm-title" className="font-semibold text-neutral-800">
+          <h2 id="session-confirm-title" className="text-lg font-semibold text-ink">
             {title}
           </h2>
-          <p className="mt-0.5 text-sm text-neutral-700">{message}</p>
+          <p className="mt-1 text-sm text-ink-muted">{message}</p>
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-sm border border-neutral-700 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50"
             >
               Keep going
             </button>
             <button
               type="button"
               onClick={onConfirm}
-              className="rounded-sm bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-500"
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
             >
               {confirmLabel}
             </button>
@@ -122,77 +124,68 @@ export function Calibration() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-neutral-800">Calibration</h1>
-        <p className="mt-1 text-sm text-neutral-900">Calibration runs on the workstation. This page opens a remote session to its GUI.</p>
-      </div>
+    <div>
+      <PageHeader
+        title="Calibration"
+        subtitle="Calibration runs on the workstation. This page opens a remote session to its GUI."
+        actions={
+          <>
+            <button type="button" onClick={start} disabled={running} className={PRIMARY_BUTTON}>
+              <FontAwesomeIcon icon={faPlay} className="text-xs" />
+              Start Calibration
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmReset(true)}
+              disabled={status === "idle"}
+              className={SECONDARY_BUTTON}
+            >
+              <FontAwesomeIcon icon={faArrowRotateRight} className="text-xs" />
+              Reset
+            </button>
+            <button type="button" onClick={() => setConfirmStop(true)} disabled={!running} className={DANGER_BUTTON}>
+              <FontAwesomeIcon icon={faStop} className="text-xs" />
+              Stop
+            </button>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-3 rounded-md border border-neutral-700 bg-white px-3 py-3">
-        <button
-          type="button"
-          onClick={start}
-          disabled={running}
-          className="flex items-center gap-2 rounded-sm bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:cursor-default disabled:hover:bg-slate-700"
-        >
-          <FontAwesomeIcon icon={faPlay} className="text-xs" />
-          Start Calibration
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmReset(true)}
-          disabled={status === "idle"}
-          className="flex items-center gap-2 rounded-sm border border-neutral-700 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-        >
-          <FontAwesomeIcon icon={faArrowRotateRight} className="text-xs" />
-          Reset
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmStop(true)}
-          disabled={!running}
-          className="flex items-center gap-2 rounded-sm border border-red-500 bg-white px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
-        >
-          <FontAwesomeIcon icon={faStop} className="text-xs" />
-          Stop
-        </button>
-        <span className="ml-auto pr-2 text-sm text-neutral-900">{STATUS_LABEL[status]}</span>
-      </div>
-
-      <div className="overflow-hidden rounded-md border border-neutral-700">
-        <div className="flex items-center gap-3 bg-white px-4 py-2">
-          <span className={`h-3 w-3 shrink-0 rounded-full ${running ? "bg-green-700" : "bg-neutral-400"}`} />
-          <div className="grow">
-            <div className="text-sm font-semibold text-neutral-800">Remote connection</div>
-            <div className="text-xs text-neutral-700">
-              {running ? "Connected to workstation · remote session active" : "Not connected · start calibration to open a session"}
+      <div className="flex flex-col gap-6">
+        <div className="bp-card overflow-hidden">
+          <div className="flex flex-wrap items-center gap-4 px-6 py-4">
+            <span className={`h-3 w-3 shrink-0 rounded-full ${running ? "bg-green-500" : "bg-slate-400"}`} />
+            <div className="grow">
+              <h2 className="text-xl font-semibold text-ink">Remote Connection</h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                {STATUS_LABEL[status]} ·{" "}
+                {running ? "connected to workstation" : "start calibration to open a session"}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-ink-muted">Session time left</div>
+              <div className="font-mono text-2xl font-semibold tracking-wider text-ink">{formatTime(secondsLeft)}</div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-neutral-700">Session time left</div>
-            <div className="font-mono text-xl font-bold tracking-wider text-neutral-800">{formatTime(secondsLeft)}</div>
+          <div className="relative flex h-[24rem] items-center justify-center bg-ink-muted text-sm font-medium text-white">
+            <span className="absolute left-6 top-3 text-xs font-normal text-white/80">Calibration GUI · workstation</span>
+            {running ? "Live view streams from the workstation" : "Start calibration to stream the workstation GUI"}
           </div>
         </div>
-        <div className="relative flex h-[24rem] items-center justify-center bg-slate-700 text-sm text-neutral-100">
-          <span className="absolute left-4 top-3">Calibration GUI · workstation</span>
-          {running ? "Live view streams from the workstation" : "Start calibration to stream the workstation GUI"}
-        </div>
-      </div>
 
-      <div className="w-full max-w-md rounded-md border border-neutral-700 bg-white p-3">
-        <h3 className="font-semibold text-neutral-800">Send a floor plan to the workstation</h3>
-        <p className="mt-0.5 text-xs text-neutral-900">Sends a file to the workstation. It is not stored in the project database.</p>
-        <div className="mt-3 flex items-center gap-4 rounded-md border border-dashed border-neutral-700 px-3 py-2">
-          <button
-            type="button"
-            onClick={() => fileInput.current?.click()}
-            className="flex items-center gap-2 rounded-sm bg-slate-700 px-3 py-2 text-sm text-white hover:bg-slate-600"
-          >
-            <FontAwesomeIcon icon={faUpload} />
-            Upload File
-          </button>
-          <span className="truncate text-sm text-neutral-700">{sentFileName ? `Selected ${sentFileName}` : "No file sent yet"}</span>
-          <input ref={fileInput} type="file" className="hidden" onChange={onFileChosen} />
+        <div className="bp-card w-full max-w-xl p-6">
+          <h2 className="text-xl font-semibold text-ink">Send a Floor Plan to the Workstation</h2>
+          <p className="mt-1 text-sm text-ink-muted">Sends a file to the workstation. It is not stored in the project database.</p>
+          <div className="mt-4 flex items-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+            <button type="button" onClick={() => fileInput.current?.click()} className={PRIMARY_BUTTON}>
+              <FontAwesomeIcon icon={faUpload} className="text-xs" />
+              Upload File
+            </button>
+            <span className="truncate text-sm text-ink-muted">
+              {sentFileName ? `Selected ${sentFileName}` : "No file sent yet"}
+            </span>
+            <input ref={fileInput} type="file" className="hidden" onChange={onFileChosen} />
+          </div>
         </div>
       </div>
 

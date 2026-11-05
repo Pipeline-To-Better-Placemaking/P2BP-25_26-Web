@@ -20,8 +20,8 @@ import {
 } from "./scannerHelpers";
 
 const selectClass =
-  "w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
-const labelClass = "text-xs font-medium text-neutral-600";
+  "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
+const labelClass = "text-xs font-medium text-ink-muted";
 
 interface ScanSettingsPanelProps {
   scanSettings: ScanSettingsRequest;
@@ -167,7 +167,7 @@ export function ScanSettingsPanel({ scanSettings, selectedPreset, onApplyPreset,
         </select>
       </label>
 
-      <label className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2">
+      <label className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2">
         <span className={labelClass}>Distance Filtering</span>
         <input
           type="checkbox"
@@ -177,7 +177,7 @@ export function ScanSettingsPanel({ scanSettings, selectedPreset, onApplyPreset,
         />
       </label>
 
-      <label className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2">
+      <label className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2">
         <span className={labelClass}>Recalibrate Before Scan</span>
         <input
           type="checkbox"

@@ -81,11 +81,11 @@ export function Login() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center surface-ground p-4">
       <Card
-        className="w-full max-w-md content-background"
+        className="w-full max-w-md bp-auth-card"
         titleTemplate={
           <div className="text-center">
-            <div className="text-xl font-semibold">Better Placemaking</div>
-            <div className="text-sm text-surface-500">{isSignup ? "Create an account" : "Sign in"}</div>
+            <div className="text-2xl font-semibold text-ink">Better Placemaking</div>
+            <div className="mt-1 text-sm font-normal text-ink-muted">{isSignup ? "Create an account" : "Sign in"}</div>
           </div>
         }
       >
@@ -123,7 +123,7 @@ export function Login() {
             <Button type="submit" label="Sign in" loading={submitting} disabled={submitting} className="w-full" />
 
             <div className="text-center text-sm">
-              <Button type="button" severity="secondary" variant="text" label="Create an account" link className="p-0" onClick={() => setIsSignup(true)} />
+              <button type="button" className="font-medium text-brand-600 hover:text-brand-600/80" onClick={() => setIsSignup(true)}>Create an account</button>
             </div>
           </form>
         ) : (
@@ -161,7 +161,7 @@ export function Login() {
             <Button type="submit" label="Create account" loading={submitting} disabled={submitting} className="w-full" />
 
             <div className="text-center text-sm">
-              <Button type="button" severity="secondary" variant="text" label="Back to sign in" className="p-0" onClick={() => setIsSignup(false)} />
+              <button type="button" className="font-medium text-brand-600 hover:text-brand-600/80" onClick={() => setIsSignup(false)}>Back to sign in</button>
             </div>
           </form>
         )}

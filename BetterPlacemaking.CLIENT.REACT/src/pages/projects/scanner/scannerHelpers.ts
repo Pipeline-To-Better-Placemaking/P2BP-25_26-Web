@@ -130,7 +130,7 @@ export function getScanStatusSeverity(status: string | null | undefined): Status
 /** Tailwind classes for a status pill, keyed the same way as getScanStatusSeverity. */
 export const STATUS_BADGE_CLASS: Record<StatusSeverity, string> = {
   success: "bg-green-50 text-green-700",
-  info: "bg-indigo-50 text-indigo-700",
+  info: "bg-brand-50 text-brand-700",
   warn: "bg-amber-50 text-amber-700",
   error: "bg-red-50 text-red-700",
   secondary: "bg-neutral-100 text-neutral-600",

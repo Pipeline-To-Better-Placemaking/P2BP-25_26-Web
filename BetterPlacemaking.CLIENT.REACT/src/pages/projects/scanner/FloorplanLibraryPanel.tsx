@@ -4,7 +4,7 @@ import { Permissions } from "../../../lib/permissions";
 import type { FloorplanLibraryItemDto } from "../../../lib/floorplanTypes";
 
 const btnSecondary =
-  "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
+  "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-50";
 
 interface FloorplanLibraryPanelProps {
   projectId: string | undefined;
@@ -47,7 +47,7 @@ export function FloorplanLibraryPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-neutral-600">Select a shared floorplan before opening the LiDAR calibration workspace.</p>
+        <p className="text-sm text-ink-muted">Select a shared floorplan before opening the LiDAR calibration workspace.</p>
 
         <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
           <button
@@ -72,9 +72,9 @@ export function FloorplanLibraryPanel({
       </HasPermission>
 
       {floorplansLoading ? (
-        <div className="py-3 text-center text-sm text-neutral-500">Loading floorplans...</div>
+        <div className="py-3 text-center text-sm text-ink-muted">Loading floorplans...</div>
       ) : floorplans.length === 0 ? (
-        <div className="py-4 text-center text-sm text-neutral-500">No floorplans uploaded yet.</div>
+        <div className="py-4 text-center text-sm text-ink-muted">No floorplans uploaded yet.</div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6">
           {floorplans.map((fp) => {
@@ -84,17 +84,17 @@ export function FloorplanLibraryPanel({
                 key={fp.Id}
                 onClick={() => onSelect(fp.Id)}
                 className={`flex cursor-pointer flex-col overflow-hidden rounded-lg border transition-all ${
-                  selected ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500" : "border-neutral-200 bg-neutral-100"
+                  selected ? "border-brand-500 bg-brand-50 ring-2 ring-brand-500" : "border-slate-200 bg-slate-100"
                 }`}
               >
-                <div className="relative flex h-24 items-center justify-center overflow-hidden bg-neutral-200">
+                <div className="relative flex h-24 items-center justify-center overflow-hidden bg-slate-200">
                   {fp.ImageDownloadUrl ? (
                     <img src={fp.ImageDownloadUrl} className="h-full w-full object-cover" alt={fp.Nickname} />
                   ) : (
                     <span className="text-2xl opacity-30">🖼</span>
                   )}
                   {selected && (
-                    <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-xs text-white">
+                    <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-xs text-white">
                       ✓
                     </div>
                   )}
@@ -103,7 +103,7 @@ export function FloorplanLibraryPanel({
                 <div className="flex items-center gap-2 p-2">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-semibold">{fp.Nickname}</div>
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-ink-muted">
                       {fp.ImageWidth} × {fp.ImageHeight}
                     </div>
                   </div>

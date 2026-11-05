@@ -49,19 +49,19 @@ export default function Dropdown({
 
   return (
     <div className="w-64 space-y-1" ref={dropdownRef}>
-      {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
+      {label && <label className="block text-sm font-medium text-ink">{label}</label>}
       
       <div className="relative">
         {/* Trigger Button */}
         <button
           type="button"
           onClick={toggleDropdown}
-          className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2 text-left text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#5039f6] focus:ring-offset-2"
+          className="flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-4 py-2 text-left text-sm font-medium text-ink shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
           <span>{selectedOption ? selectedOption.label : placeholder}</span>
           {/* Chevron Icon */}
           <svg
-            className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
             xmlns="http://w3.org"
             viewBox="0 0 20 20"
             fill="currentColor"
@@ -81,7 +81,7 @@ export default function Dropdown({
               <li
                 key={option.value}
                 onClick={() => handleOptionClick(option)}
-                className={`relative cursor-pointer select-none px-4 py-2 text-gray-900 transition-colors hover:bg-[#5039f6] hover:text-white ${
+                className={`relative cursor-pointer select-none px-4 py-2 text-ink transition-colors hover:bg-brand-600 hover:text-white ${
                   selectedOption?.value === option.value ? "bg-blue-50 font-semibold" : ""
                 }`}
               >

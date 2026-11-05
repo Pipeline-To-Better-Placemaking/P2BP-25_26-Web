@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/PageHeader";
 import { useEffect, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -80,25 +81,27 @@ export function DevicesList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-neutral-900">Devices ({devices.length})</h1>
+      <PageHeader
+        title={`Devices (${devices.length})`}
+        actions={
         <HasPermission permission={Permissions.Project.DevicesManage} projectId={projectId}>
           <button
             onClick={() => setEditing("new")}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85"
           >
             Add Device
           </button>
         </HasPermission>
-      </div>
+        }
+      />
 
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className="mt-4 text-sm text-neutral-600">Loading…</p>
+        <p className="mt-4 text-sm text-ink-muted">Loading…</p>
       ) : (
-        <table className="mt-4 w-full overflow-visible rounded-lg border border-neutral-200 bg-white text-sm">
-          <thead className="bg-neutral-100 text-left text-neutral-700">
+        <table className="mt-4 w-full overflow-visible bp-card text-sm">
+          <thead className="bg-mauve text-left text-white">
             <tr>
               <th className="px-4 py-2 font-medium">Device</th>
               <th className="px-4 py-2 font-medium">Project</th>
@@ -112,31 +115,31 @@ export function DevicesList() {
           </thead>
           <tbody>
             {devices.map((device) => (
-              <tr key={device.Id} className="relative border-t border-neutral-100">
-                <td className="px-4 py-2 text-neutral-900">{device.Name}</td>
-                <td className="px-4 py-2 text-neutral-600">{project?.Title ?? device.ProjectId}</td>
-                <td className="px-4 py-2 font-mono text-xs text-neutral-500">{device.Id}</td>
-                <td className="px-4 py-2 text-neutral-600">{formatLastHeartbeat(device.HealthReport?.Timestamp)}</td>
-                <td className="px-4 py-2 text-neutral-600">{countCamerasEnabled(device)}</td>
-                <td className="px-4 py-2 text-neutral-600">{device.Config?.Tracking?.Enabled ? "Yes" : "No"}</td>
-                <td className="px-4 py-2 text-neutral-600">{device.Config?.HeartbeatInterval ?? "—"}</td>
+              <tr key={device.Id} className="relative border-t border-slate-100">
+                <td className="px-4 py-2 text-ink">{device.Name}</td>
+                <td className="px-4 py-2 text-ink-muted">{project?.Title ?? device.ProjectId}</td>
+                <td className="px-4 py-2 font-mono text-xs text-ink-muted">{device.Id}</td>
+                <td className="px-4 py-2 text-ink-muted">{formatLastHeartbeat(device.HealthReport?.Timestamp)}</td>
+                <td className="px-4 py-2 text-ink-muted">{countCamerasEnabled(device)}</td>
+                <td className="px-4 py-2 text-ink-muted">{device.Config?.Tracking?.Enabled ? "Yes" : "No"}</td>
+                <td className="px-4 py-2 text-ink-muted">{device.Config?.HeartbeatInterval ?? "—"}</td>
                 <td className="relative px-4 py-2 text-right">
                   <HasPermission permission={Permissions.Project.DevicesManage} projectId={projectId}>
                     <button
                       onClick={() => setOpenMenuFor(openMenuFor === device.Id ? null : device.Id)}
-                      className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100"
+                      className="rounded-md px-2 py-1 text-ink-muted hover:bg-slate-100"
                       aria-label="Actions"
                     >
                       ⋮
                     </button>
                     {openMenuFor === device.Id && (
-                      <div className="absolute right-4 top-9 z-10 w-40 rounded-md border border-neutral-200 bg-white py-1 text-left shadow-lg">
+                      <div className="absolute right-4 top-9 z-10 w-40 rounded-md border border-slate-200 bg-white py-1 text-left shadow-lg">
                         <button
                           onClick={() => {
                             setEditing(device);
                             setOpenMenuFor(null);
                           }}
-                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-100"
+                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-100"
                         >
                           Edit
                         </button>
@@ -145,7 +148,7 @@ export function DevicesList() {
                             setViewingHealth(device);
                             setOpenMenuFor(null);
                           }}
-                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-100"
+                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-100"
                         >
                           Health Report
                         </button>
@@ -154,7 +157,7 @@ export function DevicesList() {
                             setViewingApiKey(device);
                             setOpenMenuFor(null);
                           }}
-                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-100"
+                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-100"
                         >
                           Get API Key
                         </button>

@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/PageHeader";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -55,7 +56,7 @@ function toPrefsInput(row: AssignedProjectRow): ProjectNotificationPrefsInput {
 }
 
 const inputClass =
-  "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
+  "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none";
 
 const NOTIFICATION_COLUMNS: { field: NotificationField; label: string }[] = [
   { field: "notifyOnOwnScan", label: "Own Scan" },
@@ -203,17 +204,17 @@ export function UserSettings() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-neutral-900">User Settings</h1>
+      <PageHeader title="User Settings" />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="mb-4 text-sm font-semibold text-neutral-900">Profile</h2>
+        <section className="bp-card p-5">
+          <h2 className="mb-4 text-xl font-semibold text-ink">Profile</h2>
           <form className="space-y-4" onSubmit={saveSettings}>
             <div>
-              <span className="block text-sm font-medium text-neutral-700">Email</span>
-              <div className="mt-1 text-sm text-neutral-600">{user?.Email || "(not available)"}</div>
+              <span className="block text-sm font-medium text-ink">Email</span>
+              <div className="mt-1 text-sm text-ink-muted">{user?.Email || "(not available)"}</div>
             </div>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               First name
               <input
                 required
@@ -223,7 +224,7 @@ export function UserSettings() {
                 className={inputClass}
               />
             </label>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Last name
               <input
                 disabled={loadingSettings}
@@ -241,17 +242,17 @@ export function UserSettings() {
             <button
               type="submit"
               disabled={savingSettings || loadingSettings}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
             >
               {savingSettings ? "Saving…" : "Save"}
             </button>
           </form>
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="mb-4 text-sm font-semibold text-neutral-900">Change Password</h2>
+        <section className="bp-card p-5">
+          <h2 className="mb-4 text-xl font-semibold text-ink">Change Password</h2>
           <form className="space-y-4" onSubmit={updatePassword}>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Current password
               <input
                 type="password"
@@ -261,7 +262,7 @@ export function UserSettings() {
                 className={inputClass}
               />
             </label>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               New password
               <input
                 type="password"
@@ -271,7 +272,7 @@ export function UserSettings() {
                 className={inputClass}
               />
             </label>
-            <label className="block text-sm font-medium text-neutral-700">
+            <label className="block text-sm font-medium text-ink">
               Confirm new password
               <input
                 type="password"
@@ -291,37 +292,37 @@ export function UserSettings() {
               <button
                 type="submit"
                 disabled={!canSubmitPassword || passwordSaving}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
               >
                 {passwordSaving ? "Updating…" : "Update Password"}
               </button>
               <button
                 type="button"
                 onClick={clearPasswordFields}
-                className="rounded-md px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+                className="rounded-md px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
               >
                 Clear
               </button>
             </div>
 
-            <Link to="/forgot-password" className="inline-block text-sm text-indigo-600 hover:underline">
+            <Link to="/forgot-password" className="inline-block text-sm text-brand-600 hover:underline">
               Forgot password?
             </Link>
           </form>
         </section>
       </div>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold text-neutral-900">Notifications Per Assigned Project</h2>
+      <section className="bp-card p-5">
+        <h2 className="mb-4 text-xl font-semibold text-ink">Notifications Per Assigned Project</h2>
 
         {notifError && <p className="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700">{notifError}</p>}
 
         {assignedProjects.length === 0 ? (
-          <p className="text-sm text-neutral-500">No projects assigned.</p>
+          <p className="text-sm text-ink-muted">No projects assigned.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-100 text-left text-neutral-700">
+              <thead className="bg-mauve text-left text-white">
                 <tr>
                   <th rowSpan={2} className="px-3 py-2 align-bottom font-medium">
                     Project
@@ -346,10 +347,10 @@ export function UserSettings() {
               </thead>
               <tbody>
                 {assignedProjects.map((row) => (
-                  <tr key={row.projectId} className="border-t border-neutral-100">
-                    <td className="px-3 py-2 text-neutral-900">{row.name}</td>
+                  <tr key={row.projectId} className="border-t border-slate-100">
+                    <td className="px-3 py-2 text-ink">{row.name}</td>
                     <td className="px-3 py-2">
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-ink">
                         {row.role}
                       </span>
                     </td>

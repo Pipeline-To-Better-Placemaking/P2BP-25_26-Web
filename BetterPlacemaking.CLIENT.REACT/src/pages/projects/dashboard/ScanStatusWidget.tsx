@@ -33,7 +33,7 @@ export function ScanStatusWidget({
 }: ScanStatusWidgetProps) {
   return (
     <AppScanStatusWidget>
-      <div className="card bg-surface-0 dark:bg-surface-900 shadow-sm rounded-xl border border-surface-300 dark:border-surface-700 p-6 bg-black">
+      <div className="bp-card p-6">
         <div className="flex items-center justify-between mb-6">
           <button type="button" className="text-xl font-semibold text-left hover:underline" onClick={onOpenModelPage}>
             Last Scan
@@ -46,7 +46,7 @@ export function ScanStatusWidget({
           <div className="text-center mb-6">
             <i className="pi pi-clock text-6xl text-blue-500 mb-4"></i>
             <div className="text-4xl font-bold mb-2">{formatTimeAgo(lastScanTime)}</div>
-            <div className="text-gray-600">Last completed scan</div>
+            <div className="text-ink-muted">Last completed scan</div>
           </div>
 
           <div className="text-sm">{toLocale(lastScanTime)}</div>

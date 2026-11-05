@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/PageHeader";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useParams } from "react-router-dom";
 import { HasPermission } from "../../auth/HasPermission";
@@ -147,13 +148,15 @@ async function createPreviewImageFromUploadedXyz(file: File): Promise<HTMLImageE
   return loadImage(canvas.toDataURL("image/png"));
 }
 
-const panelClass = "flex flex-col gap-2 rounded-lg border border-neutral-200 bg-white p-3";
+const INTRO =
+  "Calibrate the floorplan first, then select two or more scans (from history and/or uploaded XYZ files), load their flattened overlays, and align them before saving the combined calibration.";
+const panelClass = "flex flex-col gap-2 bp-card p-4";
 const btnSecondary =
-  "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
+  "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-50";
 const btnPrimary =
-  "rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50";
+  "rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50";
 const inputClass =
-  "w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
+  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
 
 /** Stable empty-array fallback so the `scanHistory` memo below doesn't see a new identity every render. */
 const EMPTY_SCANS: ScanRecordDto[] = [];
@@ -807,19 +810,17 @@ export function MultiLidarCalibration({
 
   return (
     <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
+      {projectIdProp === undefined && <PageHeader title="LiDAR Calibration" subtitle={INTRO} />}
       <div className={`flex flex-col gap-4 ${className ?? ""}`}>
-        <p className="text-sm text-neutral-600">
-          Calibrate the floorplan first, then select two or more scans (from history and/or uploaded XYZ files), load
-          their flattened overlays, and align them before saving the combined calibration.
-        </p>
+        {projectIdProp !== undefined && <p className="text-sm text-ink-muted">{INTRO}</p>}
 
         {!deviceControlled && (
           <div className={panelClass}>
-            <div className="text-sm font-semibold text-neutral-900">Device</div>
+            <div className="text-base font-semibold text-ink">Device</div>
             {devicesLoading ? (
-              <p className="text-sm text-neutral-500">Loading devices…</p>
+              <p className="text-sm text-ink-muted">Loading devices…</p>
             ) : devices.length === 0 ? (
-              <p className="text-sm text-neutral-500">No devices assigned to this project.</p>
+              <p className="text-sm text-ink-muted">No devices assigned to this project.</p>
             ) : (
               <select
                 className={inputClass}
@@ -838,11 +839,11 @@ export function MultiLidarCalibration({
 
         {!floorPlanControlled && (
           <div className={panelClass}>
-            <div className="text-sm font-semibold text-neutral-900">Floorplan</div>
+            <div className="text-base font-semibold text-ink">Floorplan</div>
             {floorplansLoading ? (
-              <p className="text-sm text-neutral-500">Loading floorplans…</p>
+              <p className="text-sm text-ink-muted">Loading floorplans…</p>
             ) : floorplans.length === 0 ? (
-              <p className="text-sm text-neutral-500">No floorplans in your library for this project.</p>
+              <p className="text-sm text-ink-muted">No floorplans in your library for this project.</p>
             ) : (
               <select
                 className={inputClass}
@@ -869,9 +870,9 @@ export function MultiLidarCalibration({
 
         {mode === "calibrate" && (
           <div className={panelClass}>
-            <div className="text-sm font-semibold text-neutral-900">Floorplan Scale Calibration</div>
-            <div className="text-sm text-neutral-600">1. Click the first reference point on the floorplan.</div>
-            <div className="text-sm text-neutral-600">2. Click the second reference point.</div>
+            <div className="text-base font-semibold text-ink">Floorplan Scale Calibration</div>
+            <div className="text-sm text-ink-muted">1. Click the first reference point on the floorplan.</div>
+            <div className="text-sm text-ink-muted">2. Click the second reference point.</div>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -891,18 +892,18 @@ export function MultiLidarCalibration({
         <div className="flex flex-wrap items-start gap-6">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <div className={panelClass}>
-              <div className="text-sm font-semibold text-neutral-900">Upload XYZ Scans</div>
+              <div className="text-base font-semibold text-ink">Upload XYZ Scans</div>
               <label className="w-fit cursor-pointer">
                 <span className={btnSecondary}>Upload XYZ</span>
                 <input type="file" accept=".xyz" multiple className="hidden" onChange={onXyzFilesSelected} />
               </label>
 
               {uploadedFiles.length === 0 ? (
-                <div className="text-sm text-neutral-500">No uploaded XYZ scans.</div>
+                <div className="text-sm text-ink-muted">No uploaded XYZ scans.</div>
               ) : (
                 uploadedFiles.map((file) => (
-                  <div key={file.id} className="flex items-center justify-between gap-2 rounded border border-neutral-200 p-2">
-                    <div className="truncate text-sm text-neutral-800">{file.name}</div>
+                  <div key={file.id} className="flex items-center justify-between gap-2 rounded border border-slate-200 p-2">
+                    <div className="truncate text-sm text-ink">{file.name}</div>
                     <div className="flex shrink-0 gap-1">
                       <button
                         type="button"
@@ -925,15 +926,15 @@ export function MultiLidarCalibration({
             </div>
 
             <div className={panelClass}>
-              <div className="text-sm font-semibold text-neutral-900">Scan History</div>
+              <div className="text-base font-semibold text-ink">Scan History</div>
               {scansLoading ? (
-                <div className="text-sm text-neutral-500">Loading scan history…</div>
+                <div className="text-sm text-ink-muted">Loading scan history…</div>
               ) : successfulScans.length === 0 ? (
-                <div className="text-sm text-neutral-500">No completed scans for this device.</div>
+                <div className="text-sm text-ink-muted">No completed scans for this device.</div>
               ) : (
                 successfulScans.map((scan) => (
-                  <div key={scan.Id} className="flex items-center justify-between gap-2 rounded border border-neutral-200 p-2">
-                    <div className="truncate text-sm text-neutral-800">Scan {scan.Id}</div>
+                  <div key={scan.Id} className="flex items-center justify-between gap-2 rounded border border-slate-200 p-2">
+                    <div className="truncate text-sm text-ink">Scan {scan.Id}</div>
                     <button
                       type="button"
                       onClick={() => toggleScanSelection(scan.Id)}
@@ -961,37 +962,37 @@ export function MultiLidarCalibration({
             </div>
 
             <div className={panelClass}>
-              <div className="text-sm font-semibold text-neutral-900">Selected Scans</div>
+              <div className="text-base font-semibold text-ink">Selected Scans</div>
               {selectedScanIds.length + selectedUploadedFileIds.length === 0 ? (
-                <div className="text-sm text-neutral-500">No scans selected.</div>
+                <div className="text-sm text-ink-muted">No scans selected.</div>
               ) : (
                 <>
                   {selectedScanIds.map((id) => (
-                    <div key={id} className="text-sm text-neutral-700">
+                    <div key={id} className="text-sm text-ink">
                       History Scan {id}
                     </div>
                   ))}
                   {uploadedFiles
                     .filter((f) => selectedUploadedFileIds.includes(f.id))
                     .map((f) => (
-                      <div key={f.id} className="text-sm text-neutral-700">
+                      <div key={f.id} className="text-sm text-ink">
                         Uploaded Scan {f.name}
                       </div>
                     ))}
                 </>
               )}
-              <div className="pt-2 text-xs text-neutral-500">Select at least two scans (history and/or uploaded).</div>
+              <div className="pt-2 text-xs text-ink-muted">Select at least two scans (history and/or uploaded).</div>
             </div>
 
             <div className={panelClass}>
-              <div className="text-sm font-semibold text-neutral-900">Calibration Details</div>
-              <div className="text-sm text-neutral-700">
+              <div className="text-base font-semibold text-ink">Calibration Details</div>
+              <div className="text-sm text-ink">
                 <span className="font-medium">Floorplan:</span> {floorPlan?.Nickname || "None"}
               </div>
-              <div className="text-sm text-neutral-700">
+              <div className="text-sm text-ink">
                 <span className="font-medium">Scalar (mm/pixel):</span> {scalarMmPerPixel ?? "—"}
               </div>
-              <label className="block text-xs font-medium text-neutral-600">
+              <label className="block text-xs font-medium text-ink-muted">
                 Output Name
                 <input value={outputName} onChange={(e) => setOutputName(e.target.value)} className={`${inputClass} mt-1`} />
               </label>
@@ -999,33 +1000,33 @@ export function MultiLidarCalibration({
           </div>
 
           <div className="flex w-full max-w-[40rem] shrink-0 flex-col gap-2" tabIndex={0} onKeyDown={onWorkspaceKeyDown}>
-            <div className="text-sm font-semibold text-neutral-900">Workspace (center is 0,0)</div>
+            <div className="text-base font-semibold text-ink">Workspace (center is 0,0)</div>
             <canvas
               ref={canvasRef}
-              className="w-full rounded border border-neutral-200 bg-neutral-100"
+              className="w-full rounded border border-slate-200 bg-slate-100"
               style={{ height: 520 }}
               onMouseDown={onCanvasMouseDown}
               onMouseMove={onCanvasMouseMove}
               onMouseUp={onCanvasMouseUp}
               onMouseLeave={onCanvasMouseUp}
             />
-            <div className="text-xs text-neutral-500">
+            <div className="text-xs text-ink-muted">
               Click an overlay below, then use arrow keys to move, [ / ] to rotate, + / - to scale, and 0 to reset.
             </div>
 
             {overlays.length > 0 && (
               <div className={`${panelClass} mt-2`}>
-                <div className="text-sm font-semibold text-neutral-900">Overlay Controls</div>
+                <div className="text-base font-semibold text-ink">Overlay Controls</div>
                 {overlays.map((overlay, i) => (
                   <div
                     key={overlay.scanId}
                     onClick={() => selectOverlay(i)}
                     className={`flex cursor-pointer items-center justify-between rounded border p-2 ${
-                      selectedOverlayIndex === i ? "border-indigo-400 bg-indigo-50" : "border-neutral-200"
+                      selectedOverlayIndex === i ? "border-brand-400 bg-brand-50" : "border-slate-200"
                     }`}
                   >
-                    <div className="truncate text-sm text-neutral-800">{overlay.label}</div>
-                    <div className="shrink-0 text-xs text-neutral-500">
+                    <div className="truncate text-sm text-ink">{overlay.label}</div>
+                    <div className="shrink-0 text-xs text-ink-muted">
                       X {overlay.xTranslation}, Y {overlay.yTranslation}, θ {overlay.theta}, S {overlay.scale}
                     </div>
                   </div>
@@ -1033,9 +1034,9 @@ export function MultiLidarCalibration({
 
                 {selectedOverlay && (
                   <div className="flex flex-col gap-2 pt-2">
-                    <div className="text-sm font-semibold text-neutral-900">Selected Overlay</div>
+                    <div className="text-base font-semibold text-ink">Selected Overlay</div>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="block text-xs font-medium text-neutral-600">
+                      <label className="block text-xs font-medium text-ink-muted">
                         X Translation
                         <input
                           type="number"
@@ -1044,7 +1045,7 @@ export function MultiLidarCalibration({
                           className={`${inputClass} mt-1`}
                         />
                       </label>
-                      <label className="block text-xs font-medium text-neutral-600">
+                      <label className="block text-xs font-medium text-ink-muted">
                         Y Translation
                         <input
                           type="number"
@@ -1053,7 +1054,7 @@ export function MultiLidarCalibration({
                           className={`${inputClass} mt-1`}
                         />
                       </label>
-                      <label className="block text-xs font-medium text-neutral-600">
+                      <label className="block text-xs font-medium text-ink-muted">
                         Theta
                         <input
                           type="number"
@@ -1062,7 +1063,7 @@ export function MultiLidarCalibration({
                           className={`${inputClass} mt-1`}
                         />
                       </label>
-                      <label className="block text-xs font-medium text-neutral-600">
+                      <label className="block text-xs font-medium text-ink-muted">
                         Scale
                         <input
                           type="number"
@@ -1108,7 +1109,7 @@ export function MultiLidarCalibration({
           </div>
         </div>
 
-        <div className="flex gap-2 border-t border-neutral-200 pt-4">
+        <div className="flex gap-2 border-t border-slate-200 pt-4">
           <button type="button" onClick={save} disabled={saving} className={btnPrimary}>
             {saving ? "Saving…" : "Save Calibration"}
           </button>

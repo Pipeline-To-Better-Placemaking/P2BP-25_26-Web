@@ -1,3 +1,4 @@
+import { PageHeader } from "../../../components/PageHeader";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { HasPermission } from "../../../auth/HasPermission";
@@ -61,16 +62,16 @@ const TRACK_COLORS = [
 
 function ControlRow({ keys, label }: { keys: string[]; label: string }) {
   return (
-    <div className="mb-1.5 flex items-center gap-2 text-neutral-600">
+    <div className="mb-1.5 flex items-center gap-2 text-ink-muted">
       {keys.map((k) => (
         <kbd
           key={k}
-          className="inline-flex h-6 min-w-[28px] items-center justify-center rounded border border-neutral-300 bg-neutral-100 px-1.5 font-mono text-xs text-neutral-700"
+          className="inline-flex h-6 min-w-[28px] items-center justify-center rounded border border-slate-300 bg-slate-100 px-1.5 font-mono text-xs text-ink"
         >
           {k}
         </kbd>
       ))}
-      <span className="ml-auto text-neutral-500">{label}</span>
+      <span className="ml-auto text-ink-muted">{label}</span>
     </div>
   );
 }
@@ -78,7 +79,7 @@ function ControlRow({ keys, label }: { keys: string[]; label: string }) {
 function ControlGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mb-4 last:mb-0">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-600">{title}</p>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-brand-600">{title}</p>
       {children}
     </div>
   );
@@ -522,15 +523,16 @@ export function Puzzle() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-neutral-900">Puzzle Calibration</h1>
+      <PageHeader
+        title="Puzzle Calibration"
+        actions={
         <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={refresh}
               disabled={refreshing || loading}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-100 disabled:opacity-50"
             >
               {refreshing ? "Refreshing…" : "Refresh Pieces"}
             </button>
@@ -538,39 +540,40 @@ export function Puzzle() {
               type="button"
               onClick={save}
               disabled={saving || mode !== "puzzle" || layers.length === 0}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </HasPermission>
-      </div>
+        }
+      />
 
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {saveError && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
-      {loading && <p className="mt-4 text-sm text-neutral-600">Loading workspace…</p>}
+      {loading && <p className="mt-4 text-sm text-ink-muted">Loading workspace…</p>}
 
       {mode === "calibrate" && (
-        <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4 text-sm">
+        <div className="mt-4 bp-card p-4 text-sm">
           <div className="flex flex-col gap-3">
             <div className={`flex items-center gap-3 ${calPoints.length === 0 ? "" : "opacity-40"}`}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
                 1
               </span>
               <span>Click the first reference point on the floorplan</span>
             </div>
             <div className={`flex items-center gap-3 ${calPoints.length === 1 ? "" : "opacity-40"}`}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
                 2
               </span>
               <span>Click the second reference point</span>
             </div>
             <div className={`flex items-center gap-3 ${calPoints.length === 2 ? "" : "opacity-40"}`}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
                 3
               </span>
               <div className="flex items-center gap-2">
-                <label htmlFor="cal-distance-mm" className="text-neutral-700">
+                <label htmlFor="cal-distance-mm" className="text-ink">
                   Enter real-world distance between points (mm):
                 </label>
                 <input
@@ -582,13 +585,13 @@ export function Puzzle() {
                     if (e.key === "Enter") finishCalibration();
                   }}
                   placeholder="e.g. 7391"
-                  className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                  className="w-28 rounded-md border border-slate-300 px-2 py-1 text-sm"
                 />
                 <HasPermission permission={Permissions.Project.Update} projectId={projectId}>
                   <button
                     type="button"
                     onClick={finishCalibration}
-                    className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-500"
+                    className="rounded-md bg-brand-600 px-3 py-1 text-sm font-medium text-white hover:bg-brand-600/85"
                   >
                     Confirm
                   </button>
@@ -603,7 +606,7 @@ export function Puzzle() {
         <div
           tabIndex={0}
           onKeyDown={onKeyDown}
-          className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-2 outline-none focus:ring-2 focus:ring-indigo-300"
+          className="overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 outline-none focus:ring-2 focus:ring-brand-300"
         >
           <canvas
             ref={canvasRef}
@@ -615,8 +618,8 @@ export function Puzzle() {
           />
         </div>
 
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm">
-          <h3 className="border-b border-neutral-200 pb-2 text-base font-semibold text-neutral-900">Controls</h3>
+        <div className="bp-card p-4 text-sm">
+          <h3 className="border-b border-slate-200 pb-2 text-xl font-semibold text-ink">Controls</h3>
           <div className="mt-3">
             <ControlGroup title="Navigation">
               <ControlRow keys={["Tab"]} label="Next layer" />
@@ -636,7 +639,7 @@ export function Puzzle() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-2 font-mono text-sm text-neutral-700">
+      <div className="mt-4 flex flex-wrap items-center gap-4 bp-card px-4 py-2 font-mono text-sm text-ink">
         <span>
           Layer: {layers.length > 0 ? selectedIndex + 1 : 0}/{layers.length}
           {activeLayer ? ` — ${activeLayer.macTag}` : ""}

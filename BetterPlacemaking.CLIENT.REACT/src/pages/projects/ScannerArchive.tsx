@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/PageHeader";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { HasPermission } from "../../auth/HasPermission";
@@ -82,20 +83,20 @@ function getScanStartErrorMessage(err: unknown): string {
 
 function StatCard({ label, value, valueClassName, meta }: { label: string; value: string; valueClassName?: string; meta: string }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className={`mt-1 text-xl font-semibold text-neutral-900 ${valueClassName ?? ""}`}>{value}</div>
-      <div className="mt-1 text-xs text-neutral-500">{meta}</div>
+    <div className="bp-card p-4">
+      <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</div>
+      <div className={`mt-1 text-xl font-semibold text-ink ${valueClassName ?? ""}`}>{value}</div>
+      <div className="mt-1 text-xs text-ink-muted">{meta}</div>
     </div>
   );
 }
 
 function Card({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
-    <div className="mt-6 rounded-lg border border-neutral-200 bg-white">
-      <div className="border-b border-neutral-200 px-4 py-3">
-        <div className="text-sm font-semibold text-neutral-900">{title}</div>
-        <div className="text-xs text-neutral-500">{subtitle}</div>
+    <div className="mt-6 bp-card">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <div className="text-xl font-semibold text-ink">{title}</div>
+        <div className="text-xs text-ink-muted">{subtitle}</div>
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -525,25 +526,23 @@ export function Scanner() {
 
   const messageBoxClass = {
     success: "bg-green-50 text-green-700",
-    info: "bg-indigo-50 text-indigo-700",
+    info: "bg-brand-50 text-brand-700",
     warn: "bg-amber-50 text-amber-700",
     error: "bg-red-50 text-red-700",
   }[scanMessageSeverity];
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-900">LiDAR Scanning</h1>
-          <p className="mt-1 text-sm text-neutral-600">Run scans, track progress, view history, and manage scan schedules</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title="LiDAR Scanning"
+        subtitle="Run scans, track progress, view history, and manage scan schedules"
+        actions={
+        <>
           <HasPermission permission={Permissions.Project.ScansStart} projectId={projectId}>
             <button
               type="button"
               onClick={resetToBaseSettings}
-              className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50"
             >
               Reset to Base
             </button>
@@ -553,18 +552,19 @@ export function Scanner() {
               type="button"
               onClick={() => void performScan()}
               disabled={scanning}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
             >
               {scanning ? "Requesting…" : "Perform Scan"}
             </button>
           </HasPermission>
-        </div>
-      </div>
+        </>
+        }
+      />
 
       {scanMessage && <p className={`mt-4 rounded-md p-3 text-sm ${messageBoxClass}`}>{scanMessage}</p>}
 
       {currentScanStatus && (
-        <p className="mt-4 rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
+        <p className="mt-4 rounded-md bg-slate-100 p-3 text-sm text-ink">
           Current status: {getScanStatusLabel(currentScanStatus)}
         </p>
       )}
@@ -579,7 +579,7 @@ export function Scanner() {
               : currentScanStatus === "error" || currentScanStatus === "failed"
                 ? "text-red-600"
                 : currentScanStatus === "running" || currentScanStatus === "in_progress" || currentScanStatus === "calibrating"
-                  ? "text-indigo-600"
+                  ? "text-brand-600"
                   : ""
           }
           meta={currentScanRecord ? formatScanDateTime(currentScanRecord.CreatedAt) : "No active scan"}

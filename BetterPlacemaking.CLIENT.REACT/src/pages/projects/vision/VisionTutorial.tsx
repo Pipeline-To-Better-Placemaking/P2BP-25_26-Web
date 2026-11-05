@@ -187,29 +187,29 @@ export function VisionTutorial({ onDone }: VisionTutorialProps) {
       {/* Tooltip card (steps 2-7, when a spotlight is active) */}
       {spotlight && (
         <div
-          className="fixed z-[10001] rounded-xl border border-neutral-200 bg-white p-5 shadow-2xl"
+          className="fixed z-[10001] rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
           style={tooltipStyle}
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-neutral-500">
+            <span className="text-xs text-ink-muted">
               {currentIndex + 1} of {STEPS.length}
             </span>
             <button
               type="button"
-              className="border-0 bg-transparent p-0 text-xs text-neutral-500 hover:underline"
+              className="border-0 bg-transparent p-0 text-xs text-ink-muted hover:underline"
               onClick={onDone}
             >
               Skip tour
             </button>
           </div>
-          <h3 className="m-0 mb-2 text-base font-semibold text-neutral-900">{currentStep.title}</h3>
-          <p className="m-0 mb-4 text-sm leading-relaxed text-neutral-600">{currentStep.description}</p>
+          <h3 className="m-0 mb-2 text-base font-semibold text-ink">{currentStep.title}</h3>
+          <p className="m-0 mb-4 text-sm leading-relaxed text-ink-muted">{currentStep.description}</p>
           <div className="flex justify-end gap-2">
             <button
               type="button"
               disabled={currentIndex === 0}
               onClick={prev}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-ink hover:bg-slate-100 disabled:opacity-50"
             >
               ← Prev
             </button>
@@ -217,7 +217,7 @@ export function VisionTutorial({ onDone }: VisionTutorialProps) {
               <button
                 type="button"
                 onClick={next}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85"
               >
                 Next →
               </button>
@@ -237,30 +237,30 @@ export function VisionTutorial({ onDone }: VisionTutorialProps) {
       {/* Welcome card (step 1, no spotlight) */}
       {!spotlight && (
         <div
-          className="fixed z-[10001] rounded-2xl border border-neutral-200 bg-white p-8 shadow-2xl"
+          className="fixed z-[10001] rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl"
           style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(480px, 90vw)" }}
         >
           <div className="mb-4 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-lg text-indigo-600">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-lg text-brand-600">
               🎥
             </span>
-            <h2 className="m-0 text-xl font-semibold text-neutral-900">{currentStep.title}</h2>
+            <h2 className="m-0 text-xl font-semibold text-ink">{currentStep.title}</h2>
           </div>
-          <p className="m-0 mb-6 text-sm leading-relaxed text-neutral-600">{currentStep.description}</p>
+          <p className="m-0 mb-6 text-sm leading-relaxed text-ink-muted">{currentStep.description}</p>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-neutral-500">{STEPS.length - 1} sections to explore</span>
+            <span className="text-xs text-ink-muted">{STEPS.length - 1} sections to explore</span>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={onDone}
-                className="rounded-md px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+                className="rounded-md px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
               >
                 Skip Tour
               </button>
               <button
                 type="button"
                 onClick={next}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85"
               >
                 Let's Go →
               </button>

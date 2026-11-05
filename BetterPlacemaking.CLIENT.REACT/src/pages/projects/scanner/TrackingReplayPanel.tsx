@@ -245,14 +245,14 @@ function errorMessage(err: unknown): string {
 
 const toggleBtn = (active: boolean) =>
   `rounded-md px-2.5 py-1 text-xs font-medium ${
-    active ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+    active ? "bg-brand-600 text-white" : "border border-slate-300 bg-white text-ink hover:bg-slate-50"
   } disabled:cursor-not-allowed disabled:opacity-50`;
 
 const actionBtn =
-  "rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:cursor-not-allowed disabled:opacity-50";
 
 const secondaryBtn =
-  "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 // ---------------------------------------------------------------------------------------------
 // Component
@@ -848,7 +848,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     <div className="flex flex-col gap-3">
       <div role="status" aria-live="polite" className="flex flex-col gap-3 empty:hidden">
         {lease.status === "acquiring" && (
-          <p className="rounded-md bg-neutral-50 p-3 text-sm text-neutral-600">Connecting to the workstation...</p>
+          <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-muted">Connecting to the workstation...</p>
         )}
         {lease.status === "locked" && (
           <div className="flex flex-wrap items-center gap-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
@@ -875,9 +875,9 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-white p-3">
+      <div className="flex flex-wrap items-end gap-3 bp-card p-3">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-neutral-500">Range</span>
+          <span className="text-xs font-medium text-ink-muted">Range</span>
           <div className="flex gap-1">
             {PRESETS.map((m) => (
               <button key={m} type="button" aria-pressed={preset === m} className={toggleBtn(preset === m)} onClick={() => selectPreset(m)}>
@@ -889,7 +889,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
             </button>
           </div>
         </div>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
+        <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
           From
           <input
             type="datetime-local"
@@ -899,10 +899,10 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               setFromInput(e.target.value);
               setPreset("custom");
             }}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-800"
+            className="rounded-md border border-slate-300 px-2 py-1 text-sm text-ink"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
+        <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
           To
           <input
             type="datetime-local"
@@ -912,11 +912,11 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               setToInput(e.target.value);
               setPreset("custom");
             }}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-800"
+            className="rounded-md border border-slate-300 px-2 py-1 text-sm text-ink"
           />
         </label>
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-neutral-500">IDs</span>
+          <span className="text-xs font-medium text-ink-muted">IDs</span>
           <div className="flex gap-1">
             <button type="button" aria-pressed={mode === "fused"} className={toggleBtn(mode === "fused")} onClick={() => setMode("fused")}>
               Fused
@@ -930,12 +930,12 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
           {busy === "load" ? "Loading..." : "Load"}
         </button>
         <div className="ml-auto flex items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-500">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
             Format
             <select
               value={exportFormat}
               onChange={(e) => setExportFormat(e.target.value as TrackingExportFormat)}
-              className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-800"
+              className="rounded-md border border-slate-300 px-2 py-1 text-sm text-ink"
             >
               <option value="csv">CSV</option>
               <option value="jsonl">JSONL</option>
@@ -948,9 +948,9 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       </div>
 
       <div role="status" aria-live="polite" className="flex flex-col gap-1">
-        {held && !metaSettled && <p className="text-xs text-neutral-500">Loading floor plan...</p>}
+        {held && !metaSettled && <p className="text-xs text-ink-muted">Loading floor plan...</p>}
         {meta?.span && (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-ink-muted">
             Recorded data available from {fmtDateTime(meta.span[0])} to {fmtDateTime(meta.span[1])}.
           </p>
         )}
@@ -961,9 +961,9 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
 
       {cleaning && (cleaning.note || cleaning.warnings.length > 0 || cleaning.configError) && (
         <div className="flex flex-col gap-1 text-xs">
-          {cleaning.note && <p className="text-neutral-500">{cleaning.note}</p>}
+          {cleaning.note && <p className="text-ink-muted">{cleaning.note}</p>}
           {cleaning.warnings.length > 0 && (
-            <p className="text-neutral-500">Cleaning config warnings: {cleaning.warnings.join(", ")}</p>
+            <p className="text-ink-muted">Cleaning config warnings: {cleaning.warnings.join(", ")}</p>
           )}
           {cleaning.configError && (
             <p role="alert" className="text-amber-700">
@@ -975,7 +975,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
 
       <div className="flex flex-col gap-3 lg:flex-row">
         <div className="min-w-0 flex-1">
-          <div ref={containerRef} className="relative w-full overflow-hidden rounded-lg border border-neutral-200">
+          <div ref={containerRef} className="relative w-full overflow-hidden rounded-lg border border-slate-200">
             <canvas
               ref={canvasRef}
               role="img"
@@ -985,7 +985,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
             {(empty || !data) && (
               <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="rounded-md bg-white/85 px-3 py-1.5 text-sm text-neutral-600">
+                <span className="rounded-md bg-white/85 px-3 py-1.5 text-sm text-ink-muted">
                   {empty ? "No tracking data in this range" : "Choose a range and press Load"}
                 </span>
               </div>
@@ -1014,7 +1014,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
                 className="min-w-[160px] flex-1"
                 aria-label="Playback position"
               />
-              <span className="font-mono text-sm text-neutral-700">
+              <span className="font-mono text-sm text-ink">
                 {fmtTime(playhead)} ({fmtDuration(playhead - data.from)} / {fmtDuration(data.to - data.from)})
               </span>
             </div>
@@ -1022,23 +1022,23 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         </div>
 
         {data && !empty && (
-          <aside className="w-full shrink-0 rounded-lg border border-neutral-200 bg-white p-3 lg:w-56">
-            <h3 className="text-sm font-semibold text-neutral-800">
+          <aside className="w-full shrink-0 bp-card p-3 lg:w-56">
+            <h3 className="text-lg font-semibold text-ink">
               {peopleCount} {countNoun} · max {peakCount} at once
             </h3>
-            <p className="mb-2 text-xs text-neutral-500">{data.mode === "fused" ? "Fused across cameras" : "Raw tracker IDs"}</p>
+            <p className="mb-2 text-xs text-ink-muted">{data.mode === "fused" ? "Fused across cameras" : "Raw tracker IDs"}</p>
             <ul className="max-h-[480px] space-y-1.5 overflow-y-auto text-sm">
               {ordered.map(({ person: p, label, seconds, share }) => {
                 return (
                   <li key={p.id} className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(p.id) }} />
-                      <span className="truncate text-neutral-800">
+                      <span className="truncate text-ink">
                         {data.mode === "fused" ? `Person ${label}` : `${label} (ID ${p.id})`}
                       </span>
-                      <span className="ml-auto font-mono text-xs text-neutral-500">{fmtMmSs(seconds)}</span>
+                      <span className="ml-auto font-mono text-xs text-ink-muted">{fmtMmSs(seconds)}</span>
                     </div>
-                    {share && <span className="pl-5 text-xs text-neutral-500">{share}</span>}
+                    {share && <span className="pl-5 text-xs text-ink-muted">{share}</span>}
                   </li>
                 );
               })}

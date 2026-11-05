@@ -22,8 +22,8 @@ interface DeviceFormProps {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <fieldset className="rounded-lg border border-neutral-200 p-4">
-      <legend className="px-1 text-sm font-semibold text-neutral-900">{title}</legend>
+    <fieldset className="rounded-lg border border-slate-200 p-4">
+      <legend className="px-1 text-sm font-semibold text-ink">{title}</legend>
       <div className="mt-2 grid grid-cols-2 gap-3">{children}</div>
     </fieldset>
   );
@@ -31,7 +31,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Field({ label, children, full }: { label: string; children: ReactNode; full?: boolean }) {
   return (
-    <label className={`block text-xs font-medium text-neutral-600 ${full ? "col-span-2" : ""}`}>
+    <label className={`block text-xs font-medium text-ink-muted ${full ? "col-span-2" : ""}`}>
       {label}
       <div className="mt-1">{children}</div>
     </label>
@@ -39,7 +39,7 @@ function Field({ label, children, full }: { label: string; children: ReactNode; 
 }
 
 const inputClass =
-  "w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none";
+  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-ink focus:border-brand-500 focus:outline-none";
 
 export function DeviceForm({ device, projects, defaultProjectId, onSave, onClose }: DeviceFormProps) {
   const config = device?.Config;
@@ -228,8 +228,8 @@ export function DeviceForm({ device, projects, defaultProjectId, onSave, onClose
           )}
         </Section>
 
-        <fieldset className="rounded-lg border border-neutral-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-neutral-900">Tracking Cameras</legend>
+        <fieldset className="rounded-lg border border-slate-200 p-4">
+          <legend className="px-1 text-sm font-semibold text-ink">Tracking Cameras</legend>
           <div className="mt-2 space-y-2">
             {trackingCameras.map((row, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -240,9 +240,9 @@ export function DeviceForm({ device, projects, defaultProjectId, onSave, onClose
                   onChange={(e) =>
                     setTrackingCameras((rows) => rows.map((r, idx) => (idx === i ? { ...r, mac: e.target.value } : r)))
                   }
-                  className={`${inputClass} ${row.existing ? "bg-neutral-100 text-neutral-500" : ""}`}
+                  className={`${inputClass} ${row.existing ? "bg-slate-100 text-ink-muted" : ""}`}
                 />
-                <label className="flex items-center gap-1 text-xs text-neutral-600">
+                <label className="flex items-center gap-1 text-xs text-ink-muted">
                   <input
                     type="checkbox"
                     checked={row.enabled}
@@ -263,7 +263,7 @@ export function DeviceForm({ device, projects, defaultProjectId, onSave, onClose
                 </button>
               </div>
             ))}
-            <button type="button" onClick={addTrackingCameraRow} className="text-xs text-indigo-600 hover:underline">
+            <button type="button" onClick={addTrackingCameraRow} className="text-xs text-brand-600 hover:underline">
               + Add camera
             </button>
           </div>
@@ -491,14 +491,14 @@ export function DeviceForm({ device, projects, defaultProjectId, onSave, onClose
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100"
+            className="rounded-md px-3 py-1.5 text-sm text-ink hover:bg-slate-100"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={!name.trim() || !projectId}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600/85 disabled:opacity-60"
           >
             Save
           </button>
