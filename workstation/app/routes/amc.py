@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from .. import automation
 from ..amc import controller
 from ..auth import amc_ticket
 from ..models import AmcStatus
@@ -22,5 +23,7 @@ def amc_start():
 @router.post("/stop", response_model=AmcStatus, status_code=202)
 def amc_stop():
     """Shut AMC down"""
+    if automation.runner.uses_amc():
+        raise HTTPException(status.HTTP_409_CONFLICT, "A calibration run is using AMC; cancel the run first")
     controller.stop()
     return controller.status()

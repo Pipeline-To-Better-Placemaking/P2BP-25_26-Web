@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import amc, calibration, rplidar, tracking, visualizer
+from .routes import amc, amc_automation, calibration, rplidar, tracking, visualizer
 
 
 def create_app() -> FastAPI:
@@ -20,7 +20,7 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
-    for r in (tracking, rplidar, visualizer, calibration, amc):
+    for r in (tracking, rplidar, visualizer, calibration, amc, amc_automation):
         app.include_router(r.router)
     return app
 
