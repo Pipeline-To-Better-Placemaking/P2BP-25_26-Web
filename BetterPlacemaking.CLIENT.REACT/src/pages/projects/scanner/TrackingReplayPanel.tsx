@@ -28,6 +28,9 @@ const TRAIL_JUMP_M = 1.0;
 const DOT_LINGER_MS = 1_000;
 const PRESETS = [5, 20, 60] as const;
 const SPEEDS = [1, 4, 16] as const;
+/** Comet tail lengths in seconds; "full" is the accumulated trail from the start of the range. */
+const TAILS = [2, 5, 15, "full"] as const;
+const TRAIL_ALPHA = 0.7;
 const COLORS = [
   "#e6194b",
   "#3cb44b",
@@ -45,6 +48,7 @@ const COLORS = [
 
 type Preset = (typeof PRESETS)[number] | "custom";
 type Speed = (typeof SPEEDS)[number];
+type Tail = (typeof TAILS)[number];
 
 type LeaseState =
   | { status: "acquiring" }
@@ -149,6 +153,34 @@ function lastIndexAtOrBeforeTyped(t: Float64Array, time: number): number {
     } else hi = mid - 1;
   }
   return ans;
+}
+
+/**
+ * Calls `segment` for every line piece of a decimated trail inside the tail window
+ * [from, to]: consecutive vertices with t in the window, joined unless the later one starts a new
+ * segment (brk). When the vertex before the window joins the first one inside it, the piece is
+ * clipped to start at `from`, so the tail keeps its full length after decimation. The head (from
+ * the last vertex to the interpolated position at the playhead) is not included.
+ */
+function forEachTailSegment(
+  tr: CanvasTrail,
+  from: number,
+  to: number,
+  segment: (x0: number, y0: number, t0: number, x1: number, y1: number, t1: number) => void,
+): void {
+  const last = lastIndexAtOrBeforeTyped(tr.t, to);
+  if (last < 0) return;
+  let k = lastIndexAtOrBeforeTyped(tr.t, from) + 1;
+  if (k > last) return;
+  if (k > 0 && !tr.brk[k] && tr.t[k] > tr.t[k - 1]) {
+    const a = (from - tr.t[k - 1]) / (tr.t[k] - tr.t[k - 1]);
+    const x0 = tr.x[k - 1] + a * (tr.x[k] - tr.x[k - 1]);
+    const y0 = tr.y[k - 1] + a * (tr.y[k] - tr.y[k - 1]);
+    segment(x0, y0, from, tr.x[k], tr.y[k], tr.t[k]);
+  }
+  for (k = k + 1; k <= last; k++) {
+    if (!tr.brk[k]) segment(tr.x[k - 1], tr.y[k - 1], tr.t[k - 1], tr.x[k], tr.y[k], tr.t[k]);
+  }
 }
 
 function pad(n: number) {
@@ -495,6 +527,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
+  const [tail, setTail] = useState<Tail>(5);
   const playheadRef = useRef(0);
   useEffect(() => {
     playheadRef.current = playhead;
@@ -763,49 +796,71 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
 
     if (!data || !trails) return;
 
-    // Offscreen trail layer.
-    const layer = trailLayerRef.current;
-    if (!layer.canvas) layer.canvas = document.createElement("canvas");
-    const off = layer.canvas;
-    const octx = off.getContext("2d");
-    if (!octx) return;
-    if (layer.trails !== trails || layer.pw !== pw || layer.ph !== ph || playhead < layer.playhead) {
-      off.width = pw;
-      off.height = ph;
-      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      octx.clearRect(0, 0, width, height);
-      octx.lineJoin = "round";
-      octx.lineCap = "round";
-      octx.lineWidth = 2;
-      layer.trails = trails;
-      layer.pw = pw;
-      layer.ph = ph;
-      layer.drawn = trails.map(() => -1);
-    }
-    trails.forEach((tr, i) => {
-      const idx = lastIndexAtOrBeforeTyped(tr.t, playhead);
-      const from = layer.drawn[i];
-      if (idx <= from) return;
-      octx.strokeStyle = colorOf(data.people[i].id);
-      octx.beginPath();
-      const k0 = Math.max(from, 0);
-      octx.moveTo(tr.x[k0], tr.y[k0]);
-      for (let k = k0 + 1; k <= idx; k++) {
-        if (tr.brk[k]) octx.moveTo(tr.x[k], tr.y[k]);
-        else octx.lineTo(tr.x[k], tr.y[k]);
-      }
-      octx.stroke();
-      layer.drawn[i] = idx;
-    });
-    layer.playhead = playhead;
-
-    ctx.globalAlpha = 0.7;
-    ctx.drawImage(off, 0, 0, width, height);
-    ctx.globalAlpha = 1;
-
-    // Heads: the short segment from the last trail vertex to the interpolated position, and the dot.
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
+    ctx.lineWidth = 2;
+    const tailMs = tail === "full" ? 0 : tail * 1000;
+    const tailFrom = playhead - tailMs;
+    /** Opacity of a piece between t0 and t1: 0 at the tail window start, 1 at the playhead. */
+    const fade = (t0: number, t1: number) =>
+      tail === "full" ? TRAIL_ALPHA : Math.min(1, Math.max(0, ((t0 + t1) / 2 - tailFrom) / tailMs));
+
+    if (tail === "full") {
+      // Offscreen trail layer.
+      const layer = trailLayerRef.current;
+      if (!layer.canvas) layer.canvas = document.createElement("canvas");
+      const off = layer.canvas;
+      const octx = off.getContext("2d");
+      if (!octx) return;
+      if (layer.trails !== trails || layer.pw !== pw || layer.ph !== ph || playhead < layer.playhead) {
+        off.width = pw;
+        off.height = ph;
+        octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        octx.clearRect(0, 0, width, height);
+        octx.lineJoin = "round";
+        octx.lineCap = "round";
+        octx.lineWidth = 2;
+        layer.trails = trails;
+        layer.pw = pw;
+        layer.ph = ph;
+        layer.drawn = trails.map(() => -1);
+      }
+      trails.forEach((tr, i) => {
+        const idx = lastIndexAtOrBeforeTyped(tr.t, playhead);
+        const from = layer.drawn[i];
+        if (idx <= from) return;
+        octx.strokeStyle = colorOf(data.people[i].id);
+        octx.beginPath();
+        const k0 = Math.max(from, 0);
+        octx.moveTo(tr.x[k0], tr.y[k0]);
+        for (let k = k0 + 1; k <= idx; k++) {
+          if (tr.brk[k]) octx.moveTo(tr.x[k], tr.y[k]);
+          else octx.lineTo(tr.x[k], tr.y[k]);
+        }
+        octx.stroke();
+        layer.drawn[i] = idx;
+      });
+      layer.playhead = playhead;
+
+      ctx.globalAlpha = TRAIL_ALPHA;
+      ctx.drawImage(off, 0, 0, width, height);
+      ctx.globalAlpha = 1;
+    } else {
+      // Comet tails: redrawn every frame from the window [playhead - tail, playhead] only.
+      trails.forEach((tr, i) => {
+        ctx.strokeStyle = colorOf(data.people[i].id);
+        forEachTailSegment(tr, tailFrom, playhead, (x0, y0, t0, x1, y1, t1) => {
+          ctx.globalAlpha = fade(t0, t1);
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.stroke();
+        });
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // Heads: the short segment from the last trail vertex to the interpolated position, and the dot.
     data.people.forEach((p, i) => {
       const idx = lastIndexAtOrBefore(p.t, playhead);
       if (idx < 0) return;
@@ -813,10 +868,10 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       const [hx, hy] = positionAt(p, idx, playhead);
       const [hcx, hcy] = project.toCanvas(hx, hy);
       const tr = trails[i];
-      const ti = layer.drawn[i];
+      const ti = lastIndexAtOrBeforeTyped(tr.t, playhead);
       if (ti >= 0 && idx + 1 < p.t.length && !isBreakAt(p, idx + 1)) {
         ctx.strokeStyle = color;
-        ctx.globalAlpha = 0.7;
+        ctx.globalAlpha = fade(tr.t[ti], playhead);
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(tr.x[ti], tr.y[ti]);
@@ -837,7 +892,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         ctx.fillText(labelOf(p.id), hcx + 9, hcy - 8);
       }
     });
-  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, colorOf, labelOf]);
+  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, tail, colorOf, labelOf]);
 
   // Render ------------------------------------------------------------------------------------
   const held = lease.status === "held";
@@ -1001,6 +1056,14 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
                 {SPEEDS.map((s) => (
                   <button key={s} type="button" aria-pressed={speed === s} className={toggleBtn(speed === s)} onClick={() => setSpeed(s)}>
                     {s}x
+                  </button>
+                ))}
+              </div>
+              <div role="group" aria-label="Trail length" className="flex items-center gap-1">
+                <span className="text-xs font-medium text-ink-muted">Tail</span>
+                {TAILS.map((t) => (
+                  <button key={t} type="button" aria-pressed={tail === t} className={toggleBtn(tail === t)} onClick={() => setTail(t)}>
+                    {t === "full" ? "Full" : `${t} s`}
                   </button>
                 ))}
               </div>

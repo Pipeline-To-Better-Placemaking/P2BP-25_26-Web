@@ -29,6 +29,11 @@ export interface TrackingCamera {
   x: number;
   y: number;
   z: number;
+  /**
+   * Where `x` and `y` come from: `config` when the workstation's cleaning config overrides the
+   * marker position (display only), else `calibration`. Absent from older workstations.
+   */
+  source?: "config" | "calibration";
 }
 
 /** `GET /tracking/meta`, normalized client side (missing or malformed fields become null/empty). */
@@ -38,6 +43,8 @@ export interface TrackingMeta {
   span: [number, number] | null;
   floorplan: TrackingFloorplan | null;
   cameras: TrackingCamera[];
+  /** Camera marker overrides that matched no camera model; absent when there are none. */
+  camera_override_warnings?: string[];
 }
 
 export type TrackingSessionKind = "replay" | "export";
