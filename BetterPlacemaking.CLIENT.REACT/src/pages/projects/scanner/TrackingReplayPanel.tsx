@@ -9,6 +9,15 @@ import type {
 } from "../../../lib/trackingTypes";
 import * as trackingApi from "../../../services/workstationTrackingApi";
 import { isAbortError, TrackingLockedError, TrackingRateLimitedError } from "../../../services/workstationTrackingApi";
+import {
+  computeDwellGrid,
+  floorplanWorldExtent,
+  HEAT_LEGEND_GRADIENT,
+  HEATMAP_CELL_M,
+  heatColor,
+  isBreakAt,
+  TRAIL_GAP_MS,
+} from "./replayHeatmap";
 
 /**
  * History replay + export of person tracks recorded on the workstation. Data is fetched directly
@@ -22,14 +31,12 @@ import { isAbortError, TrackingLockedError, TrackingRateLimitedError } from "../
 const HEARTBEAT_MS = 15_000;
 const MAX_RANGE_MS = 6 * 60 * 60 * 1000;
 const MAX_EXPORT_MS = 24 * 60 * 60 * 1000;
-const TRAIL_GAP_MS = 2_000;
-/** Consecutive samples farther apart than this (world metres) break the trail. */
-const TRAIL_JUMP_M = 1.0;
 const DOT_LINGER_MS = 1_000;
 const PRESETS = [5, 20, 60] as const;
 const SPEEDS = [1, 4, 16] as const;
 /** Comet tail lengths in seconds; "full" is the accumulated trail from the start of the range. */
 const TAILS = [2, 5, 15, "full"] as const;
+const VIEWS = ["movement", "heatmap"] as const;
 const TRAIL_ALPHA = 0.7;
 /** Opacity steps of a comet tail; each step is stroked once per person, so overlaps never compound. */
 const FADE_LEVELS = 16;
@@ -51,6 +58,7 @@ const COLORS = [
 type Preset = (typeof PRESETS)[number] | "custom";
 type Speed = (typeof SPEEDS)[number];
 type Tail = (typeof TAILS)[number];
+type View = (typeof VIEWS)[number];
 
 type LeaseState =
   | { status: "acquiring" }
@@ -83,15 +91,6 @@ function lastIndexAtOrBefore(t: number[], time: number): number {
     } else hi = mid - 1;
   }
   return ans;
-}
-
-/**
- * True when sample i starts a new trail segment: the first sample, a time gap over TRAIL_GAP_MS,
- * or a jump over TRAIL_JUMP_M (measured in world metres, before projection).
- */
-function isBreakAt(p: TrackingPerson, i: number): boolean {
-  if (i <= 0) return true;
-  return p.t[i] - p.t[i - 1] > TRAIL_GAP_MS || Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) > TRAIL_JUMP_M;
 }
 
 /** Position at `time`, linearly interpolated between samples of the same trail segment. */
@@ -244,6 +243,11 @@ function fmtDuration(ms: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/** Seconds for the heatmap legend: one decimal below 10 s, whole seconds above. */
+function fmtSeconds(seconds: number): string {
+  return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds).toLocaleString()} s`;
 }
 
 /** Seconds -> "mm:ss" (minutes keep counting past an hour). */
@@ -556,6 +560,10 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
   const [tail, setTail] = useState<Tail>(5);
+  const [view, setView] = useState<View>("movement");
+  /** The heatmap covers the floor plan's world extent, so it needs one. */
+  const heatmapAvailable = meta?.floorplan != null;
+  const heatmapView = view === "heatmap" && heatmapAvailable;
   const playheadRef = useRef(0);
   useEffect(() => {
     playheadRef.current = playhead;
@@ -622,6 +630,11 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, speed, data]);
+
+  const selectView = (v: View) => {
+    if (v === "heatmap") setPlaying(false);
+    setView(v);
+  };
 
   const togglePlay = () => {
     if (!data) return;
@@ -771,6 +784,38 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
     [data, project],
   );
 
+  /** Dwell grid for the loaded range (its mode included), in world cells; independent of the canvas. */
+  const heatGrid = useMemo(() => {
+    if (!data || data.people.length === 0 || !fp) return null;
+    const extent = floorplanWorldExtent(fp);
+    return extent ? computeDwellGrid(data.people, extent) : null;
+  }, [data, fp]);
+
+  /** Heatmap cells with time, projected to canvas CSS px through the trails' transform. */
+  const heatCells = useMemo(() => {
+    if (!heatGrid || !project || heatGrid.max <= 0) return null;
+    const { c0, r0, cell, cols, rows, seconds, max } = heatGrid;
+    const cells: { pts: [number, number][]; fill: string }[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const v = seconds[r * cols + c];
+        if (v <= 0) continue;
+        const wx = (c0 + c) * cell;
+        const wy = (r0 + r) * cell;
+        cells.push({
+          pts: [
+            project.toCanvas(wx, wy),
+            project.toCanvas(wx + cell, wy),
+            project.toCanvas(wx + cell, wy + cell),
+            project.toCanvas(wx, wy + cell),
+          ],
+          fill: heatColor(v / max),
+        });
+      }
+    }
+    return cells;
+  }, [heatGrid, project]);
+
   /**
    * Trails are drawn incrementally onto an offscreen canvas: each frame only strokes the
    * segments added since the last frame. Seeking backwards (or new data/size) redraws it once.
@@ -807,6 +852,17 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       }
     }
 
+    if (heatmapView && heatCells) {
+      for (const { pts, fill } of heatCells) {
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
     ctx.font = "11px system-ui, sans-serif";
     ctx.textBaseline = "middle";
 
@@ -822,7 +878,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
       ctx.fillText(cam.name, cx + 8, cy);
     }
 
-    if (!data || !trails) return;
+    if (!data || !trails || heatmapView) return;
 
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -927,7 +983,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
         ctx.fillText(labelOf(p.id), hcx + 9, hcy - 8);
       }
     });
-  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, tail, colorOf, labelOf]);
+  }, [project, trails, width, height, dpr, floorImg, meta, data, playhead, tail, colorOf, labelOf, heatmapView, heatCells]);
 
   // Render ------------------------------------------------------------------------------------
   const held = lease.status === "held";
@@ -1070,7 +1126,9 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               ref={canvasRef}
               role="img"
               aria-label={
-                data && !empty ? `Floor plan replay of ${peopleCount} ${countNoun}, at most ${peakCount} at once` : "Floor plan replay"
+                data && !empty && heatmapView
+                  ? `Dwell heatmap of ${peopleCount} ${countNoun}, busiest cell ${fmtSeconds(heatGrid?.max ?? 0)}`
+                  : data && !empty ? `Floor plan replay of ${peopleCount} ${countNoun}, at most ${peakCount} at once` : "Floor plan replay"
               }
               style={{ width: `${width}px`, height: `${height}px`, display: "block" }} />
             {(empty || !data) && (
@@ -1084,12 +1142,28 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
 
           {data && !empty && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="button" className={actionBtn} onClick={togglePlay}>
+              <div role="group" aria-label="View" className="flex items-center gap-1">
+                <span className="text-xs font-medium text-ink-muted">View</span>
+                {VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={(v === "heatmap") === heatmapView}
+                    className={toggleBtn((v === "heatmap") === heatmapView)}
+                    disabled={v === "heatmap" && !heatmapAvailable}
+                    onClick={() => selectView(v)}
+                  >
+                    {v === "movement" ? "Movement" : "Heatmap"}
+                  </button>
+                ))}
+                {!heatmapAvailable && <span className="text-xs text-ink-muted">Heatmap needs a floor plan</span>}
+              </div>
+              <button type="button" className={actionBtn} disabled={heatmapView} onClick={togglePlay}>
                 {playing ? "Pause" : "Play"}
               </button>
               <div className="flex gap-1">
                 {SPEEDS.map((s) => (
-                  <button key={s} type="button" aria-pressed={speed === s} className={toggleBtn(speed === s)} onClick={() => setSpeed(s)}>
+                  <button key={s} type="button" aria-pressed={speed === s} className={toggleBtn(speed === s)} disabled={heatmapView} onClick={() => setSpeed(s)}>
                     {s}x
                   </button>
                 ))}
@@ -1097,7 +1171,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               <div role="group" aria-label="Trail length" className="flex items-center gap-1">
                 <span className="text-xs font-medium text-ink-muted">Tail</span>
                 {TAILS.map((t) => (
-                  <button key={t} type="button" aria-pressed={tail === t} className={toggleBtn(tail === t)} onClick={() => setTail(t)}>
+                  <button key={t} type="button" aria-pressed={tail === t} className={toggleBtn(tail === t)} disabled={heatmapView} onClick={() => setTail(t)}>
                     {t === "full" ? "Full" : `${t} s`}
                   </button>
                 ))}
@@ -1108,6 +1182,7 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
                 max={data.to}
                 step={100}
                 value={playhead}
+                disabled={heatmapView}
                 onChange={(e) => setPlayhead(Number(e.target.value))}
                 className="min-w-[160px] flex-1"
                 aria-label="Playback position"
@@ -1115,6 +1190,22 @@ export function TrackingReplayPanel({ projectId }: TrackingReplayPanelProps) {
               <span className="font-mono text-sm text-ink">
                 {fmtTime(playhead)} ({fmtDuration(playhead - data.from)} / {fmtDuration(data.to - data.from)})
               </span>
+            </div>
+          )}
+
+          {data && !empty && heatmapView && heatGrid && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+              <span>Time spent per {HEATMAP_CELL_M} m cell over the window (person-seconds)</span>
+              <span className="flex items-center gap-1.5">
+                <span className="font-mono text-ink">0</span>
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-3 w-32 rounded-sm border border-slate-300"
+                  style={{ backgroundImage: HEAT_LEGEND_GRADIENT, backgroundColor: "#ffffff" }}
+                />
+                <span className="font-mono text-ink">{fmtSeconds(heatGrid.max)}</span>
+              </span>
+              {data.mode === "raw" && <span>Raw: each camera's track counts separately.</span>}
             </div>
           )}
         </div>
