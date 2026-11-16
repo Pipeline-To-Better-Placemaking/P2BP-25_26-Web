@@ -86,6 +86,14 @@ export const env = {
   workstationTrackingUrl: optional("WORKSTATION_TRACKING_URL"),
   workstationTicketMinutes: optionalPositiveInt("WORKSTATION_TICKET_MINUTES", 5),
 
+  // --- Workstation AMC control (browser talks to the AMC control service directly) ---
+  // Tickets are signed with the same WORKSTATION_TICKET_SECRET as tracking tickets;
+  // the "scope" claim ("amc" vs "tracking") keeps them apart. The secret and
+  // WORKSTATION_AMC_URL must both be set or the /api/workstation routes answer 503.
+  // WORKSTATION_BASE_URL above is unrelated (the RemoteWorkstation seam).
+  workstationAmcUrl: optional("WORKSTATION_AMC_URL"),
+  workstationAmcTicketMinutes: optionalPositiveInt("WORKSTATION_AMC_TICKET_MINUTES", 25),
+
   // --- Tracking (mirrors appsettings.json "Tracking" section) ---
   // Tracking data is a filesystem artifact of the offline CV pipeline (CSV of recent
   // detections + one JSON file per finished track), not a database table - see
