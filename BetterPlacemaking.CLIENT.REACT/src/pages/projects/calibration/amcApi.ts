@@ -119,12 +119,21 @@ export type WorkstationErrorKind = "unreachable" | "unauthorized" | "forbidden" 
 export class WorkstationError extends Error {
   kind: WorkstationErrorKind;
   status?: number;
+  // Seconds from a Retry-After header, when the response carried a readable one
+  retryAfter?: number;
 
-  constructor(kind: WorkstationErrorKind, message: string, status?: number) {
+  constructor(kind: WorkstationErrorKind, message: string, status?: number, retryAfter?: number) {
     super(message);
     this.kind = kind;
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+// Retry-After as whole seconds; null when missing (or not exposed by CORS) or given as a date
+export function parseRetryAfter(value: string | null): number | null {
+  if (value === null || !/^\s*\d+\s*$/.test(value)) return null;
+  return Number(value.trim());
 }
 
 export function normalizeAmcUrl(raw: string): string | null {
@@ -224,7 +233,12 @@ async function workstationFetch<T>(
     if (res.status === 403) {
       throw new WorkstationError("forbidden", detail || "This workstation isn't set up for this project.", 403);
     }
-    throw new WorkstationError("server", detail || `Workstation service error (${res.status}).`, res.status);
+    throw new WorkstationError(
+      "server",
+      detail || `Workstation service error (${res.status}).`,
+      res.status,
+      parseRetryAfter(res.headers.get("Retry-After")) ?? undefined,
+    );
   }
   return (await res.json()) as T;
 }
@@ -311,9 +325,28 @@ export function isAlreadyDeleted(err: unknown): boolean {
   return err instanceof WorkstationError && err.status === 404;
 }
 
+// How long a delete keeps retrying while the workstation starts AMC, and the wait when a 503
+// carries no readable Retry-After (older workstations don't expose it through CORS)
+export const AMC_START_WAIT_MS = 180_000;
+export const DEFAULT_RETRY_AFTER_S = 15;
+
+export interface DeleteWorkstationOptions {
+  // Called before each wait while the workstation starts AMC, with the seconds until the retry
+  onStartingAmc?: (retryInSeconds: number) => void;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
 // Deletes the project's folder and AMC project on the workstation. Resolves null when the workstation
-// has no folder for the project, which leaves nothing to clean up.
-export async function deleteWorkstationProject(projectId: string): Promise<WorkstationDeleteResult | null> {
+// has no folder for the project, which leaves nothing to clean up. A 503 means the workstation is
+// starting AMC: the call waits and retries for up to AMC_START_WAIT_MS.
+export async function deleteWorkstationProject(
+  projectId: string,
+  options: DeleteWorkstationOptions = {},
+): Promise<WorkstationDeleteResult | null> {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+
   const ticket = await requestDeleteTicket(projectId);
   if (isMixedContent(ticket.WorkstationUrl)) {
     throw new WorkstationError(
@@ -321,17 +354,36 @@ export async function deleteWorkstationProject(projectId: string): Promise<Works
       `This page is served over HTTPS but the workstation is at ${ticket.WorkstationUrl}, so the browser blocks the connection.`,
     );
   }
+
+  const deadline = now() + AMC_START_WAIT_MS;
   let result: WorkstationDeleteResult | null;
-  try {
-    result = await workstationFetch<WorkstationDeleteResult>(
-      ticket.WorkstationUrl,
-      ticket.Ticket,
-      "/projects/current",
-      "DELETE",
-    );
-  } catch (err) {
-    if (!isAlreadyDeleted(err)) throw err;
-    result = null;
+  for (;;) {
+    try {
+      result = await workstationFetch<WorkstationDeleteResult>(
+        ticket.WorkstationUrl,
+        ticket.Ticket,
+        "/projects/current",
+        "DELETE",
+      );
+      break;
+    } catch (err) {
+      if (isAlreadyDeleted(err)) {
+        result = null;
+        break;
+      }
+      if (!(err instanceof WorkstationError && err.status === 503)) throw err;
+      const remaining = deadline - now();
+      if (remaining <= 0) {
+        throw new WorkstationError(
+          "server",
+          "AMC did not become ready on the workstation within three minutes.",
+          503,
+        );
+      }
+      const waitS = err.retryAfter ?? DEFAULT_RETRY_AFTER_S;
+      options.onStartingAmc?.(waitS);
+      await sleep(Math.min(waitS * 1000, remaining));
+    }
   }
   forgetTicket(projectId);
   return result;

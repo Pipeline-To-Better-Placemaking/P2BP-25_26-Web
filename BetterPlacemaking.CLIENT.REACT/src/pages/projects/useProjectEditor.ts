@@ -219,7 +219,19 @@ export function useProjectEditor(reload: () => void) {
   // Workstation first, so a failure there leaves the web project in place to retry
   async function deleteWithWorkstation(project: ProjectDto, folder: string) {
     try {
-      const result = await amcApi.deleteWorkstationProject(project.Id);
+      let startingShown = false;
+      const result = await amcApi.deleteWorkstationProject(project.Id, {
+        onStartingAmc: () => {
+          if (startingShown) return;
+          startingShown = true;
+          toast.add({
+            severity: "info",
+            summary: "Workstation",
+            detail: `Starting AMC on the workstation to delete ${folder}; this can take a few minutes.`,
+            life: 15000,
+          });
+        },
+      });
       if (result?.Leftover) {
         toast.add({
           severity: "warn",

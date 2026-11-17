@@ -18,7 +18,14 @@ vi.mock("../../../auth/authStore", () => ({
   getState: () => ({ User: { Id: "user-1" } }),
 }));
 
-import { deleteWorkstationProject, isDownloadable, isVideoPath, listProjectFiles, WorkstationError } from "./amcApi";
+import {
+  deleteWorkstationProject,
+  isDownloadable,
+  isVideoPath,
+  listProjectFiles,
+  parseRetryAfter,
+  WorkstationError,
+} from "./amcApi";
 
 const BASE = "http://workstation:8090";
 
@@ -26,9 +33,31 @@ function ticket(name: string) {
   return { Ticket: name, ExpiresAt: new Date(Date.now() + 300_000).toISOString(), WorkstationUrl: BASE };
 }
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 }
+
+// A fake clock whose sleep advances time, so retries run instantly
+function fakeClock() {
+  let t = 0;
+  const sleeps: number[] = [];
+  return {
+    sleeps,
+    now: () => t,
+    sleep: async (ms: number) => {
+      sleeps.push(ms);
+      t += ms;
+    },
+  };
+}
+
+describe("parseRetryAfter", () => {
+  it("reads whole seconds and ignores anything else", () => {
+    expect(parseRetryAfter("15")).toBe(15);
+    expect(parseRetryAfter(null)).toBeNull();
+    expect(parseRetryAfter("Wed, 21 Oct 2026 07:28:00 GMT")).toBeNull();
+  });
+});
 
 describe("isVideoPath", () => {
   it("treats everything under footage/ as video", () => {
@@ -120,6 +149,33 @@ describe("deleteWorkstationProject", () => {
     const err = await deleteWorkstationProject("p5").catch((e: unknown) => e);
     expect((err as WorkstationError).kind).toBe("unreachable");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries after Retry-After while the workstation starts AMC", async () => {
+    post.mockResolvedValueOnce(ticket("delete-ticket"));
+    const result = { Folder: "plaza", AmcProjectId: "amc-1", AmcProjectDeleted: true, Leftover: null };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(503, { detail: "Starting AMC" }, { "Retry-After": "10" }))
+      .mockResolvedValueOnce(jsonResponse(503, { detail: "Starting AMC" }))
+      .mockResolvedValueOnce(jsonResponse(200, result));
+    const clock = fakeClock();
+    const onStartingAmc = vi.fn();
+
+    await expect(deleteWorkstationProject("p7", { ...clock, onStartingAmc })).resolves.toEqual(result);
+    // The second 503 has no readable Retry-After, so it waits the 15 second default
+    expect(clock.sleeps).toEqual([10_000, 15_000]);
+    expect(onStartingAmc).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up when AMC is still not ready after three minutes", async () => {
+    post.mockResolvedValueOnce(ticket("delete-ticket"));
+    fetchMock.mockImplementation(async () => jsonResponse(503, { detail: "Starting AMC" }, { "Retry-After": "15" }));
+    const clock = fakeClock();
+
+    const err = await deleteWorkstationProject("p8", clock).catch((e: unknown) => e);
+    expect((err as WorkstationError).status).toBe(503);
+    expect(clock.sleeps.reduce((a, b) => a + b, 0)).toBe(180_000);
   });
 
   it("drops the project's cached amc ticket after a delete", async () => {
