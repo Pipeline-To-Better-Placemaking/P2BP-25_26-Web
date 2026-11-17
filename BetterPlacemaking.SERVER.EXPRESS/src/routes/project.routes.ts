@@ -1,10 +1,17 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import * as projectService from "../services/projectService.js";
 import * as authorizationService from "../authorization/authorizationService.js";
 import { Permissions } from "../authorization/permissions.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
 import { toProjectDto } from "../models/project.js";
+import { parseWorkstationFolder } from "../models/workstationFolder.js";
+
+function sendFolderConflict(res: Response, err: unknown): boolean {
+  if (!(err instanceof projectService.WorkstationFolderConflictError)) return false;
+  res.status(409).json({ Message: err.message });
+  return true;
+}
 
 export const projectRouter = Router();
 
@@ -51,10 +58,19 @@ projectRouter.get("/:id", requirePermission(Permissions.Project.Read), async (re
 
 projectRouter.post("/", requirePermission(Permissions.Global.ProjectsCreate), async (req, res, next) => {
   try {
-    const { Title, Description, Location } = req.body ?? {};
-    const project = await projectService.create({ Title, Description, Location }, req.user!.sub);
+    const { Title, Description, Location, WorkstationFolder } = req.body ?? {};
+    const folder = parseWorkstationFolder(WorkstationFolder);
+    if (!folder.ok) {
+      res.status(400).json({ Message: folder.message });
+      return;
+    }
+    const project = await projectService.create(
+      { Title, Description, Location, WorkstationFolder: folder.value },
+      req.user!.sub,
+    );
     res.status(200).json(toProjectDto(project));
   } catch (err) {
+    if (sendFolderConflict(res, err)) return;
     next(err);
   }
 });
@@ -65,10 +81,26 @@ projectRouter.put("/:id", requirePermission(Permissions.Project.Update), async (
       res.status(400).send();
       return;
     }
-    const { Title, Description, Location } = req.body;
-    const success = await projectService.update(req.params.id, { Title, Description, Location });
+    const { Title, Description, Location, WorkstationFolder } = req.body;
+    // Omitted leaves the stored folder unchanged; otherwise it is set-once (see projectService.update).
+    let folderValue: string | null | undefined;
+    if (WorkstationFolder !== undefined) {
+      const folder = parseWorkstationFolder(WorkstationFolder);
+      if (!folder.ok) {
+        res.status(400).json({ Message: folder.message });
+        return;
+      }
+      folderValue = folder.value;
+    }
+    const success = await projectService.update(req.params.id, {
+      Title,
+      Description,
+      Location,
+      WorkstationFolder: folderValue,
+    });
     res.status(success ? 200 : 404).send();
   } catch (err) {
+    if (sendFolderConflict(res, err)) return;
     next(err);
   }
 });
