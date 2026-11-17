@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
 import {
   amcWorkstationUrl,
+  createDeleteTicket,
   createProvisionTicket,
   createWorkstationTicket,
   isWorkstationControlConfigured,
@@ -15,6 +16,7 @@ import {
   WorkstationFolderMissingError,
   type CalibrationSpec,
 } from "../services/calibrationSpecService.js";
+import * as projectService from "../services/projectService.js";
 
 export const workstationRouter = Router();
 
@@ -117,6 +119,30 @@ workstationRouter.post("/project/:projectId/provision", requirePermission(Permis
       res.status(400).json({ Message: err.message });
       return;
     }
+    next(err);
+  }
+});
+
+//Hands a ticket to delete the project's folder and AMC project on the workstation
+workstationRouter.post("/project/:projectId/delete-ticket", requirePermission(Permissions.Project.Delete), async (req, res, next) => {
+  try {
+    const workstationUrl = amcWorkstationUrl();
+    if (!isWorkstationControlConfigured() || !workstationUrl) {
+      res.status(503).json({ Message: "Workstation control is not configured." });
+      return;
+    }
+    const project = await projectService.getById(req.params.projectId);
+    if (!project) {
+      res.status(404).json({ Message: "Project not found." });
+      return;
+    }
+    const { ticket, expiresAtUtc } = createDeleteTicket(req.user!.sub, req.params.projectId);
+    res.status(200).json({
+      Ticket: ticket,
+      ExpiresAt: expiresAtUtc.toISOString(),
+      WorkstationUrl: workstationUrl,
+    });
+  } catch (err) {
     next(err);
   }
 });

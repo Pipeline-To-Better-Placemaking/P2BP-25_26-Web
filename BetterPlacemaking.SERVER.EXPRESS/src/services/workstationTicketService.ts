@@ -11,6 +11,10 @@ export const WORKSTATION_TICKET_SCOPE = "amc";
 // AMC project (hardware repo `installer/plan/AMC-WEB-PROJECTS.md`, section 9).
 export const WORKSTATION_PROVISION_TICKET_SCOPE = "amc-provision";
 export const WORKSTATION_PROVISION_TICKET_MINUTES = 15;
+// Ticket for DELETE /projects/current on the workstation: removes the project's
+// folder and AMC project (hardware repo `installer/plan/AMC-PROJECT-LIFECYCLE.md`, section 3.1).
+export const WORKSTATION_DELETE_TICKET_SCOPE = "amc-delete";
+export const WORKSTATION_DELETE_TICKET_MINUTES = 5;
 
 export interface WorkstationTicket {
   ticket: string;
@@ -51,4 +55,8 @@ export function createProvisionTicket(userId: string, projectId: string): Workst
     WORKSTATION_PROVISION_TICKET_SCOPE,
     WORKSTATION_PROVISION_TICKET_MINUTES,
   );
+}
+
+export function createDeleteTicket(userId: string, projectId: string): WorkstationTicket {
+  return signWorkstationTicket(userId, projectId, WORKSTATION_DELETE_TICKET_SCOPE, WORKSTATION_DELETE_TICKET_MINUTES);
 }
