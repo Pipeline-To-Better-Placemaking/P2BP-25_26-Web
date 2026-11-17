@@ -139,9 +139,12 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
+// Current clips sit directly in footage/; the kept recording in footage/previous/ does not count
+const FOOTAGE_CLIP = /^footage\/[^/]+\.mp4$/;
+
 // True when the folder already holds recorded clips (footage/*.mp4)
 function hasFootage(files: WorkstationFile[]): boolean {
-  return files.some((f) => f.Path.startsWith("footage/") && f.Path.endsWith(".mp4"));
+  return files.some((f) => FOOTAGE_CLIP.test(f.Path));
 }
 
 // The minutes field as a whole number in range, or null when it isn't one
