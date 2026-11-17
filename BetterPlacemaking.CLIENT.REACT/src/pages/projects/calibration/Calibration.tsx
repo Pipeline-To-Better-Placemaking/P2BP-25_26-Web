@@ -59,6 +59,10 @@ const PROVISION_POLL_MAX_ERRORS = 5;
 const AMC_POLL_MS = 2_000;
 const AUTOMATION_POLL_MS = 3_000;
 const TICKET_MARGIN_MS = 30_000;
+// Length of a new footage recording, in whole minutes
+const RECORD_MINUTES_MIN = 1;
+const RECORD_MINUTES_MAX = 30;
+const RECORD_MINUTES_DEFAULT = 5;
 
 type Severity = "success" | "info" | "warn" | "danger" | "secondary";
 
@@ -133,6 +137,21 @@ function formatBytes(bytes: number): string {
     unit++;
   }
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
+
+// Current clips sit directly in footage/; the kept recording in footage/previous/ does not count
+const FOOTAGE_CLIP = /^footage\/[^/]+\.mp4$/;
+
+// True when the folder already holds recorded clips (footage/*.mp4)
+function hasFootage(files: WorkstationFile[]): boolean {
+  return files.some((f) => FOOTAGE_CLIP.test(f.Path));
+}
+
+// The minutes field as a whole number in range, or null when it isn't one
+function parseRecordMinutes(text: string): number | null {
+  if (!/^\d+$/.test(text.trim())) return null;
+  const minutes = Number(text.trim());
+  return minutes >= RECORD_MINUTES_MIN && minutes <= RECORD_MINUTES_MAX ? minutes : null;
 }
 
 function isTicketFresh(ticket: WorkstationTicket): boolean {
@@ -536,7 +555,12 @@ function JobDetails({ job }: { job: AutomationJob }) {
             <span className="w-6 shrink-0 text-sm font-semibold text-ink-muted">{step.Number}</span>
             <div className="min-w-0 grow">
               <div className="text-sm font-medium text-ink">{step.Title}</div>
-              {step.Message && <div className="mt-0.5 text-sm text-ink-muted">{step.Message}</div>}
+              {/* A running step's message is its live progress, such as how much of a recording is done */}
+              {step.Message && (
+                <div className={`mt-0.5 text-sm ${step.State === "running" ? "font-medium text-ink" : "text-ink-muted"}`}>
+                  {step.Message}
+                </div>
+              )}
               {step.Done && <div className="mt-0.5 text-xs text-ink-muted">Done: {step.Done}</div>}
             </div>
             <Tag value={step.State} severity={STEP_SEVERITY[step.State]} />
@@ -552,11 +576,14 @@ function JobDetails({ job }: { job: AutomationJob }) {
 function AutomationPanel({
   projectId,
   ready,
+  folderHasFootage,
   onRunFinished,
   onStateChange,
 }: {
   projectId: string;
   ready: boolean;
+  // Whether the folder's file list holds footage/*.mp4; null until it has loaded
+  folderHasFootage: boolean | null;
   onRunFinished: () => void;
   onStateChange: (state: AutomationJobState | null) => void;
 }) {
@@ -567,7 +594,12 @@ function AutomationPanel({
   const [pending, setPending] = useState(false);
   const [floorplans, setFloorplans] = useState<FloorplanLibraryItemDto[]>([]);
   const [floorplanId, setFloorplanId] = useState("");
+  // The user's own choice; until they make one, recording defaults to on when the folder has no footage
+  const [recordChoice, setRecordChoice] = useState<boolean | null>(null);
+  const [recordMinutesText, setRecordMinutesText] = useState(String(RECORD_MINUTES_DEFAULT));
   const lastJob = useRef<AutomationJob | null>(null);
+  const record = recordChoice ?? folderHasFootage === false;
+  const recordMinutes = parseRecordMinutes(recordMinutesText);
 
   // Records the latest job and tells the page when this project's run has just ended
   const applyJob = useCallback(
@@ -632,8 +664,32 @@ function AutomationPanel({
     });
   }
 
-  // A refused start, continue or cancel (409) shows the workstation's reason, such as another project's run
-  const canStart = ready && loaded && !pending && !isActive(job);
+  function start() {
+    const floorplan = floorplanId || undefined;
+    if (!record) {
+      void act(() => startAutomation(projectId, floorplan));
+      return;
+    }
+    if (recordMinutes === null) return;
+    const length = `${recordMinutes} minute${recordMinutes === 1 ? "" : "s"}`;
+    confirmation.confirm({
+      header: "Record new footage",
+      message:
+        `Start the run by recording ${length} of new footage from every camera? People must walk through every ` +
+        "camera's view for the whole recording. It replaces the folder's current footage; one previous recording is " +
+        "kept in footage/previous/.",
+      icon: "pi pi-exclamation-triangle",
+      rejectButtonStyleClass: "p-button-text",
+      acceptLabel: "Record and start",
+      rejectLabel: "Not yet",
+      accept: () => void act(() => startAutomation(projectId, floorplan, { recordSeconds: recordMinutes * 60 })),
+    });
+  }
+
+  // A refused start, continue or cancel (409) shows the workstation's reason, such as another project's run;
+  // a rejected recording request (400) shows its detail the same way
+  const canStart = ready && loaded && !pending && !isActive(job) && (!record || recordMinutes !== null);
+  const controlsEnabled = ready && loaded && !pending && !isActive(job);
   const canContinue = !pending && !!job && RESUMABLE.includes(job.State);
   const canCancel = !pending && !!job && CANCELLABLE.includes(job.State);
 
@@ -644,7 +700,7 @@ function AutomationPanel({
         <>
           <button
             type="button"
-            onClick={() => void act(() => startAutomation(projectId, floorplanId || undefined))}
+            onClick={start}
             disabled={!canStart}
             className={PRIMARY_BUTTON}
           >
@@ -671,22 +727,73 @@ function AutomationPanel({
         <p className="text-sm text-ink-muted">Runs start once the project is set up on the workstation.</p>
       )}
       {ready && (
-        <label className="block max-w-md text-sm font-medium text-ink">
-          Floor plan
-          <select
-            value={floorplanId}
-            onChange={(e) => setFloorplanId(e.target.value)}
-            disabled={!canStart}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
-          >
-            <option value="">Newest floor plan in the project</option>
-            {floorplans.map((f) => (
-              <option key={f.Id} value={f.Id}>
-                {f.Nickname}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-col gap-4">
+          <label className="block max-w-md text-sm font-medium text-ink">
+            Floor plan
+            <select
+              value={floorplanId}
+              onChange={(e) => setFloorplanId(e.target.value)}
+              disabled={!controlsEnabled}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">Newest floor plan in the project</option>
+              {floorplans.map((f) => (
+                <option key={f.Id} value={f.Id}>
+                  {f.Nickname}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <fieldset className="max-w-md">
+            <legend className="sr-only">Footage</legend>
+            <div className="flex items-center gap-2">
+              <input
+                id={`record-footage-${projectId}`}
+                type="checkbox"
+                checked={record}
+                onChange={(e) => setRecordChoice(e.target.checked)}
+                disabled={!controlsEnabled}
+                aria-describedby={`record-footage-help-${projectId}`}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <label htmlFor={`record-footage-${projectId}`} className="text-sm font-medium text-ink">
+                Record new footage
+              </label>
+            </div>
+            {record && (
+              <div className="mt-3 pl-6">
+                <label htmlFor={`record-minutes-${projectId}`} className="block text-sm font-medium text-ink">
+                  Length in minutes ({RECORD_MINUTES_MIN} to {RECORD_MINUTES_MAX})
+                </label>
+                <input
+                  id={`record-minutes-${projectId}`}
+                  type="number"
+                  inputMode="numeric"
+                  min={RECORD_MINUTES_MIN}
+                  max={RECORD_MINUTES_MAX}
+                  step={1}
+                  value={recordMinutesText}
+                  onChange={(e) => setRecordMinutesText(e.target.value)}
+                  disabled={!controlsEnabled}
+                  aria-invalid={recordMinutes === null}
+                  aria-describedby={recordMinutes === null ? `record-minutes-error-${projectId}` : undefined}
+                  className="mt-1 w-28 rounded-md border border-slate-300 px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
+                />
+                {recordMinutes === null && (
+                  <p id={`record-minutes-error-${projectId}`} className="mt-1 text-sm text-red-600">
+                    Enter a whole number of minutes from {RECORD_MINUTES_MIN} to {RECORD_MINUTES_MAX}.
+                  </p>
+                )}
+              </div>
+            )}
+            <p id={`record-footage-help-${projectId}`} className="mt-2 pl-6 text-sm text-ink-muted">
+              Step 2 records every camera at once. People must walk through every camera's view for the whole
+              recording. The recording replaces the folder's current footage; one previous recording is kept in{" "}
+              <span className="font-mono">footage/previous/</span>.
+            </p>
+          </fieldset>
+        </div>
       )}
 
       <div aria-live="polite">
@@ -700,7 +807,16 @@ function AutomationPanel({
 
 // -- files ------------------------------------------------------------------------------
 
-function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: string }) {
+function FilesPanel({
+  projectId,
+  reloadKey,
+  onFilesLoaded,
+}: {
+  projectId: string;
+  reloadKey: string;
+  // Told about each listing that loads, so the run panel can see whether the folder holds footage
+  onFilesLoaded: (files: WorkstationFile[]) => void;
+}) {
   const [files, setFiles] = useState<WorkstationFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   // The reloadKey the shown listing answers; loading until it matches the current one
@@ -719,6 +835,7 @@ function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: st
           if (!isLatest()) return;
           setFiles(items);
           setError(null);
+          onFilesLoaded(items);
         })
         .catch((err: unknown) => {
           if (isLatest()) setError(describe(err));
@@ -727,7 +844,7 @@ function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: st
           if (isLatest()) setSettledKey(key);
         });
     },
-    [projectId],
+    [projectId, onFilesLoaded],
   );
 
   useEffect(() => {
@@ -894,6 +1011,8 @@ function ConnectedPanels({
   const { binding, refresh } = bindingState;
   const onRunFinished = useCallback(() => void refresh(), [refresh]);
   const [runState, setRunState] = useState<AutomationJobState | null>(null);
+  const [folderHasFootage, setFolderHasFootage] = useState<boolean | null>(null);
+  const onFilesLoaded = useCallback((files: WorkstationFile[]) => setFolderHasFootage(hasFootage(files)), []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -902,10 +1021,17 @@ function ConnectedPanels({
       <AutomationPanel
         projectId={projectId}
         ready={binding?.State === "ready"}
+        folderHasFootage={folderHasFootage}
         onRunFinished={onRunFinished}
         onStateChange={setRunState}
       />
-      {binding && <FilesPanel projectId={projectId} reloadKey={`${binding.State}:${binding.LastRunAt ?? 0}`} />}
+      {binding && (
+        <FilesPanel
+          projectId={projectId}
+          reloadKey={`${binding.State}:${binding.LastRunAt ?? 0}`}
+          onFilesLoaded={onFilesLoaded}
+        />
+      )}
     </div>
   );
 }

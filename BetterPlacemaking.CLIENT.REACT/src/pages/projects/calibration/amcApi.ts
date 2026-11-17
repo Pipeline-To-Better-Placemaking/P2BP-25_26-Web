@@ -343,11 +343,23 @@ export function getAutomation(projectId: string): Promise<AutomationJob | null> 
   );
 }
 
+export interface StartAutomationOptions {
+  // Records new footage from every camera in step 2 for this many seconds (the workstation accepts 30 to 1800)
+  recordSeconds?: number;
+}
+
 // Signs a calibration spec for the project (newest floor plan unless one is named) and starts a run with it
-export async function startAutomation(projectId: string, floorplanId?: string): Promise<AutomationJob> {
+export async function startAutomation(
+  projectId: string,
+  floorplanId?: string,
+  options?: StartAutomationOptions,
+): Promise<AutomationJob> {
   const spec = await requestCalibrationSpec(projectId, floorplanId);
+  const recordSeconds = options?.recordSeconds;
+  const body =
+    recordSeconds !== undefined ? { Spec: spec.Spec, Record: { Seconds: recordSeconds } } : { Spec: spec.Spec };
   return withAmcTicket(projectId, (t) =>
-    workstationFetch<AutomationJob>(t.WorkstationUrl, t.Ticket, "/amc/automation/start", "POST", { Spec: spec.Spec }),
+    workstationFetch<AutomationJob>(t.WorkstationUrl, t.Ticket, "/amc/automation/start", "POST", body),
   );
 }
 
