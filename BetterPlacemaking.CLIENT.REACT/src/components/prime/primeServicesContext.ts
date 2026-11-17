@@ -54,6 +54,7 @@ export class PrimeBus {
   private msg = new Set<Listener<ToastMessage[]>>();
   private clr = new Set<Listener<string | undefined>>();
   private conf = new Set<Listener<Confirmation | null>>();
+  private rem = new Set<Listener<unknown>>();
   onMessage(fn: Listener<ToastMessage[]>) {
     this.msg.add(fn);
     return () => void this.msg.delete(fn);
@@ -61,6 +62,10 @@ export class PrimeBus {
   onClear(fn: Listener<string | undefined>) {
     this.clr.add(fn);
     return () => void this.clr.delete(fn);
+  }
+  onRemove(fn: Listener<unknown>) {
+    this.rem.add(fn);
+    return () => void this.rem.delete(fn);
   }
   onConfirm(fn: Listener<Confirmation | null>) {
     this.conf.add(fn);
@@ -72,6 +77,10 @@ export class PrimeBus {
   }
   clear(key?: string) {
     this.clr.forEach((f) => f(key));
+  }
+  /** Removes the messages added with this `id`, such as a sticky one whose wait is over. */
+  remove(id: unknown) {
+    this.rem.forEach((f) => f(id));
   }
   confirm(c: Confirmation | null) {
     this.conf.forEach((f) => f(c));

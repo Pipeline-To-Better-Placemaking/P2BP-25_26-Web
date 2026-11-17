@@ -27,6 +27,7 @@ import {
   describeWorkstationError,
   getAutomation,
   getWorkstationProject,
+  isDownloadable,
   isMixedContent,
   isNotConfigured,
   listProjectFiles,
@@ -655,7 +656,7 @@ function AutomationPanel({
   function confirmCancel() {
     confirmation.confirm({
       header: "Cancel run",
-      message: "Cancel the automated calibration run? Steps already done in AMC stay done.",
+      message: "Cancel the automated calibration run? Footage recorded by this run is deleted and the AMC project is reset to empty. Earlier footage and calibrations are kept.",
       icon: "pi pi-exclamation-triangle",
       rejectButtonStyleClass: "p-button-text",
       acceptLabel: "Cancel run",
@@ -898,15 +899,19 @@ function FilesPanel({
                   <td className="py-2 pr-4 whitespace-nowrap">{formatBytes(f.Size)}</td>
                   <td className="py-2 pr-4 whitespace-nowrap">{formatUnix(f.ModifiedAt)}</td>
                   <td className="py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => void download(f.Path)}
-                      aria-label={`Download ${f.Path}`}
-                      className={SECONDARY_BUTTON}
-                    >
-                      <FontAwesomeIcon icon={faDownload} className="text-xs" />
-                      Download
-                    </button>
+                    {isDownloadable(f) ? (
+                      <button
+                        type="button"
+                        onClick={() => void download(f.Path)}
+                        aria-label={`Download ${f.Path}`}
+                        className={SECONDARY_BUTTON}
+                      >
+                        <FontAwesomeIcon icon={faDownload} className="text-xs" />
+                        Download
+                      </button>
+                    ) : (
+                      <span className="text-xs text-ink-muted whitespace-nowrap">Stays on the workstation</span>
+                    )}
                   </td>
                 </tr>
               ))}

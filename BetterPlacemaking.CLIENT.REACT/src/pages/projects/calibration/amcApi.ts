@@ -61,11 +61,21 @@ export interface ProvisionResult {
   Ticket: WorkstationTicket;
 }
 
-// One file in the project's folder; Path is relative with "/" separators, ModifiedAt is Unix seconds
+// One file in the project's folder; Path is relative with "/" separators, ModifiedAt is Unix seconds.
+// Downloadable is false for video files, which stay on the workstation; older workstations omit it.
 export interface WorkstationFile {
   Path: string;
   Size: number;
   ModifiedAt: number;
+  Downloadable?: boolean;
+}
+
+// What the workstation removed for DELETE /projects/current; Leftover is a renamed folder it could not remove
+export interface WorkstationDeleteResult {
+  Folder: string;
+  AmcProjectId: string | null;
+  AmcProjectDeleted: boolean;
+  Leftover: string | null;
 }
 
 export type AutomationStepState = "pending" | "running" | "done" | "skipped" | "waiting" | "failed";
@@ -109,12 +119,21 @@ export type WorkstationErrorKind = "unreachable" | "unauthorized" | "forbidden" 
 export class WorkstationError extends Error {
   kind: WorkstationErrorKind;
   status?: number;
+  // Seconds from a Retry-After header, when the response carried a readable one
+  retryAfter?: number;
 
-  constructor(kind: WorkstationErrorKind, message: string, status?: number) {
+  constructor(kind: WorkstationErrorKind, message: string, status?: number, retryAfter?: number) {
     super(message);
     this.kind = kind;
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+// Retry-After as whole seconds; null when missing (or not exposed by CORS) or given as a date
+export function parseRetryAfter(value: string | null): number | null {
+  if (value === null || !/^\s*\d+\s*$/.test(value)) return null;
+  return Number(value.trim());
 }
 
 export function normalizeAmcUrl(raw: string): string | null {
@@ -140,6 +159,11 @@ function projectPath(projectId: string): string {
 
 export function requestTicket(projectId: string): Promise<WorkstationTicket> {
   return api.post<WorkstationTicket>(`${projectPath(projectId)}/ticket`);
+}
+
+// Needs Project.Delete; scope amc-delete, only accepted by DELETE /projects/current
+export function requestDeleteTicket(projectId: string): Promise<WorkstationTicket> {
+  return api.post<WorkstationTicket>(`${projectPath(projectId)}/delete-ticket`);
 }
 
 // Needs Project.Update; 400 when the project has no workstation folder
@@ -180,7 +204,7 @@ async function workstationFetch<T>(
   baseUrl: string,
   ticket: string,
   path: string,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   body?: unknown,
 ): Promise<T> {
   const headers: Record<string, string> = { Authorization: `Bearer ${ticket}` };
@@ -209,7 +233,12 @@ async function workstationFetch<T>(
     if (res.status === 403) {
       throw new WorkstationError("forbidden", detail || "This workstation isn't set up for this project.", 403);
     }
-    throw new WorkstationError("server", detail || `Workstation service error (${res.status}).`, res.status);
+    throw new WorkstationError(
+      "server",
+      detail || `Workstation service error (${res.status}).`,
+      res.status,
+      parseRetryAfter(res.headers.get("Retry-After")) ?? undefined,
+    );
   }
   return (await res.json()) as T;
 }
@@ -263,9 +292,14 @@ async function withAmcTicket<T>(projectId: string, call: (ticket: WorkstationTic
     return await call(await amcTicket(projectId));
   } catch (err) {
     if (!(err instanceof WorkstationError && err.kind === "unauthorized")) throw err;
-    amcTickets.delete(ticketKey(projectId));
+    forgetTicket(projectId);
     return call(await amcTicket(projectId));
   }
+}
+
+// Drops the cached amc ticket for the project, such as after its folder is deleted
+function forgetTicket(projectId: string): void {
+  amcTickets.delete(ticketKey(projectId));
 }
 
 // -- project folder -----------------------------------------------------------
@@ -284,6 +318,75 @@ export async function provisionProject(projectId: string): Promise<ProvisionResu
     Binding: binding,
     Ticket: { Ticket: provision.Ticket, ExpiresAt: provision.ExpiresAt, WorkstationUrl: provision.WorkstationUrl },
   };
+}
+
+// True when a workstation delete failed only because the workstation has no folder for the project
+export function isAlreadyDeleted(err: unknown): boolean {
+  return err instanceof WorkstationError && err.status === 404;
+}
+
+// How long a delete keeps retrying while the workstation starts AMC, and the wait when a 503
+// carries no readable Retry-After (older workstations don't expose it through CORS)
+export const AMC_START_WAIT_MS = 180_000;
+export const DEFAULT_RETRY_AFTER_S = 15;
+
+export interface DeleteWorkstationOptions {
+  // Called before each wait while the workstation starts AMC, with the seconds until the retry
+  onStartingAmc?: (retryInSeconds: number) => void;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+// Deletes the project's folder and AMC project on the workstation. Resolves null when the workstation
+// has no folder for the project, which leaves nothing to clean up. A 503 means the workstation is
+// starting AMC: the call waits and retries for up to AMC_START_WAIT_MS.
+export async function deleteWorkstationProject(
+  projectId: string,
+  options: DeleteWorkstationOptions = {},
+): Promise<WorkstationDeleteResult | null> {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+
+  const ticket = await requestDeleteTicket(projectId);
+  if (isMixedContent(ticket.WorkstationUrl)) {
+    throw new WorkstationError(
+      "unreachable",
+      `This page is served over HTTPS but the workstation is at ${ticket.WorkstationUrl}, so the browser blocks the connection.`,
+    );
+  }
+
+  const deadline = now() + AMC_START_WAIT_MS;
+  let result: WorkstationDeleteResult | null;
+  for (;;) {
+    try {
+      result = await workstationFetch<WorkstationDeleteResult>(
+        ticket.WorkstationUrl,
+        ticket.Ticket,
+        "/projects/current",
+        "DELETE",
+      );
+      break;
+    } catch (err) {
+      if (isAlreadyDeleted(err)) {
+        result = null;
+        break;
+      }
+      if (!(err instanceof WorkstationError && err.status === 503)) throw err;
+      const remaining = deadline - now();
+      if (remaining <= 0) {
+        throw new WorkstationError(
+          "server",
+          "AMC did not become ready on the workstation within three minutes.",
+          503,
+        );
+      }
+      const waitS = err.retryAfter ?? DEFAULT_RETRY_AFTER_S;
+      options.onStartingAmc?.(waitS);
+      await sleep(Math.min(waitS * 1000, remaining));
+    }
+  }
+  forgetTicket(projectId);
+  return result;
 }
 
 // The project's binding, or null when the workstation has no folder for it. Uses the given ticket
@@ -308,6 +411,19 @@ export async function getWorkstationProject(
     if (err instanceof WorkstationError && err.status === 404) return null;
     throw err;
   }
+}
+
+// Video files stay on the workstation: anything under footage/ or with one of these suffixes
+const VIDEO_SUFFIXES = [".mp4", ".mkv", ".mov", ".avi", ".ts", ".h264", ".h265"];
+
+export function isVideoPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.startsWith("footage/") || VIDEO_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
+
+// Honors the workstation's Downloadable flag, falling back to the video rule when it is missing
+export function isDownloadable(file: WorkstationFile): boolean {
+  return file.Downloadable ?? !isVideoPath(file.Path);
 }
 
 export function listProjectFiles(projectId: string): Promise<WorkstationFile[]> {

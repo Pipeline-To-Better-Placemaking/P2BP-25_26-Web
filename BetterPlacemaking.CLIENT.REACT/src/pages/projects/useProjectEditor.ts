@@ -55,6 +55,8 @@ export function useProjectEditor(reload: () => void) {
   const toast = useToast();
   // Stops provisioning polls when the page goes away
   const alive = useRef(true);
+  // Ids of projects whose delete is in progress
+  const deleting = useRef(new Set<string>());
 
   useEffect(() => {
     alive.current = true;
@@ -188,22 +190,103 @@ export function useProjectEditor(reload: () => void) {
     });
   }
 
+  // Deletes the web project only, as before the workstation cleanup existed
+  async function deleteFromWebApp(project: ProjectDto) {
+    try {
+      await projectApi.deleteProject(project.Id);
+    } catch (err) {
+      console.error("Error deleting project:", err);
+      reportError("Couldn't delete the project", err);
+      return;
+    }
+    reload();
+  }
+
+  // Offered when the workstation could not delete the folder: delete only the web project, or stop
+  function offerWebOnlyDelete(project: ProjectDto, folder: string, err: unknown) {
+    confirmation.confirm({
+      header: "Workstation cleanup failed",
+      message:
+        `Couldn't delete ${folder} on the workstation: ${amcApi.describeWorkstationError(err).replace(/\.?\s*$/, ".")} ` +
+        `Delete from the web app only? The folder and its AMC project stay on the workstation.`,
+      icon: "pi pi-exclamation-triangle",
+      acceptButtonStyleClass: "p-button-danger",
+      rejectButtonStyleClass: "p-button-text",
+      acceptLabel: "Delete from the web app only",
+      rejectLabel: "Cancel",
+      accept: () => void runDelete(project, null),
+    });
+  }
+
+  // Workstation first, so a failure there leaves the web project in place to retry
+  async function deleteWithWorkstation(project: ProjectDto, folder: string) {
+    // Shown for as long as the workstation is starting AMC, removed when the delete settles
+    const startingToastId = `delete-starting-amc-${project.Id}`;
+    let startingShown = false;
+    try {
+      const result = await amcApi.deleteWorkstationProject(project.Id, {
+        onStartingAmc: () => {
+          if (startingShown) return;
+          startingShown = true;
+          toast.add({
+            id: startingToastId,
+            severity: "info",
+            summary: "Workstation",
+            detail: `Starting AMC on the workstation to delete ${folder}; this can take a few minutes.`,
+            sticky: true,
+          });
+        },
+      });
+      if (startingShown) toast.remove(startingToastId);
+      if (result?.Leftover) {
+        toast.add({
+          severity: "warn",
+          summary: "Workstation",
+          detail: `${folder} was deleted, but ${result.Leftover} could not be removed from the workstation.`,
+          life: 10000,
+        });
+      }
+    } catch (err) {
+      if (startingShown) toast.remove(startingToastId);
+      // Not configured for workstation control: nothing to clean up from here
+      if (!amcApi.isNotConfigured(err)) {
+        offerWebOnlyDelete(project, folder, err);
+        return;
+      }
+    }
+    await deleteFromWebApp(project);
+  }
+
+  // A project whose delete is in progress ignores further Delete clicks until it settles
+  async function runDelete(project: ProjectDto, folder: string | null | undefined) {
+    if (deleting.current.has(project.Id)) return;
+    deleting.current.add(project.Id);
+    try {
+      await (folder ? deleteWithWorkstation(project, folder) : deleteFromWebApp(project));
+    } finally {
+      deleting.current.delete(project.Id);
+    }
+  }
+
   function deleteProject(project: ProjectDto) {
     if (!project.Id) return;
+    if (deleting.current.has(project.Id)) {
+      toast.add({ severity: "info", summary: "Delete Project", detail: "This project is already being deleted.", life: 5000 });
+      return;
+    }
+    const name = project.Title || project.Id;
+    const folder = project.WorkstationFolder;
     confirmation.confirm({
       header: "Delete Project",
-      message: `Delete project "${project.Title || project.Id}"? This cannot be undone.`,
+      message: folder
+        ? `Delete project "${name}"? Its workstation folder ${folder} (footage, floor plan, calibrations) and its AMC project are deleted too. This cannot be undone.`
+        : `Delete project "${name}"? This cannot be undone.`,
       icon: "pi pi-exclamation-triangle",
       acceptButtonStyleClass: "p-button-danger",
       rejectButtonStyleClass: "p-button-text",
       acceptLabel: "Delete",
       rejectLabel: "Cancel",
-      accept: () => {
-        projectApi
-          .deleteProject(project.Id)
-          .then(reload)
-          .catch((err) => console.error("Error deleting project:", err));
-      },
+      accept: () => void runDelete(project, folder),
     });
   }
 
