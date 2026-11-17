@@ -5,6 +5,8 @@ export interface ProjectInput {
   Title?: string;
   Description?: string;
   Location?: string;
+  /** null or "" means no folder; set-once on update (omit to leave it alone). */
+  WorkstationFolder?: string | null;
 }
 
 export function getProjects(): Promise<ProjectDto[]> {
