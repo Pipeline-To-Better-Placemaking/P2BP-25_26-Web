@@ -162,3 +162,82 @@ describe("POST /api/workstation/project/:projectId/provision", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("POST /api/workstation/project/:projectId/delete-ticket", () => {
+  const deleteTicket = (projectId: string) =>
+    request(createApp())
+      .post(`/api/workstation/project/${projectId}/delete-ticket`)
+      .set("Authorization", authHeader());
+
+  it("issues a 5 minute amc-delete ticket and the workstation URL", async () => {
+    const res = await deleteTicket("proj-1");
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(["ExpiresAt", "Ticket", "WorkstationUrl"]);
+    expect(res.body.WorkstationUrl).toBe("https://p2bp-workstation.tail1.ts.net");
+
+    const ticket = decode(res.body.Ticket);
+    expect(ticket).toMatchObject({ sub: "user-1", pid: "proj-1", scope: "amc-delete", aud: "p2bp-workstation" });
+    expect(ticket.iss).toBe(env.jwtIssuer);
+    expect(ticket.exp! - ticket.iat!).toBe(5 * 60);
+
+    const expiresAt = new Date(res.body.ExpiresAt).getTime();
+    expect(expiresAt).toBeGreaterThan(Date.now());
+    expect(expiresAt).toBeLessThanOrEqual(ticket.exp! * 1000 + 1000);
+  });
+
+  it("does not follow WORKSTATION_AMC_TICKET_MINUTES", async () => {
+    env.workstationAmcTicketMinutes = 40;
+    const ticket = decode((await deleteTicket("proj-1")).body.Ticket);
+    expect(ticket.exp! - ticket.iat!).toBe(5 * 60);
+  });
+
+  it("issues a ticket for a project without a workstation folder", async () => {
+    // The workstation answers 404 for it, which the web app treats as deleted.
+    const res = await deleteTicket("proj-2");
+    expect(res.status).toBe(200);
+    expect(decode(res.body.Ticket).pid).toBe("proj-2");
+  });
+
+  it("differs in scope from the control and provision tickets", async () => {
+    const app = createApp();
+    const amc = await request(app).post("/api/workstation/project/proj-1/ticket").set("Authorization", authHeader());
+    const del = await deleteTicket("proj-1");
+    expect(decode(amc.body.Ticket).scope).toBe("amc");
+    expect(decode(del.body.Ticket).scope).toBe("amc-delete");
+  });
+
+  it("is a 404 for an unknown project", async () => {
+    const res = await deleteTicket("nope");
+    expect(res.status).toBe(404);
+    expect(res.body.Ticket).toBeUndefined();
+  });
+
+  it("is a 503 until the secret and the workstation URL are both set", async () => {
+    env.workstationTicketSecret = undefined;
+    const noSecret = await deleteTicket("proj-1");
+    expect(noSecret.status).toBe(503);
+    expect(noSecret.body).toEqual({ Message: "Workstation control is not configured." });
+
+    env.workstationTicketSecret = SECRET;
+    env.workstationAmcUrl = undefined;
+    expect((await deleteTicket("proj-1")).status).toBe(503);
+  });
+
+  it("checks Project.Delete on the requested project", async () => {
+    await deleteTicket("proj-1");
+    expect(hasProjectPermission).toHaveBeenCalledWith("user-1", "User", "proj-1", "Project.Delete");
+  });
+
+  it("refuses (403) a user with only Project.Update", async () => {
+    hasProjectPermission.mockImplementation(async (...args: unknown[]) => args[3] === "Project.Update");
+    const res = await deleteTicket("proj-1");
+    expect(res.status).toBe(403);
+    expect(res.body.Ticket).toBeUndefined();
+  });
+
+  it("requires a login (401)", async () => {
+    const res = await request(createApp()).post("/api/workstation/project/proj-1/delete-ticket");
+    expect(res.status).toBe(401);
+  });
+});
