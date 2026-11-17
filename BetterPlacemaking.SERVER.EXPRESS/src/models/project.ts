@@ -3,6 +3,7 @@ export interface ProjectDoc {
   Title?: string | null;
   Description?: string | null;
   Location?: string | null;
+  WorkstationFolder?: string | null;
 }
 
 export interface Project extends ProjectDoc {
@@ -14,6 +15,7 @@ export interface ProjectDto {
   Title?: string | null;
   Description?: string | null;
   Location?: string | null;
+  WorkstationFolder: string | null;
 }
 
 export function toProjectDto(project: Project): ProjectDto {
@@ -22,5 +24,6 @@ export function toProjectDto(project: Project): ProjectDto {
     Title: project.Title ?? null,
     Description: project.Description ?? null,
     Location: project.Location ?? null,
+    WorkstationFolder: project.WorkstationFolder ?? null,
   };
 }

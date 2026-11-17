@@ -65,6 +65,22 @@ describe("projectService.update", () => {
   });
 });
 
+describe("projectService workstation folder", () => {
+  it("throws WorkstationFolderConflictError for a folder another project holds", async () => {
+    await projectService.create({ WorkstationFolder: "svc-race" }, "u1");
+    const other = await projectService.create({ Title: "Other" }, "u1");
+    await expect(projectService.update(other.Id, { WorkstationFolder: "svc-race" })).rejects.toBeInstanceOf(
+      projectService.WorkstationFolderConflictError,
+    );
+  });
+
+  it("leaves the folder unchanged when the update omits it", async () => {
+    const project = await projectService.create({ WorkstationFolder: "svc-keep" }, "u1");
+    expect(await projectService.update(project.Id, { Title: "x" })).toBe(true);
+    expect((await projectService.getById(project.Id))?.WorkstationFolder).toBe("svc-keep");
+  });
+});
+
 describe("projectService.deleteProject", () => {
   it("deletes the project and cascades members", async () => {
     const project = await projectService.create({ Title: "Del" }, "u1");

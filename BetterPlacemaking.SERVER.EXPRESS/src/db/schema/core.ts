@@ -72,14 +72,19 @@ export const userGlobalRoles = pgTable("user_global_roles", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
-/** Legacy `projects`. */
-export const projects = pgTable("projects", {
-  id: id(),
-  title: text("title"),
-  description: text("description"),
-  location: text("location"),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+/** Legacy `projects`. `workstation_folder` is the project's folder on the DeepStream workstation; set once. */
+export const projects = pgTable(
+  "projects",
+  {
+    id: id(),
+    title: text("title"),
+    description: text("description"),
+    location: text("location"),
+    workstationFolder: text("workstation_folder"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("projects_workstation_folder_uq").on(t.workstationFolder)],
+);
 
 /** Legacy `projects/{id}/members/{userId}`; one row per (project, user). */
 export const projectMembers = pgTable(
