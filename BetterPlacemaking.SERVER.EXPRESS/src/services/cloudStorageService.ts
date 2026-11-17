@@ -12,6 +12,8 @@ export interface RequestUploadUrlInput {
 
 export interface RequestDownloadUrlInput {
   PathFromRoot?: string;
+  /** How long the link works, at most and by default DOWNLOAD_URL_TTL_SECONDS (7 days). */
+  TtlSeconds?: number;
 }
 
 export interface SignedUrlResult {
@@ -146,7 +148,10 @@ export async function createSignedDownloadUrl(input: RequestDownloadUrlInput): P
   const segments = objectName.split("/");
   const filename = segments[segments.length - 1];
 
-  const ttlSeconds = DOWNLOAD_URL_TTL_SECONDS;
+  const ttlSeconds =
+    input.TtlSeconds && input.TtlSeconds > 0
+      ? Math.min(Math.floor(input.TtlSeconds), DOWNLOAD_URL_TTL_SECONDS)
+      : DOWNLOAD_URL_TTL_SECONDS;
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
   const { data, error } = await getStorageBucket().createSignedUrl(objectName, ttlSeconds, { download: filename });
