@@ -139,7 +139,7 @@ export function PrimeServicesProvider({ children }: { children?: ReactNode }) {
   );
 }
 
-/** MessageService equivalent. `add({ severity, summary, detail, life, sticky, key, ... })`, `addAll([...])`, `clear(key?)`. */
+/** MessageService equivalent. `add({ severity, summary, detail, life, sticky, key, ... })`, `addAll([...])`, `clear(key?)`, `remove(id)`. */
 export function useToast() {
   const { bus } = usePrimeServices();
   return useMemo(
@@ -147,6 +147,7 @@ export function useToast() {
       add: (m: ToastMessage) => bus.add(m),
       addAll: (m: ToastMessage[]) => bus.add(m),
       clear: (key?: string) => bus.clear(key),
+      remove: (id: unknown) => bus.remove(id),
     }),
     [bus],
   );

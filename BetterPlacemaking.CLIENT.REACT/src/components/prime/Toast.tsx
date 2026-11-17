@@ -142,9 +142,13 @@ export function Toast({ toastKey, position = "top-right", life = 3000, className
     const off2 = bus.onClear((key) => {
       if (key === undefined || key === toastKey) setItems([]);
     });
+    const off3 = bus.onRemove((id) => {
+      setItems((cur) => (cur.some((m) => m.id === id) ? cur.filter((m) => m.id !== id) : cur));
+    });
     return () => {
       off1();
       off2();
+      off3();
     };
   }, [bus, toastKey, preventDuplicates]);
 

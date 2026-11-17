@@ -55,6 +55,8 @@ export function useProjectEditor(reload: () => void) {
   const toast = useToast();
   // Stops provisioning polls when the page goes away
   const alive = useRef(true);
+  // Ids of projects whose delete is in progress
+  const deleting = useRef(new Set<string>());
 
   useEffect(() => {
     alive.current = true;
@@ -212,26 +214,30 @@ export function useProjectEditor(reload: () => void) {
       rejectButtonStyleClass: "p-button-text",
       acceptLabel: "Delete from the web app only",
       rejectLabel: "Cancel",
-      accept: () => void deleteFromWebApp(project),
+      accept: () => void runDelete(project, null),
     });
   }
 
   // Workstation first, so a failure there leaves the web project in place to retry
   async function deleteWithWorkstation(project: ProjectDto, folder: string) {
+    // Shown for as long as the workstation is starting AMC, removed when the delete settles
+    const startingToastId = `delete-starting-amc-${project.Id}`;
+    let startingShown = false;
     try {
-      let startingShown = false;
       const result = await amcApi.deleteWorkstationProject(project.Id, {
         onStartingAmc: () => {
           if (startingShown) return;
           startingShown = true;
           toast.add({
+            id: startingToastId,
             severity: "info",
             summary: "Workstation",
             detail: `Starting AMC on the workstation to delete ${folder}; this can take a few minutes.`,
-            life: 15000,
+            sticky: true,
           });
         },
       });
+      if (startingShown) toast.remove(startingToastId);
       if (result?.Leftover) {
         toast.add({
           severity: "warn",
@@ -241,6 +247,7 @@ export function useProjectEditor(reload: () => void) {
         });
       }
     } catch (err) {
+      if (startingShown) toast.remove(startingToastId);
       // Not configured for workstation control: nothing to clean up from here
       if (!amcApi.isNotConfigured(err)) {
         offerWebOnlyDelete(project, folder, err);
@@ -250,8 +257,23 @@ export function useProjectEditor(reload: () => void) {
     await deleteFromWebApp(project);
   }
 
+  // A project whose delete is in progress ignores further Delete clicks until it settles
+  async function runDelete(project: ProjectDto, folder: string | null | undefined) {
+    if (deleting.current.has(project.Id)) return;
+    deleting.current.add(project.Id);
+    try {
+      await (folder ? deleteWithWorkstation(project, folder) : deleteFromWebApp(project));
+    } finally {
+      deleting.current.delete(project.Id);
+    }
+  }
+
   function deleteProject(project: ProjectDto) {
     if (!project.Id) return;
+    if (deleting.current.has(project.Id)) {
+      toast.add({ severity: "info", summary: "Delete Project", detail: "This project is already being deleted.", life: 5000 });
+      return;
+    }
     const name = project.Title || project.Id;
     const folder = project.WorkstationFolder;
     confirmation.confirm({
@@ -264,7 +286,7 @@ export function useProjectEditor(reload: () => void) {
       rejectButtonStyleClass: "p-button-text",
       acceptLabel: "Delete",
       rejectLabel: "Cancel",
-      accept: () => void (folder ? deleteWithWorkstation(project, folder) : deleteFromWebApp(project)),
+      accept: () => void runDelete(project, folder),
     });
   }
 
