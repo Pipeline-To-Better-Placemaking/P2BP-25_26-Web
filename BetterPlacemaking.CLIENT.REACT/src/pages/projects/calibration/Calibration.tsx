@@ -103,18 +103,20 @@ const STEP_SEVERITY: Record<AutomationStepState, Severity> = {
   failed: "danger",
 };
 
-// States the workstation will accept a continue for
+// States the workstation will accept a continue or a cancel for
 const RESUMABLE: AutomationJobState[] = ["waiting_for_user", "failed", "interrupted"];
+const CANCELLABLE: AutomationJobState[] = ["running", ...RESUMABLE];
+
+function isActiveState(state: AutomationJobState | null | undefined): boolean {
+  return state === "running" || state === "waiting_for_user";
+}
 
 function isActive(job: AutomationJob | null): boolean {
-  return job?.State === "running" || job?.State === "waiting_for_user";
+  return isActiveState(job?.State);
 }
 
-// Readable message for any failure; a 409 means the workstation is busy with something else
-function describe(err: unknown): string {
-  if (err instanceof WorkstationError && err.status === 409) return `The workstation is busy: ${err.message}`;
-  return describeWorkstationError(err);
-}
+// Readable message for any failure; the workstation's own detail (such as why it is busy) is shown as is
+const describe = describeWorkstationError;
 
 function formatUnix(seconds: number | null | undefined): string {
   if (!seconds) return "Never";
@@ -332,7 +334,7 @@ function WorkstationProjectPanel({
 
   return (
     <Panel title="Workstation Project" actions={actions}>
-      {body}
+      <div aria-live="polite">{body}</div>
       {stalled && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Message severity="warn" text={stalled} />
@@ -360,7 +362,16 @@ function WorkstationProjectPanel({
 
 // -- AMC ----------------------------------------------------------------------------
 
-function AmcPanel({ projectId, initialTicket }: { projectId: string; initialTicket: WorkstationTicket }) {
+function AmcPanel({
+  projectId,
+  initialTicket,
+  runState,
+}: {
+  projectId: string;
+  initialTicket: WorkstationTicket;
+  // The automated run's state: the runner starts and uses AMC itself
+  runState: AutomationJobState | null;
+}) {
   const confirmation = useConfirm();
   const ticket = useRef(initialTicket);
   const [status, setStatus] = useState<AmcStatus | null>(null);
@@ -397,10 +408,10 @@ function AmcPanel({ projectId, initialTicket }: { projectId: string; initialTick
     call("/amc/status", "GET")
       .then(setStatus)
       .catch((err: unknown) => setError(describe(err)));
-  }, [call]);
+  }, [call, runState]);
 
   const transitioning = status?.State === "starting" || status?.State === "stopping";
-  usePolling(transitioning, AMC_POLL_MS, refresh);
+  usePolling(transitioning || isActiveState(runState), AMC_POLL_MS, refresh);
 
   async function act(path: "/amc/start" | "/amc/stop") {
     setPending(true);
@@ -459,7 +470,7 @@ function AmcPanel({ projectId, initialTicket }: { projectId: string; initialTick
       <p className="text-sm text-ink-muted">
         The calibration app on the workstation. It is shared by every project, so one person calibrates at a time.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-ink">
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-ink" aria-live="polite">
         <span>Status</span>
         {status ? <Tag value={status.State} severity={AMC_SEVERITY[status.State]} /> : <span className="text-ink-muted">Unknown</span>}
         {transitioning && <span className="text-ink-muted">Updating...</span>}
@@ -542,10 +553,12 @@ function AutomationPanel({
   projectId,
   ready,
   onRunFinished,
+  onStateChange,
 }: {
   projectId: string;
   ready: boolean;
   onRunFinished: () => void;
+  onStateChange: (state: AutomationJobState | null) => void;
 }) {
   const confirmation = useConfirm();
   const [job, setJob] = useState<AutomationJob | null>(null);
@@ -562,9 +575,10 @@ function AutomationPanel({
       const prev = lastJob.current;
       lastJob.current = next;
       setJob(next);
-      if (prev && next && isActive(prev) && !isActive(next) && next.ProjectId === projectId) onRunFinished();
+      if (prev?.State !== next?.State) onStateChange(next?.State ?? null);
+      if (prev && next && isActive(prev) && !isActive(next)) onRunFinished();
     },
-    [projectId, onRunFinished],
+    [onRunFinished, onStateChange],
   );
 
   const refresh = useCallback(async () => {
@@ -618,12 +632,10 @@ function AutomationPanel({
     });
   }
 
-  // AMC is shared: the last run may belong to another project
-  const ownJob = job?.ProjectId === projectId ? job : null;
-  const otherBusy = !!job && job.ProjectId !== projectId && isActive(job);
+  // A refused start, continue or cancel (409) shows the workstation's reason, such as another project's run
   const canStart = ready && loaded && !pending && !isActive(job);
-  const canContinue = !pending && !!ownJob && RESUMABLE.includes(ownJob.State);
-  const canCancel = !pending && isActive(ownJob);
+  const canContinue = !pending && !!job && RESUMABLE.includes(job.State);
+  const canCancel = !pending && !!job && CANCELLABLE.includes(job.State);
 
   return (
     <Panel
@@ -677,15 +689,10 @@ function AutomationPanel({
         </label>
       )}
 
-      {otherBusy && job && (
-        <Message
-          severity="warn"
-          text={`AMC is running calibration for ${job.ProjectTitle || "another project"}. Wait for it to finish.`}
-          className="mt-4"
-        />
-      )}
-      {loaded && !ownJob && !otherBusy && <p className="mt-4 text-sm text-ink-muted">No automated run for this project yet.</p>}
-      {ownJob && <JobDetails job={ownJob} />}
+      <div aria-live="polite">
+        {loaded && !job && <p className="mt-4 text-sm text-ink-muted">No automated run for this project yet.</p>}
+        {job && <JobDetails job={job} />}
+      </div>
       <ErrorText message={error} />
     </Panel>
   );
@@ -695,30 +702,43 @@ function AutomationPanel({
 
 function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: string }) {
   const [files, setFiles] = useState<WorkstationFile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The reloadKey the shown listing answers; loading until it matches the current one
+  const [settledKey, setSettledKey] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // Only the newest request may update the listing, so a slow older one can't overwrite it
+  const latestRequest = useRef(0);
+  const loading = refreshing || settledKey !== reloadKey;
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setFiles(await listProjectFiles(projectId));
-      setError(null);
-    } catch (err) {
-      setError(describe(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const load = useCallback(
+    (key: string) => {
+      const request = ++latestRequest.current;
+      const isLatest = () => request === latestRequest.current;
+      return listProjectFiles(projectId)
+        .then((items) => {
+          if (!isLatest()) return;
+          setFiles(items);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (isLatest()) setError(describe(err));
+        })
+        .finally(() => {
+          if (isLatest()) setSettledKey(key);
+        });
+    },
+    [projectId],
+  );
 
   useEffect(() => {
-    listProjectFiles(projectId)
-      .then((items) => {
-        setFiles(items);
-        setError(null);
-      })
-      .catch((err: unknown) => setError(describe(err)))
-      .finally(() => setLoading(false));
-  }, [projectId, reloadKey]);
+    void load(reloadKey);
+  }, [load, reloadKey]);
+
+  async function refresh() {
+    setRefreshing(true);
+    await load(reloadKey);
+    setRefreshing(false);
+  }
 
   // Resolves the link on click so its ticket is fresh, then lets the browser stream the file to disk
   async function download(path: string) {
@@ -749,7 +769,9 @@ function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: st
                 <th className="py-2 pr-4 font-medium">Path</th>
                 <th className="py-2 pr-4 font-medium">Size</th>
                 <th className="py-2 pr-4 font-medium">Modified</th>
-                <th className="py-2" />
+                <th className="py-2">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-ink">
@@ -759,7 +781,12 @@ function FilesPanel({ projectId, reloadKey }: { projectId: string; reloadKey: st
                   <td className="py-2 pr-4 whitespace-nowrap">{formatBytes(f.Size)}</td>
                   <td className="py-2 pr-4 whitespace-nowrap">{formatUnix(f.ModifiedAt)}</td>
                   <td className="py-2 text-right">
-                    <button type="button" onClick={() => void download(f.Path)} className={SECONDARY_BUTTON}>
+                    <button
+                      type="button"
+                      onClick={() => void download(f.Path)}
+                      aria-label={`Download ${f.Path}`}
+                      className={SECONDARY_BUTTON}
+                    >
                       <FontAwesomeIcon icon={faDownload} className="text-xs" />
                       Download
                     </button>
@@ -866,12 +893,18 @@ function ConnectedPanels({
   const bindingState = useWorkstationBinding(projectId, !!folder);
   const { binding, refresh } = bindingState;
   const onRunFinished = useCallback(() => void refresh(), [refresh]);
+  const [runState, setRunState] = useState<AutomationJobState | null>(null);
 
   return (
     <div className="flex flex-col gap-6">
       <WorkstationProjectPanel projectId={projectId} folder={folder} state={bindingState} />
-      <AmcPanel projectId={projectId} initialTicket={ticket} />
-      <AutomationPanel projectId={projectId} ready={binding?.State === "ready"} onRunFinished={onRunFinished} />
+      <AmcPanel projectId={projectId} initialTicket={ticket} runState={runState} />
+      <AutomationPanel
+        projectId={projectId}
+        ready={binding?.State === "ready"}
+        onRunFinished={onRunFinished}
+        onStateChange={setRunState}
+      />
       {binding && <FilesPanel projectId={projectId} reloadKey={`${binding.State}:${binding.LastRunAt ?? 0}`} />}
     </div>
   );
