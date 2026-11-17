@@ -45,6 +45,7 @@ beforeAll(async () => {
     { id: "proj-1", title: "Living Room" },
     { id: "proj-2", title: "  " },
     { id: "proj-3", title: "Other" },
+    { id: "proj-4", title: "Lobby", workstationFolder: "lobby-east" },
   ]);
   const base = { userId: "user-1", imageSizeBytes: 10, imageContentType: "image/png" };
   await db.insert(floorplanLibrary).values([
@@ -88,6 +89,7 @@ describe("POST /api/workstation/project/:projectId/calibration-spec", () => {
       FloorplanId: "fp-new",
       FloorplanNickname: "Ground floor",
       LayoutPxPerM: 100,
+      WorkstationFolder: null,
     });
     const claims = decode(res.body.Spec);
     expect(claims).toMatchObject({ sub: "user-1", pid: "proj-1", scope: "amc-calibration-spec" });
@@ -118,6 +120,18 @@ describe("POST /api/workstation/project/:projectId/calibration-spec", () => {
     expect(res.status).toBe(200);
     expect(res.body.Summary).toMatchObject({ ProjectTitle: "proj-2", FloorplanId: null, LayoutPxPerM: null });
     expect(decode(res.body.Spec).spec.floorplan).toBeNull();
+  });
+
+  it("carries a null folder when the project has no workstation folder", async () => {
+    const res = await post("proj-1");
+    expect(decode(res.body.Spec).spec).toHaveProperty("folder", null);
+  });
+
+  it("carries the project's workstation folder", async () => {
+    const res = await post("proj-4");
+    expect(res.status).toBe(200);
+    expect(res.body.Summary.WorkstationFolder).toBe("lobby-east");
+    expect(decode(res.body.Spec).spec.folder).toBe("lobby-east");
   });
 
   it("is a 404 for a project that does not exist", async () => {

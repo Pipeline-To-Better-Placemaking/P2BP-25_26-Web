@@ -10,6 +10,7 @@ export const CALIBRATION_SPEC_MINUTES = 15;
 
 export class ProjectNotFoundError extends Error {}
 export class FloorplanNotInProjectError extends Error {}
+export class WorkstationFolderMissingError extends Error {}
 
 export interface CalibrationSpecFloorplan {
   id: string;
@@ -25,6 +26,13 @@ export interface CalibrationSpecFloorplan {
 export interface CalibrationSpec {
   title: string;
   floorplan: CalibrationSpecFloorplan | null;
+  /** The project's workstation folder, or null when it has none. */
+  folder: string | null;
+}
+
+export interface CalibrationSpecOptions {
+  /** Refuse with WorkstationFolderMissingError when the project has no workstation folder. */
+  requireFolder?: boolean;
 }
 
 export interface CreatedCalibrationSpec {
@@ -56,12 +64,17 @@ export async function createCalibrationSpec(
   userId: string,
   projectId: string,
   floorplanId?: string,
+  options: CalibrationSpecOptions = {},
 ): Promise<CreatedCalibrationSpec> {
   const secret = env.workstationTicketSecret;
   if (!secret) throw new Error("WORKSTATION_TICKET_SECRET is not configured.");
 
   const [project] = await getDb().select().from(projects).where(eq(projects.id, projectId)).limit(1);
   if (!project) throw new ProjectNotFoundError("Project not found.");
+  const folder = project.workstationFolder ?? null;
+  if (options.requireFolder && !folder) {
+    throw new WorkstationFolderMissingError("This project has no workstation folder; set one before provisioning.");
+  }
 
   const row = await loadFloorplan(projectId, floorplanId);
   let floorplan: CalibrationSpecFloorplan | null = null;
@@ -81,7 +94,7 @@ export async function createCalibrationSpec(
     };
   }
 
-  const spec: CalibrationSpec = { title: project.title?.trim() || project.id, floorplan };
+  const spec: CalibrationSpec = { title: project.title?.trim() || project.id, floorplan, folder };
   const expiresAtUtc = new Date(Date.now() + CALIBRATION_SPEC_MINUTES * 60_000);
   const token = jwt.sign({ sub: userId, pid: projectId, scope: CALIBRATION_SPEC_SCOPE, spec }, secret, {
     algorithm: "HS256",
