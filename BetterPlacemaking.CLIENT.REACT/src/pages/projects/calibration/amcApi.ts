@@ -1,4 +1,5 @@
 import { api, ApiError } from "../../../auth/apiClient";
+import * as authStore from "../../../auth/authStore";
 
 //Client for controlling the AMC on the workstation
 
@@ -226,16 +227,33 @@ export function amcRequest(
 
 const TICKET_MARGIN_MS = 30_000;
 const amcTickets = new Map<string, WorkstationTicket>();
+let ticketsUserId: string | null = null;
+
+// Tickets belong to the user who asked for them: drop them all whenever the signed-in user changes
+authStore.subscribe((state) => {
+  const userId = state?.User.Id ?? null;
+  if (userId !== ticketsUserId) {
+    ticketsUserId = userId;
+    amcTickets.clear();
+  }
+});
 
 function isFresh(ticket: WorkstationTicket): boolean {
   return Date.parse(ticket.ExpiresAt) - Date.now() > TICKET_MARGIN_MS;
 }
 
+// Cache key: the signed-in user and the project, so a ticket is never reused by another user
+function ticketKey(projectId: string): string {
+  return `${authStore.getState()?.User.Id ?? ""}:${projectId}`;
+}
+
 async function amcTicket(projectId: string): Promise<WorkstationTicket> {
-  const cached = amcTickets.get(projectId);
+  const key = ticketKey(projectId);
+  const cached = amcTickets.get(key);
   if (cached && isFresh(cached)) return cached;
   const ticket = await requestTicket(projectId);
-  amcTickets.set(projectId, ticket);
+  // Skip caching if the user changed while the request was in flight
+  if (ticketKey(projectId) === key) amcTickets.set(key, ticket);
   return ticket;
 }
 
@@ -245,7 +263,7 @@ async function withAmcTicket<T>(projectId: string, call: (ticket: WorkstationTic
     return await call(await amcTicket(projectId));
   } catch (err) {
     if (!(err instanceof WorkstationError && err.kind === "unauthorized")) throw err;
-    amcTickets.delete(projectId);
+    amcTickets.delete(ticketKey(projectId));
     return call(await amcTicket(projectId));
   }
 }
@@ -277,7 +295,14 @@ export async function getWorkstationProject(
   const fetchCurrent = (t: WorkstationTicket) =>
     workstationFetch<WorkstationProject>(t.WorkstationUrl, t.Ticket, "/projects/current", "GET");
   try {
-    if (ticket && isFresh(ticket)) return await fetchCurrent(ticket);
+    if (ticket && isFresh(ticket)) {
+      try {
+        return await fetchCurrent(ticket);
+      } catch (err) {
+        // A rejected provision ticket falls back to the project's amc ticket once
+        if (!(err instanceof WorkstationError && err.kind === "unauthorized")) throw err;
+      }
+    }
     return await withAmcTicket(projectId, fetchCurrent);
   } catch (err) {
     if (err instanceof WorkstationError && err.status === 404) return null;
