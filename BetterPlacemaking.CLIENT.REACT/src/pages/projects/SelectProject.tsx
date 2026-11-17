@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import * as projectApi from "../../services/projectApi";
 import type { ProjectDto } from "../../lib/projectTypes";
-import { useConfirm, useDialogService } from "../../components/prime";
-import { ProjectForm } from "./ProjectForm";
+import { useProjectEditor } from "./useProjectEditor";
 import { HasPermission } from "../../auth/HasPermission";
 import { Permissions } from "../../lib/permissions";
 import { PageHeader } from "../../components/PageHeader";
@@ -19,8 +18,6 @@ import { DANGER_BUTTON, PRIMARY_BUTTON, SECONDARY_BUTTON } from "../../component
 export function SelectProject() {
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [managing, setManaging] = useState(false);
-  const dialogService = useDialogService();
-  const confirmation = useConfirm();
 
   function load() {
     projectApi
@@ -31,75 +28,7 @@ export function SelectProject() {
 
   useEffect(load, []);
 
-  const breakpoints = { "960px": "75vw", "640px": "90vw" };
-
-  function addProject() {
-    const ref = dialogService.open<ProjectDto | undefined, ProjectDto>(
-      ProjectForm,
-      {
-        header: "Add Project",
-        width: "50vw",
-        modal: true,
-        breakpoints,
-        closable: true,
-      },
-    );
-    ref?.onClose.then((project) => {
-      if (!project) return;
-      projectApi
-        .addProject({
-          Title: project.Title,
-          Description: project.Description,
-          Location: project.Location,
-        })
-        .then(load)
-        .catch((err) => console.error("Error adding project:", err));
-    });
-  }
-
-  function editProject(project: ProjectDto) {
-    const ref = dialogService.open<ProjectDto | undefined, ProjectDto>(
-      ProjectForm,
-      {
-        header: "Edit Project",
-        width: "50vw",
-        modal: true,
-        data: project,
-        breakpoints,
-        closable: true,
-      },
-    );
-    ref?.onClose.then((updated) => {
-      if (!updated) return;
-      projectApi
-        .updateProject(updated.Id, {
-          Title: updated.Title,
-          Description: updated.Description,
-          Location: updated.Location,
-        })
-        .then(load)
-        .catch((err) => console.error("Error updating project:", err));
-    });
-  }
-
-  function deleteProject(project: ProjectDto) {
-    if (!project.Id) return;
-    confirmation.confirm({
-      header: "Delete Project",
-      message: `Delete project "${project.Title || project.Id}"? This cannot be undone.`,
-      icon: "pi pi-exclamation-triangle",
-      acceptButtonStyleClass: "p-button-danger",
-      rejectButtonStyleClass: "p-button-text",
-      acceptLabel: "Delete",
-      rejectLabel: "Cancel",
-      accept: () => {
-        projectApi
-          .deleteProject(project.Id)
-          .then(load)
-          .catch((err) => console.error("Error deleting project:", err));
-      },
-    });
-  }
+  const { addProject, editProject, deleteProject } = useProjectEditor(load);
 
   return (
     <div className="w-full">
