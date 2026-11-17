@@ -7,6 +7,10 @@ import { env } from "../config/env.js";
 // two apart, so the workstation must check it.
 export const WORKSTATION_TICKET_AUDIENCE = "p2bp-workstation";
 export const WORKSTATION_TICKET_SCOPE = "amc";
+// Ticket for POST /projects on the workstation: creates the project's folder and
+// AMC project (hardware repo `installer/plan/AMC-WEB-PROJECTS.md`, section 9).
+export const WORKSTATION_PROVISION_TICKET_SCOPE = "amc-provision";
+export const WORKSTATION_PROVISION_TICKET_MINUTES = 15;
 
 export interface WorkstationTicket {
   ticket: string;
@@ -22,17 +26,29 @@ export function amcWorkstationUrl(): string | undefined {
   return env.workstationAmcUrl?.replace(/\/+$/, "");
 }
 
-export function createWorkstationTicket(userId: string, projectId: string): WorkstationTicket {
+function signWorkstationTicket(userId: string, projectId: string, scope: string, minutes: number): WorkstationTicket {
   const secret = env.workstationTicketSecret;
   if (!secret) throw new Error("WORKSTATION_TICKET_SECRET is not configured.");
 
-  const minutes = env.workstationAmcTicketMinutes;
   const expiresAtUtc = new Date(Date.now() + minutes * 60_000);
-  const ticket = jwt.sign({ sub: userId, pid: projectId, scope: WORKSTATION_TICKET_SCOPE }, secret, {
+  const ticket = jwt.sign({ sub: userId, pid: projectId, scope }, secret, {
     algorithm: "HS256",
     audience: WORKSTATION_TICKET_AUDIENCE,
     issuer: env.jwtIssuer,
     expiresIn: `${minutes}m`,
   });
   return { ticket, expiresAtUtc };
+}
+
+export function createWorkstationTicket(userId: string, projectId: string): WorkstationTicket {
+  return signWorkstationTicket(userId, projectId, WORKSTATION_TICKET_SCOPE, env.workstationAmcTicketMinutes);
+}
+
+export function createProvisionTicket(userId: string, projectId: string): WorkstationTicket {
+  return signWorkstationTicket(
+    userId,
+    projectId,
+    WORKSTATION_PROVISION_TICKET_SCOPE,
+    WORKSTATION_PROVISION_TICKET_MINUTES,
+  );
 }
