@@ -382,21 +382,36 @@ function WorkstationProjectPanel({
 
 // -- AMC ----------------------------------------------------------------------------
 
+function OpenAmcLink({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={SECONDARY_BUTTON}>
+      <FontAwesomeIcon icon={faUpRightFromSquare} className="text-xs" />
+      Open AMC
+    </a>
+  );
+}
+
 function AmcPanel({
   projectId,
   initialTicket,
   runState,
+  onUiUrlChange,
 }: {
   projectId: string;
   initialTicket: WorkstationTicket;
   // The automated run's state: the runner starts and uses AMC itself
   runState: AutomationJobState | null;
+  // AMC's UI address while AMC is ready, else null, so the run's manual steps can link to it
+  onUiUrlChange: (url: string | null) => void;
 }) {
   const confirmation = useConfirm();
   const ticket = useRef(initialTicket);
   const [status, setStatus] = useState<AmcStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const uiUrl = status?.State === "ready" && status.UiUrl ? status.UiUrl : null;
+  useEffect(() => onUiUrlChange(uiUrl), [uiUrl, onUiUrlChange]);
 
   // Calls the AMC route with a fresh ticket, fetching a new one once if the workstation rejects it
   const call = useCallback(
@@ -474,12 +489,7 @@ function AmcPanel({
             <FontAwesomeIcon icon={faStop} className="text-xs" />
             Stop
           </button>
-          {state === "ready" && status?.UiUrl && (
-            <a href={status.UiUrl} target="_blank" rel="noopener noreferrer" className={SECONDARY_BUTTON}>
-              <FontAwesomeIcon icon={faUpRightFromSquare} className="text-xs" />
-              Open AMC
-            </a>
-          )}
+          {uiUrl && <OpenAmcLink url={uiUrl} />}
           <button type="button" onClick={() => void refresh()} className={SECONDARY_BUTTON}>
             <FontAwesomeIcon icon={faArrowRotateRight} className="text-xs" />
             Refresh
@@ -521,7 +531,13 @@ function JobResult({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-function JobDetails({ job }: { job: AutomationJob }) {
+// Next to a manual step: the link while AMC is ready, otherwise where to start it
+function AmcAccess({ amcUrl }: { amcUrl: string | null }) {
+  if (amcUrl) return <OpenAmcLink url={amcUrl} />;
+  return <span className="text-sm text-ink-muted">Start AMC in the AMC panel above to open it.</span>;
+}
+
+function JobDetails({ job, amcUrl }: { job: AutomationJob; amcUrl: string | null }) {
   return (
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -541,7 +557,10 @@ function JobDetails({ job }: { job: AutomationJob }) {
 
       {job.State === "waiting_for_user" && job.UserActions.length > 0 && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <div className="text-sm font-semibold text-ink">To do in AMC, then press Continue</div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-ink">To do in AMC, then press Continue</div>
+            <AmcAccess amcUrl={amcUrl} />
+          </div>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink">
             {job.UserActions.map((action, i) => (
               <li key={i}>{action}</li>
@@ -564,6 +583,7 @@ function JobDetails({ job }: { job: AutomationJob }) {
               )}
               {step.Done && <div className="mt-0.5 text-xs text-ink-muted">Done: {step.Done}</div>}
             </div>
+            {step.State === "waiting" && step.NeedsUser && amcUrl && <OpenAmcLink url={amcUrl} />}
             <Tag value={step.State} severity={STEP_SEVERITY[step.State]} />
           </li>
         ))}
@@ -577,12 +597,15 @@ function JobDetails({ job }: { job: AutomationJob }) {
 function AutomationPanel({
   projectId,
   ready,
+  amcUrl,
   folderHasFootage,
   onRunFinished,
   onStateChange,
 }: {
   projectId: string;
   ready: boolean;
+  // AMC's UI address while AMC is ready, for the manual steps' Open AMC links
+  amcUrl: string | null;
   // Whether the folder's file list holds footage/*.mp4; null until it has loaded
   folderHasFootage: boolean | null;
   onRunFinished: () => void;
@@ -799,7 +822,7 @@ function AutomationPanel({
 
       <div aria-live="polite">
         {loaded && !job && <p className="mt-4 text-sm text-ink-muted">No automated run for this project yet.</p>}
-        {job && <JobDetails job={job} />}
+        {job && <JobDetails job={job} amcUrl={amcUrl} />}
       </div>
       <ErrorText message={error} />
     </Panel>
@@ -1016,16 +1039,18 @@ function ConnectedPanels({
   const { binding, refresh } = bindingState;
   const onRunFinished = useCallback(() => void refresh(), [refresh]);
   const [runState, setRunState] = useState<AutomationJobState | null>(null);
+  const [amcUrl, setAmcUrl] = useState<string | null>(null);
   const [folderHasFootage, setFolderHasFootage] = useState<boolean | null>(null);
   const onFilesLoaded = useCallback((files: WorkstationFile[]) => setFolderHasFootage(hasFootage(files)), []);
 
   return (
     <div className="flex flex-col gap-6">
       <WorkstationProjectPanel projectId={projectId} folder={folder} state={bindingState} />
-      <AmcPanel projectId={projectId} initialTicket={ticket} runState={runState} />
+      <AmcPanel projectId={projectId} initialTicket={ticket} runState={runState} onUiUrlChange={setAmcUrl} />
       <AutomationPanel
         projectId={projectId}
         ready={binding?.State === "ready"}
+        amcUrl={amcUrl}
         folderHasFootage={folderHasFootage}
         onRunFinished={onRunFinished}
         onStateChange={setRunState}
