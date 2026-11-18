@@ -214,7 +214,9 @@ export function AppLayout() {
             </nav>
           </div>
 
-          <div className="grow min-h-0 overflow-y-auto inset-shadow-sm surface-ground p-8 rounded-lg">
+          {/* relative: absolutely positioned descendants (sr-only labels) stay inside this scroll pane
+              instead of escaping the h-screen layout and lengthening the whole document */}
+          <div className="relative grow min-h-0 overflow-y-auto inset-shadow-sm surface-ground p-8 rounded-lg">
             <Outlet />
           </div>
         </div>
