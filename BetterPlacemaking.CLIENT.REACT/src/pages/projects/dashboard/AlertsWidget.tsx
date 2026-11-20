@@ -45,7 +45,7 @@ export function AlertsWidget({ alerts, alertCounts, formatTimeAgo, onRefresh, on
               Alerts
             </button>
 
-            <Button icon="pi pi-refresh text-brand-600"  text rounded onClick={onRefresh} />
+            <Button icon="pi pi-refresh text-brand-600 dark:text-white"  text rounded onClick={onRefresh} />
           </div>
 
           <button
