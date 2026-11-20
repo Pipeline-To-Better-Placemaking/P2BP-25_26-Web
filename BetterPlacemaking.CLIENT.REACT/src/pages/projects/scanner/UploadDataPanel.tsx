@@ -21,7 +21,7 @@ export function UploadDataPanel() {
 
   const dropdownOptions = [
     { label: "Meters (M)", value: "meters" },
-    { label: "Millimeters, (mm)", value: "millimeters" },
+    { label: "Millimeters (mm)", value: "millimeters" },
   ];
 
   const handleSelect = (selected: { label: string; value: string }) => {
