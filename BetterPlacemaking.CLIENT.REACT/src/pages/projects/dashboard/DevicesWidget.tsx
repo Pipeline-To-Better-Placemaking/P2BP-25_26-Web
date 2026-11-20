@@ -50,7 +50,7 @@ export function DevicesWidget({
             </div>
           </div>
 
-          <Button icon="pi pi-refresh text-brand-600" text rounded onClick={onRefresh} />
+          <Button icon="pi pi-refresh text-brand-600 dark:text-white" text rounded onClick={onRefresh} />
         </div>
 
         {loading && <div className="text-sm  text-ink-muted">Loading devices...</div>}
